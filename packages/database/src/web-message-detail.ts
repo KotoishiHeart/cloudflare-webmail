@@ -1,5 +1,10 @@
 import type { AccessIdentityKey } from './domain.js';
-import { normalizeId, normalizeIssuer, normalizeSubject } from './validation.js';
+import {
+  DatabaseInputError,
+  normalizeId,
+  normalizeIssuer,
+  normalizeSubject,
+} from './validation.js';
 import type { WebAttachment, WebMessageDetail } from './web-message-domain.js';
 import {
   toWebAttachment,
@@ -58,7 +63,7 @@ export async function getWebMessageAttachment(
 ): Promise<WebAttachment | null> {
   const messageId = normalizeId(messageIdInput, 'messageId');
   if (!Number.isSafeInteger(ordinalInput) || ordinalInput < 0 || ordinalInput > 99) {
-    throw new Error('attachment ordinal must be between 0 and 99');
+    throw new DatabaseInputError('ordinal', 'must be between 0 and 99');
   }
   const row = await db.prepare(`
     SELECT ordinal, filename, content_type, disposition, content_id,

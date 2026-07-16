@@ -4,6 +4,7 @@ import {
 } from './access-auth.js';
 import { routeApi } from './api-router.js';
 import { apiError } from './api-response.js';
+import { serveAuthenticatedAsset } from './assets.js';
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -44,10 +45,7 @@ export async function handleWebRequest(
     if (url.pathname.startsWith('/api/')) {
       return await routeApi(request, env, auth.identity, dependencies.now?.() ?? Date.now());
     }
-    return Response.json(
-      { ok: false, error: 'not_found' },
-      { status: 404, headers: JSON_HEADERS },
-    );
+    return await serveAuthenticatedAsset(request, env.ASSETS);
   } catch (error) {
     console.error(JSON.stringify({
       event: 'web.request_failed',

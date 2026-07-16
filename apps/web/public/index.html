@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#132a24">
+    <title>Cloudflare Webmail</title>
+    <link rel="stylesheet" href="/styles/base.css">
+    <link rel="stylesheet" href="/styles/layout.css">
+    <link rel="stylesheet" href="/styles/components.css">
+    <link rel="stylesheet" href="/styles/responsive.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="Cloudflare Webmail ホーム">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <span><strong>Cloudflare</strong><small>Webmail</small></span>
+        </a>
+        <label class="mailbox-picker">
+          <span>メールボックス</span>
+          <select id="mailbox-select" aria-label="メールボックスを選択"></select>
+        </label>
+        <div class="identity">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="identity-email">認証を確認中</span>
+        </div>
+      </header>
+
+      <aside class="sidebar" aria-label="メールフォルダー">
+        <p class="eyebrow">Folders</p>
+        <nav id="folder-nav" class="folder-nav">
+          <button class="active" data-folder="inbox"><span>受信箱</span></button>
+          <button data-folder="starred"><span>スター付き</span></button>
+          <button data-folder="archive"><span>アーカイブ</span></button>
+          <button data-folder="trash"><span>ゴミ箱</span></button>
+          <button data-folder="all"><span>すべてのメール</span></button>
+        </nav>
+        <div class="sidebar-note">
+          <span>Protected by</span>
+          <strong>Cloudflare Access</strong>
+        </div>
+      </aside>
+
+      <main class="mail-area">
+        <section class="list-panel" aria-labelledby="folder-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Mailbox</p>
+              <h1 id="folder-title">受信箱</h1>
+            </div>
+            <button id="refresh-button" class="icon-button" type="button">更新</button>
+          </div>
+          <div id="empty-state" class="empty-state" hidden>
+            <span class="empty-mark" aria-hidden="true">✦</span>
+            <h2>ここにはまだメールがありません</h2>
+            <p>新しいメッセージが届くと、この一覧に表示されます。</p>
+          </div>
+          <div id="message-list" class="message-list" aria-live="polite"></div>
+          <button id="load-more" class="load-more" type="button" hidden>さらに読み込む</button>
+        </section>
+
+        <section id="detail-panel" class="detail-panel" aria-labelledby="detail-subject">
+          <div id="detail-placeholder" class="detail-placeholder">
+            <span aria-hidden="true">↗</span>
+            <p>メールを選択すると<br>ここに内容を表示します</p>
+          </div>
+          <article id="detail-content" hidden>
+            <div class="detail-topline">
+              <button id="detail-close" class="icon-button close-button" type="button">閉じる</button>
+              <p id="detail-date" class="message-date"></p>
+            </div>
+            <p id="detail-state" class="detail-state"></p>
+            <h2 id="detail-subject" tabindex="-1"></h2>
+            <dl class="address-grid">
+              <div><dt>差出人</dt><dd id="detail-sender"></dd></div>
+              <div><dt>宛先</dt><dd id="detail-recipients"></dd></div>
+              <div id="detail-cc-row"><dt>CC</dt><dd id="detail-cc"></dd></div>
+            </dl>
+            <div id="detail-actions" class="detail-actions"></div>
+            <pre id="detail-body" class="message-body"></pre>
+            <section id="attachment-section" class="attachments" hidden>
+              <h3>添付ファイル</h3>
+              <div id="attachment-list"></div>
+            </section>
+            <a id="raw-link" class="raw-link" href="#">元のメールをダウンロード</a>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div id="status" class="status-toast" role="status" aria-live="polite" hidden></div>
+
+    <template id="message-template">
+      <button class="message-row" type="button">
+        <span class="unread-dot" aria-hidden="true"></span>
+        <span class="message-main">
+          <span class="message-line"><strong class="message-sender"></strong><time></time></span>
+          <span class="message-subject"></span>
+          <span class="message-preview"></span>
+        </span>
+        <span class="message-badges"></span>
+      </button>
+    </template>
+
+    <template id="attachment-template">
+      <a class="attachment-card">
+        <span class="file-mark" aria-hidden="true">↓</span>
+        <span><strong class="attachment-name"></strong><small class="attachment-meta"></small></span>
+      </a>
+    </template>
+  </body>
+</html>

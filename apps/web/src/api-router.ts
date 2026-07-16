@@ -55,13 +55,17 @@ async function routeKnownApi(
 
   const attachment = pathname.match(/^\/api\/messages\/([^/]+)\/attachments\/(\d+)$/u);
   if (attachment !== null) {
+    const ordinal = Number(attachment[2]);
+    if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > 99) {
+      return apiError('invalid_request', 400);
+    }
     return request.method === 'GET'
       ? downloadMessageAttachment(
         env.RAW_EMAILS,
         env.DB,
         identity,
         attachment[1] ?? '',
-        Number(attachment[2]),
+        ordinal,
       )
       : apiError('method_not_allowed', 405, 'GET');
   }

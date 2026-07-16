@@ -22,6 +22,12 @@ validates staged objects, parses MIME, stores canonical message objects in R2,
 and records searchable message metadata in D1. Queue redelivery is idempotent by
 message ID and raw-message SHA-256.
 
+The web Worker independently verifies the Cloudflare Access application JWT,
+maps its issuer and subject to D1 memberships, exposes a bounded JSON and
+streaming API, and serves the browser application through Workers Static
+Assets. HTML mail is shown as source text in this stage instead of being
+inserted into the page DOM.
+
 ## Development
 
 ```bash
@@ -48,6 +54,18 @@ Apply both D1 migrations and deploy the ingest and jobs Workers before enabling
 a production Email Routing rule. The jobs consumer retries each message up to
 five times and then sends it to the dead-letter queue for inspection.
 
+Before deploying the web Worker, create a Cloudflare Access self-hosted
+application for its public hostname with an explicit Allow policy. Then replace
+the fail-closed values in `apps/web/wrangler.jsonc`:
+
+- `ACCESS_TEAM_DOMAIN`: the `https://<team>.cloudflareaccess.com` issuer.
+- `ACCESS_AUD`: the Access application's Audience tag.
+
+The corresponding Access issuer and subject must also be explicitly linked in
+the D1 `access_identities` table. Email claims are display metadata and are not
+used as the application authorization key. The interactive UI does not accept
+Access service tokens or provide a local authentication bypass.
+
 The ingest Worker deliberately retains a staged R2 object when Queue production
 throws. Queue outcomes can be ambiguous, and deleting the object could make an
 already-enqueued job unrecoverable. A later operational stage will reconcile
@@ -63,5 +81,5 @@ with Wrangler and are checked in CI through `npm run types:check`.
 2. Completed: D1 baseline schema and mailbox authorization model.
 3. Completed: Email Routing to R2 staging and Queue production.
 4. Completed: Queue MIME parsing and D1/R2 persistence.
-5. Access-protected Web API and Static Assets UI.
+5. Completed: Access-protected Web API and Static Assets UI.
 6. Outbox delivery, operational CLI, migration, and backup tooling.

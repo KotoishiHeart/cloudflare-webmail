@@ -12,6 +12,10 @@ import {
 const ACCESS_JWT_HEADER = 'cf-access-jwt-assertion';
 const MAX_ACCESS_JWT_LENGTH = 16 * 1024;
 
+// This cache contains only the public JWKS resolver for deployment configuration.
+// It never stores a request token or identity and is bounded to one entry.
+let cachedKeySet: { teamDomain: string; keys: JWTVerifyGetKey } | null = null;
+
 export type AccessIdentity = {
   issuer: string;
   subject: string;
@@ -42,7 +46,7 @@ export async function authenticateAccessRequest(
   }
 
   try {
-    const keys = createRemoteJWKSet(new URL(`${config.teamDomain}/cdn-cgi/access/certs`));
+    const keys = accessKeySet(config);
     const identity = await verifyAccessToken(token, config, keys);
     return identity === null
       ? { ok: false, status: 403, code: 'identity_unsupported' }
@@ -74,4 +78,11 @@ export async function verifyAccessToken(
     return null;
   }
   return { issuer: config.teamDomain, subject, email };
+}
+
+function accessKeySet(config: AccessConfig): JWTVerifyGetKey {
+  if (cachedKeySet?.teamDomain === config.teamDomain) return cachedKeySet.keys;
+  const keys = createRemoteJWKSet(new URL(`${config.teamDomain}/cdn-cgi/access/certs`));
+  cachedKeySet = { teamDomain: config.teamDomain, keys };
+  return keys;
 }

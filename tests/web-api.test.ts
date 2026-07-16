@@ -163,6 +163,27 @@ describe('authorized webmail API', () => {
     const response = await webRequest(`/api/messages/${MESSAGE_ID}`, {}, outsider);
     expect(response.status).toBe(404);
   });
+
+  it('rejects out-of-range pagination, attachment, and patch inputs', async () => {
+    const list = await webRequest(
+      `/api/mailboxes/${MAILBOX_ID}/messages?limit=100`,
+      {},
+      OWNER,
+    );
+    expect(list.status).toBe(400);
+    const attachment = await webRequest(
+      `/api/messages/${MESSAGE_ID}/attachments/100`,
+      {},
+      OWNER,
+    );
+    expect(attachment.status).toBe(400);
+    const patch = await webRequest(`/api/messages/${MESSAGE_ID}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'text/plain', origin: ORIGIN },
+      body: '{}',
+    }, OWNER);
+    expect(patch.status).toBe(415);
+  });
 });
 
 function webRequest(

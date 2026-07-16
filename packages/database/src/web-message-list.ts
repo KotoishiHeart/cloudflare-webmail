@@ -1,4 +1,4 @@
-import { normalizeId } from './validation.js';
+import { DatabaseInputError, normalizeId } from './validation.js';
 import {
   WEB_MAILBOX_FOLDERS,
   type WebMailboxFolder,
@@ -63,7 +63,7 @@ function normalizeLimit(value: number): number {
 function validateCursor(cursor: WebMessageCursor | null): void {
   if (cursor === null) return;
   if (!Number.isSafeInteger(cursor.before) || cursor.before <= 0) {
-    throw new Error('cursor before must be a positive timestamp');
+    throw new DatabaseInputError('cursor.before', 'must be a positive timestamp');
   }
   normalizeId(cursor.beforeId, 'beforeId');
 }

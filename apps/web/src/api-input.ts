@@ -12,18 +12,25 @@ export function cursorFromUrl(url: URL): WebMessageCursor | null {
   if (before === null || beforeId === null || !/^\d+$/u.test(before)) {
     throw new ApiInputError('invalid message cursor');
   }
-  return { before: Number(before), beforeId };
+  const timestamp = Number(before);
+  if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+    throw new ApiInputError('invalid message cursor');
+  }
+  return { before: timestamp, beforeId };
 }
 
 export function limitFromUrl(url: URL): number {
   const value = url.searchParams.get('limit');
   if (value === null) return 30;
   if (!/^\d{1,3}$/u.test(value)) throw new ApiInputError('invalid message limit');
-  return Number(value);
+  const limit = Number(value);
+  if (limit < 1 || limit > 50) throw new ApiInputError('invalid message limit');
+  return limit;
 }
 
 export async function readFlagPatch(request: Request): Promise<WebMessageFlagPatch> {
-  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) {
+  const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (contentType !== 'application/json') {
     throw new UnsupportedMediaTypeError();
   }
   const input = await readBoundedJson(request, MAX_PATCH_BYTES);
