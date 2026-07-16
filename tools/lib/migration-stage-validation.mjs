@@ -83,6 +83,15 @@ function validateLegacyManifest(manifest) {
       || !count(mapping.discovered)
       || !count(mapping.prepared)
       || !count(mapping.failed)
+      || !count(mapping.inbound)
+      || !count(mapping.outbound)
+      || !count(mapping.read)
+      || !count(mapping.starred)
+      || !count(mapping.archived)
+      || !count(mapping.deleted)
+      || !count(mapping.attachments)
+      || mapping.inbound + mapping.outbound !== mapping.prepared
+      || mapping.prepared + mapping.failed !== mapping.discovered
     ) throw new Error('legacy stage mapping is invalid');
     if (mailboxIds.has(mapping.mailboxId) || sourceAddresses.has(mapping.sourceAddress)) {
       throw new Error('legacy stage mapping is duplicated');

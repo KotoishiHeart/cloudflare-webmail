@@ -101,13 +101,37 @@ object, or invalid metadata makes the stage incomplete. An incomplete archived
 stage can be inspected but the shared apply command refuses to apply it.
 
 After provisioning every mapped mailbox and applying all current D1 migrations,
-rehearse and then apply through the common stage runner:
+small rehearsals can use the common per-object stage runner:
 
 ```bash
 npm run migrate:mail -- apply --stage ops/legacy-stage --local --yes
 npm run migrate:mail -- apply --stage ops/legacy-stage --remote --yes \
   --config ops/deploy-production/configs/web.wrangler.json
 ```
+
+For the full archived mailbox set, use the bulk path. Configure a named rclone
+S3 remote for the target R2 account outside this repository; keep its access
+key and secret in the rclone configuration or environment, never in command
+arguments or the deployment manifest.
+
+```bash
+npm run migrate:legacy -- bulk-apply \
+  --stage ops/legacy-stage \
+  --tree ops/legacy-r2-upload \
+  --rclone-destination cf-r2:cf-webmail-raw \
+  --rclone-config /secure/rclone.conf \
+  --database cf-webmail --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json \
+  --transfers 16 --checkers 32
+```
+
+Bulk apply materializes a target-key tree using hard links where possible,
+runs parallel immutable R2 copy, then performs a full `rclone check --download`
+before changing D1. It saves the complete comparison report and its SHA-256,
+applies D1 chunks resumably, and finally compares the target migration batch,
+message/object counts, direction, flags, and attachment counts with the stage.
+An existing remote object with different content or any missing/different
+download blocks D1 application.
 
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext

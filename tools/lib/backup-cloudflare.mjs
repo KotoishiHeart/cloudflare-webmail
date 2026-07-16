@@ -65,7 +65,7 @@ export function defaultRunner() {
   return { spawn: spawnSync };
 }
 
-function queryD1(sql, options, runner) {
+export function queryD1(sql, options, runner) {
   const output = capture(runner, [
     'd1', 'execute', options.database, targetFlag(options), '--command', sql,
     '--json', ...persistenceArgs(options), '--config', options.config,

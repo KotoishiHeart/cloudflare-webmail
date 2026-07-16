@@ -35,6 +35,13 @@ export async function prepareLegacyMigrationStage(options) {
     discovered: 0,
     prepared: 0,
     failed: 0,
+    inbound: 0,
+    outbound: 0,
+    read: 0,
+    starred: 0,
+    archived: 0,
+    deleted: 0,
+    attachments: 0,
   }]));
   let currentSql = [];
   let discovered = 0;
@@ -82,7 +89,14 @@ export async function prepareLegacyMigrationStage(options) {
         currentSql.push(renderLegacyMessageSql(message, legacy, batchId, createdAt));
         if (message.status === 'quarantined') quarantined += 1;
         prepared += 1;
-        accountCounts.get(mapping.sourceAddress).prepared += 1;
+        const account = accountCounts.get(mapping.sourceAddress);
+        account.prepared += 1;
+        account[message.direction] += 1;
+        account.read += message.flags.isRead ? 1 : 0;
+        account.starred += message.flags.isStarred ? 1 : 0;
+        account.archived += message.flags.isArchived ? 1 : 0;
+        account.deleted += message.flags.isDeleted ? 1 : 0;
+        account.attachments += message.attachments.length;
         if (currentSql.length >= SQL_CHUNK_SIZE) {
           sqlChunks.push(await writeSqlChunk(stage, sqlChunks.length + 1, currentSql));
           currentSql = [];

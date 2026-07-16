@@ -132,5 +132,6 @@ from the confirmation-required migration and deploy step.
    resumable mail migration, and portable D1/R2 backup and restore tooling.
 7. Completed: manifest-driven production configuration, remote preflight, and
    dependency-ordered Worker deployment tooling.
-8. In progress: archived D1/R2 compatibility migration with explicit account
-   mapping and end-to-end count/hash verification.
+8. Completed: archived D1/R2 compatibility migration with explicit account
+   mapping, resumable raw snapshots, parallel bulk transfer, full R2 content
+   comparison, and target D1 count/metadata verification.

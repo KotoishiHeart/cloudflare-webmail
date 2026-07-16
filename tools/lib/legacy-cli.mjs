@@ -5,6 +5,7 @@ import { importLegacySafeSql } from './legacy-sqlite.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
 import { prepareLegacyMigrationStage } from './legacy-stage.mjs';
 import { verifyMigrationStage } from './migration-stage.mjs';
+import { applyLegacyStageBulk } from './legacy-bulk-apply.mjs';
 
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
@@ -100,6 +101,23 @@ export async function runLegacyMigrationCli(argv, io = {
     io.stdout(`${JSON.stringify(result.manifest, null, 2)}\n`);
     return result.manifest.complete === false ? 2 : 0;
   }
+  if (command === 'bulk-apply') {
+    const result = await applyLegacyStageBulk(required(options, 'stage'), {
+      yes: Boolean(options.yes),
+      local: Boolean(options.local),
+      remote: Boolean(options.remote),
+      database: options.database ?? 'cf-webmail',
+      config: options.config ?? 'apps/web/wrangler.jsonc',
+      persistTo: options['persist-to'],
+      tree: options.tree,
+      rcloneDestination: required(options, 'rclone-destination'),
+      rcloneConfig: options['rclone-config'],
+      transfers: options.transfers,
+      checkers: options.checkers,
+    });
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  }
   throw new Error(`unknown command: ${command}`);
 }
 
@@ -123,5 +141,7 @@ function usage() {
     `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
     `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +
     `  prepare --database legacy.sqlite --mapping mapping.json --snapshot DIR --stage DIR\n` +
-    `  verify-stage --stage DIR\n`;
+    `  verify-stage --stage DIR\n` +
+    `  bulk-apply --stage DIR --rclone-destination REMOTE:BUCKET \\\n` +
+    `    (--local|--remote) --yes [--rclone-config FILE] [--tree DIR]\n`;
 }
