@@ -110,6 +110,30 @@ recorded blocker, then rerun with `--force`. A successful postflight does not
 replace the manual canary send/receive and Access authorization checks listed
 in the report.
 
+## Continuous verification
+
+`.github/workflows/ci.yml` runs the generated-binding check, TypeScript checks,
+Node operations tests, Miniflare Workers tests, and all three dry builds on
+pushes and pull requests. Protect the default branch by requiring this `verify`
+job.
+
+The manually dispatched `Production read-only preflight` workflow is restricted
+to the default branch and the `production-readonly` GitHub environment. Add
+required reviewers to that environment and configure these environment
+secrets:
+
+- `CLOUDFLARE_ACCOUNT_ID`: the exact account in the deployment manifest.
+- `CLOUDFLARE_API_TOKEN`: a dedicated token limited to the read permissions
+  needed for Workers deployments, D1, R2, Queues, Email Sending, and Email
+  Routing inspection.
+- `DEPLOYMENT_MANIFEST_JSON`: the complete non-placeholder deployment manifest.
+
+The workflow writes the manifest and generated stage below the ephemeral runner
+temporary directory and uploads only `preflight.json`. It cannot run migrations,
+deploy Workers, change routing, or create a backup. Keep production mutation on
+a secured operator host because upgrade backups contain complete private mail
+and must not become unencrypted CI artifacts.
+
 Preflight expires after one hour. Deployment stops on the first failed
 migration or Worker upload and does not attempt an unsafe automatic rollback.
 Before any mutation, it writes `rollback-plan.json` into the stage. A retry
