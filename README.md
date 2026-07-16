@@ -102,6 +102,11 @@ Maildir and archived raw-object migrations use the resumable stage workflow in
 fully local; an explicit `apply --local|--remote --yes` uploads R2 objects
 before applying chunked D1 inserts.
 
+Portable D1/R2 backups and empty-target restores are documented in
+[`docs/backup-and-restore.md`](docs/backup-and-restore.md). Each completed
+bundle has an offline-verifiable manifest with hashes for the D1 export and
+every referenced R2 object.
+
 ## Implementation stages
 
 1. Completed: Worker entrypoints, versioned contracts, generated binding types,
@@ -110,5 +115,5 @@ before applying chunked D1 inserts.
 3. Completed: Email Routing to R2 staging and Queue production.
 4. Completed: Queue MIME parsing and D1/R2 persistence.
 5. Completed: Access-protected Web API and Static Assets UI.
-6. In progress: completed Queue-backed outbox delivery; operational CLI,
-   migration, and backup tooling follow as separate commits.
+6. Completed: Queue-backed outbound delivery, review-first operations,
+   resumable mail migration, and portable D1/R2 backup and restore tooling.
