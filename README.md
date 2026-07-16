@@ -151,6 +151,12 @@ in [`docs/deployment.md`](docs/deployment.md). A non-secret manifest generates
 hash-bound configs for the exact Git commit; remote preflight remains separate
 from the confirmation-required migration and deploy step.
 
+The complete archived-to-rebuild production boundary is documented in
+[`docs/cutover.md`](docs/cutover.md). It keeps the old stores intact, uses a
+canary route, freezes archived writes before the final snapshot, performs a
+fresh D1/R2 target audit, and treats messages accepted after the Email Routing
+change as data that cannot be discarded by a code rollback.
+
 ## Implementation stages
 
 1. Completed: Worker entrypoints, versioned contracts, generated binding types,
@@ -166,3 +172,9 @@ from the confirmation-required migration and deploy step.
 8. Completed: archived D1/R2 compatibility migration with explicit account
    mapping, resumable raw snapshots, parallel bulk transfer, full R2 content
    comparison, and target D1 count/metadata verification.
+9. Completed: durable queue recovery, D1/R2 reconciliation, advanced search,
+   safe HTML rendering, replies/forwards, and verified outbound attachments.
+10. Completed: mailbox labels, preferences, previewed rules, structured audit
+    and delivery events, guarded system administration, and retention deletion.
+11. Completed: accessible administration PWA, deployment rollback points,
+    production postflight gating, protected CI, and archived cutover tooling.

@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { parseOptions } from './ops-cli.mjs';
 import { createLegacyInventory, createLegacyMappingTemplate, loadAndValidateLegacyMapping } from './legacy-inventory.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
@@ -6,6 +6,7 @@ import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs
 import { prepareLegacyMigrationStage } from './legacy-stage.mjs';
 import { verifyMigrationStage } from './migration-stage.mjs';
 import { applyLegacyStageBulk } from './legacy-bulk-apply.mjs';
+import { auditLegacyStageBulk } from './legacy-bulk-audit.mjs';
 
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
@@ -118,11 +119,37 @@ export async function runLegacyMigrationCli(argv, io = {
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
+  if (command === 'bulk-audit') {
+    const output = required(options, 'output');
+    await requireMissing(output);
+    const result = await auditLegacyStageBulk(required(options, 'stage'), {
+      local: Boolean(options.local),
+      remote: Boolean(options.remote),
+      database: options.database ?? 'cf-webmail',
+      config: options.config ?? 'apps/web/wrangler.jsonc',
+      persistTo: options['persist-to'],
+      tree: required(options, 'tree'),
+      report: required(options, 'report'),
+      rcloneDestination: required(options, 'rclone-destination'),
+      rcloneConfig: options['rclone-config'],
+      checkers: options.checkers,
+    });
+    await writeExclusive(output, result);
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  }
   throw new Error(`unknown command: ${command}`);
 }
 
 async function writeExclusive(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
+}
+
+async function requireMissing(path) {
+  await readFile(path).then(
+    () => { throw new Error(`output already exists: ${path}`); },
+    (error) => { if (error?.code !== 'ENOENT') throw error; },
+  );
 }
 
 function required(options, key) {
@@ -143,5 +170,7 @@ function usage() {
     `  prepare --database legacy.sqlite --mapping mapping.json --snapshot DIR --stage DIR\n` +
     `  verify-stage --stage DIR\n` +
     `  bulk-apply --stage DIR --rclone-destination REMOTE:BUCKET \\\n` +
-    `    (--local|--remote) --yes [--rclone-config FILE] [--tree DIR]\n`;
+    `    (--local|--remote) --yes [--rclone-config FILE] [--tree DIR]\n` +
+    `  bulk-audit --stage DIR --tree DIR --rclone-destination REMOTE:BUCKET\n` +
+    `    --report FILE --output FILE (--local|--remote) [--rclone-config FILE]\n`;
 }

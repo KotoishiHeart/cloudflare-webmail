@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { applyLegacyStageBulk } from '../lib/legacy-bulk-apply.mjs';
+import { auditLegacyStageBulk } from '../lib/legacy-bulk-audit.mjs';
 import { materializeLegacyR2Tree } from '../lib/legacy-bulk-stage.mjs';
 
 const MAILBOX_ID = '019c315c-1f20-7000-8000-000000000701';
@@ -67,6 +68,29 @@ describe('legacy bulk apply', () => {
     const resumed = await applyLegacyStageBulk(stage, options, runner);
     assert.equal(resumed.completedAt, state.completedAt);
     assert.equal(calls.length, callCount);
+
+    const auditCalls = [];
+    const audit = await auditLegacyStageBulk(stage, {
+      ...options,
+      report: join(root, 'cutover-r2-report.txt'),
+    }, { spawn(command, args) {
+      auditCalls.push({ command, args });
+      if (command === 'rclone' && args[0] === 'check') {
+        writeFileSync(args[args.indexOf('--combined') + 1], `= ${objectKey()}\n`);
+      }
+      if (command === 'npx' && args.includes('--command')) {
+        const sql = args[args.indexOf('--command') + 1];
+        const results = sql.includes('FROM migration_batches') ? [batchRow()] : [accountRow()];
+        return { status: 0, stdout: JSON.stringify([{ results }]), stderr: '' };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    } });
+    assert.equal(audit.kind, 'cf-webmail-legacy-cutover-audit');
+    assert.equal(audit.r2.objects, 1);
+    assert.deepEqual(audit.d1, { batchId: BATCH_ID, messages: 1, objects: 1 });
+    assert.ok(auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'check'));
+    assert.ok(!auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'copy'));
+    assert.ok(!auditCalls.some((call) => call.command === 'npx' && call.args.includes('--file')));
   });
 });
 

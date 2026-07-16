@@ -133,6 +133,27 @@ message/object counts, direction, flags, and attachment counts with the stage.
 An existing remote object with different content or any missing/different
 download blocks D1 application.
 
+Immediately before production cutover, rerun the target audit without copying
+or inserting anything. Use new report and output paths for every attempt:
+
+```bash
+npm run migrate:legacy -- bulk-audit \
+  --stage ops/legacy-final-stage \
+  --tree ops/legacy-final-r2-upload \
+  --rclone-destination cf-r2:cf-webmail-raw \
+  --rclone-config /secure/rclone.conf \
+  --database cf-webmail --remote \
+  --config ops/deploy-production/configs/web.wrangler.json \
+  --report ops/evidence/final-r2-check.txt \
+  --output ops/evidence/final-legacy-audit.json
+```
+
+This performs a fresh download-based `rclone check` of every staged object and
+rechecks the migration batch, source hashes, per-account direction and flag
+counts, attachment counts, and object-reference count in D1. The JSON records
+the R2 report digest but no mail content or credential. Any mismatch exits
+without changing R2 or D1.
+
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext
 secrets from the archived repository into any of these files.

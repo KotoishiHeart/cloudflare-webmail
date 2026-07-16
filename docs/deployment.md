@@ -110,6 +110,11 @@ recorded blocker, then rerun with `--force`. A successful postflight does not
 replace the manual canary send/receive and Access authorization checks listed
 in the report.
 
+The end-to-end archived-system freeze, final import, Email Routing boundary,
+acceptance tests, and legacy rollback limitations are defined in
+[`cutover.md`](cutover.md). Do not switch production routing from this deployment
+document alone.
+
 ## Continuous verification
 
 `.github/workflows/ci.yml` runs the generated-binding check, TypeScript checks,
