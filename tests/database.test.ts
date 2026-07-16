@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import {
+  addMailboxAlias,
   authorizeMailboxAccess,
   DatabaseInputError,
   listAuthorizedMailboxes,
@@ -46,6 +47,7 @@ describe('D1 identity and mailbox authorization', () => {
       mailboxId,
       address: 'inbox@example.com',
       addressKind: 'primary',
+      primaryAddress: 'inbox@example.com',
       displayName: 'Main inbox',
     });
     await expect(authorizeMailboxAccess(
@@ -54,6 +56,39 @@ describe('D1 identity and mailbox authorization', () => {
       mailboxId,
       'manage',
     )).resolves.toEqual({ allowed: true, userId, mailboxId, role: 'owner' });
+  });
+
+  it('resolves aliases while retaining the primary mailbox address', async () => {
+    const userId = '019c315c-1f20-7000-8000-000000000041';
+    const mailboxId = '019c315c-1f20-7000-8000-000000000042';
+    await provisionUserWithIdentity(env.DB, {
+      userId,
+      email: 'alias-owner@example.com',
+      identity: { issuer: ISSUER, subject: 'alias-owner' },
+      now: NOW,
+    });
+    await provisionMailboxWithOwner(env.DB, {
+      mailboxId,
+      ownerUserId: userId,
+      address: 'primary-alias-test@example.com',
+      now: NOW,
+    });
+    await addMailboxAlias(env.DB, {
+      mailboxId,
+      address: 'Support-Alias@Example.com',
+      now: NOW + 1,
+    });
+
+    await expect(resolveActiveMailboxAddress(
+      env.DB,
+      'support-alias@example.com',
+    )).resolves.toEqual({
+      mailboxId,
+      address: 'support-alias@example.com',
+      addressKind: 'alias',
+      primaryAddress: 'primary-alias-test@example.com',
+      displayName: 'primary-alias-test@example.com',
+    });
   });
 
   it('allows viewers to read but denies mailbox operations', async () => {

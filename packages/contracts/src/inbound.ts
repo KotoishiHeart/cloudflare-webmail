@@ -50,7 +50,8 @@ export function parseInboundQueueMessage(input: unknown): InboundQueueParseResul
   if (!isRecord(input.envelope)) {
     issues.push('envelope must be an object');
   } else {
-    checkString(input.envelope.from, 'envelope.from', issues, 320);
+    // RFC 5321 uses an empty reverse-path for delivery status notifications.
+    checkString(input.envelope.from, 'envelope.from', issues, 320, true);
     checkString(input.envelope.to, 'envelope.to', issues, 320);
   }
 

@@ -11,6 +11,20 @@
       "migrations_dir": "../../migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "RAW_EMAILS",
+      "bucket_name": "cf-webmail-raw"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "INBOUND_QUEUE",
+        "queue": "cf-webmail-inbound"
+      }
+    ]
+  },
   "observability": {
     "enabled": true,
     "logs": { "head_sampling_rate": 1 },

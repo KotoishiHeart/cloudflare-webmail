@@ -27,6 +27,7 @@ export type MailboxRoute = {
   mailboxId: string;
   address: string;
   addressKind: MailboxAddressKind;
+  primaryAddress: string;
   displayName: string;
 };
 

@@ -1,26 +1,17 @@
 import {
-  isMailboxAddressKind,
   isMailboxRole,
   mailboxRoleGrants,
   type AccessIdentityKey,
   type AuthorizedMailbox,
   type MailboxAccessDecision,
   type MailboxCapability,
-  type MailboxRoute,
 } from './domain.js';
+import { toMailboxRoute, type MailboxRouteRow } from './routing.js';
 import {
-  normalizeEmailAddress,
   normalizeId,
   normalizeIssuer,
   normalizeSubject,
 } from './validation.js';
-
-type RouteRow = {
-  mailbox_id: string;
-  address: string;
-  address_kind: string;
-  display_name: string;
-};
 
 type AccessRow = {
   user_id: string;
@@ -30,32 +21,10 @@ type AccessRow = {
   role: string | null;
 };
 
-type AuthorizedMailboxRow = RouteRow & {
+type AuthorizedMailboxRow = MailboxRouteRow & {
   user_id: string;
   role: string;
 };
-
-export async function resolveActiveMailboxAddress(
-  db: D1Database,
-  addressInput: string,
-): Promise<MailboxRoute | null> {
-  const address = normalizeEmailAddress(addressInput, 'address');
-  const row = await db.prepare(`
-    SELECT
-      m.id AS mailbox_id,
-      ma.address,
-      ma.kind AS address_kind,
-      m.display_name
-    FROM mailbox_addresses AS ma
-    JOIN mailboxes AS m ON m.id = ma.mailbox_id
-    WHERE ma.address = ? COLLATE NOCASE
-      AND ma.status = 'active'
-      AND m.status = 'active'
-    LIMIT 1
-  `).bind(address).first<RouteRow>();
-
-  return row === null ? null : toMailboxRoute(row);
-}
 
 export async function authorizeMailboxAccess(
   db: D1Database,
@@ -111,6 +80,7 @@ export async function listAuthorizedMailboxes(
       m.id AS mailbox_id,
       ma.address,
       ma.kind AS address_kind,
+      ma.address AS primary_address,
       m.display_name,
       mm.role
     FROM access_identities AS ai
@@ -129,16 +99,4 @@ export async function listAuthorizedMailboxes(
     if (!isMailboxRole(row.role)) return [];
     return [{ ...toMailboxRoute(row), userId: row.user_id, role: row.role }];
   });
-}
-
-function toMailboxRoute(row: RouteRow): MailboxRoute {
-  if (!isMailboxAddressKind(row.address_kind)) {
-    throw new Error('D1 returned an invalid mailbox address kind');
-  }
-  return {
-    mailboxId: row.mailbox_id,
-    address: row.address,
-    addressKind: row.address_kind,
-    displayName: row.display_name,
-  };
 }

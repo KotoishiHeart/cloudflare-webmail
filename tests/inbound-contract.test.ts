@@ -25,6 +25,11 @@ describe('inbound Queue contract', () => {
     expect(parseInboundQueueMessage(validMessage())).toEqual({ ok: true, value: validMessage() });
   });
 
+  it('accepts an empty SMTP reverse-path for bounce messages', () => {
+    const input = { ...validMessage(), envelope: { from: '', to: 'inbox@example.com' } };
+    expect(parseInboundQueueMessage(input)).toEqual({ ok: true, value: input });
+  });
+
   it('rejects unknown versions and unsafe R2 keys', () => {
     const input = { ...validMessage(), schemaVersion: 2, rawKey: 'raw/message.eml' };
     const result = parseInboundQueueMessage(input);

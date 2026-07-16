@@ -15,9 +15,11 @@ The repository starts with three deliberately small Worker entrypoints:
 - `packages/database`: prepared D1 queries and mailbox authorization rules.
 - `migrations`: the forward-only D1 schema history shared by all Workers.
 
-The ingest Worker rejects mail until the durable R2 staging implementation is
-added. The jobs Worker is not registered as a Queue consumer yet. These safe
-defaults prevent a partial deployment from silently accepting and losing mail.
+The ingest Worker resolves active D1 mailbox addresses, streams the original
+message to R2, and only then publishes a versioned Queue message. Unknown
+recipients, invalid sizes, and failed handoffs are rejected. The jobs Worker is
+not registered as a Queue consumer until Stage 4, so do not enable a production
+Email Routing rule before that stage is deployed.
 
 ## Development
 
@@ -32,6 +34,18 @@ The committed Worker configuration declares the `DB` binding without a
 production `database_id`. Create the `cf-webmail` D1 database and add the ID to
 all three Worker configurations before a remote migration or deployment. Local
 migrations and tests do not require a Cloudflare account.
+
+Stage 3 also expects these account resources before remote deployment:
+
+```bash
+npx wrangler r2 bucket create cf-webmail-raw
+npx wrangler queues create cf-webmail-inbound
+```
+
+The ingest Worker deliberately retains a staged R2 object when Queue production
+throws. Queue outcomes can be ambiguous, and deleting the object could make an
+already-enqueued job unrecoverable. A later operational stage will reconcile
+and expire orphaned staging objects.
 
 `worker-configuration.d.ts` files are generated from each Worker configuration
 with Wrangler and are checked in CI through `npm run types:check`.

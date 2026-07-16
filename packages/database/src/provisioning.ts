@@ -36,6 +36,12 @@ export type SetMailboxMembershipInput = {
   now: number;
 };
 
+export type AddMailboxAliasInput = {
+  mailboxId: string;
+  address: string;
+  now: number;
+};
+
 export async function provisionUserWithIdentity(
   db: D1Database,
   input: ProvisionUserInput,
@@ -112,4 +118,20 @@ export async function setMailboxMembership(
       role = excluded.role,
       updated_at = excluded.updated_at
   `).bind(mailboxId, userId, input.role, now, now).run();
+}
+
+export async function addMailboxAlias(
+  db: D1Database,
+  input: AddMailboxAliasInput,
+): Promise<void> {
+  const mailboxId = normalizeId(input.mailboxId, 'mailboxId');
+  const address = normalizeEmailAddress(input.address, 'address');
+  const now = requireTimestamp(input.now);
+
+  await db.prepare(`
+    INSERT INTO mailbox_addresses (
+      address, mailbox_id, kind, status, created_at, updated_at
+    )
+    VALUES (?, ?, 'alias', 'active', ?, ?)
+  `).bind(address, mailboxId, now, now).run();
 }
