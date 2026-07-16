@@ -104,6 +104,12 @@ Maildir and archived raw-object migrations use the resumable stage workflow in
 fully local; an explicit `apply --local|--remote --yes` uploads R2 objects
 before applying chunked D1 inserts.
 
+The archived D1 safe-backup adapter and account-to-mailbox mapping workflow are
+documented separately in
+[`docs/legacy-migration.md`](docs/legacy-migration.md). It first isolates the
+old SQL in a local compatibility database and records account-level counts and
+integrity results before any R2 object is copied.
+
 Portable D1/R2 backups and empty-target restores are documented in
 [`docs/backup-and-restore.md`](docs/backup-and-restore.md). Each completed
 bundle has an offline-verifiable manifest with hashes for the D1 export and
@@ -126,3 +132,5 @@ from the confirmation-required migration and deploy step.
    resumable mail migration, and portable D1/R2 backup and restore tooling.
 7. Completed: manifest-driven production configuration, remote preflight, and
    dependency-ordered Worker deployment tooling.
+8. In progress: archived D1/R2 compatibility migration with explicit account
+   mapping and end-to-end count/hash verification.

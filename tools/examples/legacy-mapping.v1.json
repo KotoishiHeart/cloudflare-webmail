@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "kind": "cf-webmail-legacy-mapping",
+  "sourceDatabaseSha256": "REPLACE_WITH_INVENTORY_SOURCE_HASH",
+  "mappings": [
+    {
+      "sourceAddress": "mail@example.com",
+      "mailboxId": "019c315c-1f20-7000-8000-000000000002",
+      "address": "mail@example.com"
+    }
+  ],
+  "exclusions": [
+    {
+      "sourceAddress": "retired@example.com",
+      "reason": "Retired mailbox approved for exclusion before cutover"
+    }
+  ]
+}

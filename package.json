@@ -19,6 +19,7 @@
     "test:node": "node --test tools/tests/*.test.mjs",
     "ops": "node tools/cf-webmail.mjs",
     "migrate:mail": "node tools/migrate-mail.mjs",
+    "migrate:legacy": "node tools/migrate-legacy.mjs",
     "backup": "node tools/backup.mjs",
     "deploy": "node tools/deploy.mjs",
     "db:migrate:local": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler d1 migrations apply cf-webmail --local --config apps/web/wrangler.jsonc",
