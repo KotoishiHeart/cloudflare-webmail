@@ -1,3 +1,5 @@
+import { createComposeDraftController } from './compose-draft.js';
+
 const dialog = document.querySelector('#compose-dialog');
 const form = document.querySelector('#compose-form');
 const submit = document.querySelector('#compose-submit');
@@ -11,9 +13,12 @@ const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const attachmentInput = document.querySelector('#compose-attachments');
 const composeHint = document.querySelector('#compose-hint');
 
+const drafts = createComposeDraftController(form);
+
 export function bindCompose(onSubmit) {
   submitHandler = onSubmit;
   document.querySelector('#compose-close').addEventListener('click', closeCompose);
+  document.querySelector('#compose-discard').addEventListener('click', discardCompose);
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
     closeCompose();
@@ -27,14 +32,16 @@ export function openCompose(mailbox, draft = {}) {
   requestId = crypto.randomUUID();
   composeMode = draft.composeMode || 'new';
   sourceMessageId = draft.sourceMessageId || '';
+  const restored = drafts.begin(mailbox.id, composeMode, sourceMessageId);
+  const values = restored?.fields ?? draft;
   form.reset();
   document.querySelector('#compose-title').textContent = composeTitle(composeMode);
   document.querySelector('#compose-from').textContent = `差出人: ${mailbox.address}`;
-  setValue('#compose-to', draft.to);
-  setValue('#compose-cc', draft.cc);
-  setValue('#compose-bcc', draft.bcc);
-  setValue('#compose-subject', draft.subject);
-  setValue('#compose-text', draft.text);
+  setValue('#compose-to', values.to);
+  setValue('#compose-cc', values.cc);
+  setValue('#compose-bcc', values.bcc);
+  setValue('#compose-subject', values.subject);
+  setValue('#compose-text', values.text);
   renderAttachmentHint();
   dialog.showModal();
   document.querySelector('#compose-to').focus();
@@ -76,6 +83,17 @@ export function openForwardCompose(mailbox, detail, body) {
 }
 
 export function closeCompose() {
+  drafts.saveNow();
+  closeDialog();
+}
+
+function discardCompose() {
+  drafts.clear();
+  form.reset();
+  closeDialog();
+}
+
+function closeDialog() {
   if (dialog.open) dialog.close();
   requestId = '';
   composeMode = 'new';
@@ -100,7 +118,8 @@ async function submitCompose(event) {
       sourceMessageId: sourceMessageId || null,
       attachments,
     });
-    closeCompose();
+    drafts.clear();
+    closeDialog();
   } catch {
     // The app-level handler keeps the draft open and displays the API error.
   } finally {

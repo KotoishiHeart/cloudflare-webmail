@@ -40,7 +40,21 @@ test('mail and administration shells expose accessible landmarks', async () => {
   ]);
   assert.match(mail, /href="#mail-main"/u);
   assert.match(mail, /id="admin-button"[^>]+hidden/u);
+  assert.match(mail, /id="bulk-select-all"/u);
+  assert.match(mail, /id="compose-draft-status"[^>]+aria-live="polite"/u);
   assert.match(admin, /href="#admin-main"/u);
   assert.match(admin, /data-admin-section="retention"/u);
   assert.match(admin, /role="tabpanel"/u);
+});
+
+test('compose drafts stay device-local and never enter the service-worker cache', async () => {
+  const [drafts, worker] = await Promise.all([
+    readFile(resolve(PUBLIC, 'ui/compose-draft.js'), 'utf8'),
+    readFile(resolve(PUBLIC, 'service-worker.js'), 'utf8'),
+  ]);
+  assert.match(drafts, /window\.localStorage/u);
+  assert.doesNotMatch(drafts, /fetch\(/u);
+  assert.match(drafts, /attachments|添付/u);
+  assert.match(worker, /'\/ui\/compose-draft\.js'/u);
+  assert.doesNotMatch(worker, /localStorage/u);
 });

@@ -61,6 +61,11 @@ retention deletion. The installable PWA caches only static shells and code;
 mail APIs, bodies, raw MIME, and attachments are always network-only. See
 [`docs/adr/0016-separated-admin-pwa.md`](docs/adr/0016-separated-admin-pwa.md).
 
+The mailbox UI supports bounded bulk flag changes with immediate undo and
+device-local compose drafts. Draft text is scoped by mailbox and reply source,
+never sent to the server before submission, never cached by the Service Worker,
+and excludes file attachments.
+
 ## Development
 
 ```bash

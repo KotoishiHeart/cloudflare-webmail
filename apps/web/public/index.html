@@ -260,8 +260,10 @@
         <label>件名 <input id="compose-subject" name="subject" type="text" maxlength="998"></label>
         <label>本文 <textarea id="compose-text" name="text" rows="14" required></textarea></label>
         <label>添付ファイル <input id="compose-attachments" name="attachments" type="file" multiple></label>
+        <p id="compose-draft-status" class="compose-draft-status" aria-live="polite">この端末内に自動保存します（添付ファイルを除く）。</p>
         <div class="compose-actions">
           <span id="compose-hint">最大8個・1ファイル10 MiB・合計20 MiB</span>
+          <button id="compose-discard" class="secondary" type="button">下書きを破棄</button>
           <button id="compose-submit" type="submit">送信トレイに追加</button>
         </div>
       </form>

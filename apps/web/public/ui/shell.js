@@ -65,4 +65,18 @@ export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose,
   document.querySelector('#detail-close').addEventListener('click', onClose);
   document.querySelector('#compose-button').addEventListener('click', onCompose);
   document.querySelector('#settings-button').addEventListener('click', onSettings);
+  document.addEventListener('keydown', (event) => {
+    if (
+      event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey
+      || document.querySelector('dialog[open]')
+      || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)
+    ) return;
+    if (event.key === '/') {
+      event.preventDefault();
+      document.querySelector('#search-query').focus();
+    } else if (event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      onCompose();
+    }
+  });
 }
