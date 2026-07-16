@@ -1,11 +1,12 @@
-export const INBOUND_QUEUE_SCHEMA_VERSION = 1 as const;
+export const INBOUND_QUEUE_SCHEMA_VERSION = 2 as const;
 export const MAX_INBOUND_MESSAGE_BYTES = 25 * 1024 * 1024;
 
 export type InboundRoutingAction = 'store' | 'quarantine';
 
-export type InboundQueueMessageV1 = {
+export type InboundQueueMessageV2 = {
   schemaVersion: typeof INBOUND_QUEUE_SCHEMA_VERSION;
   messageId: string;
+  mailboxId: string;
   rawKey: string;
   envelope: {
     from: string;
@@ -28,7 +29,7 @@ export type InboundQueueMessageV1 = {
   };
 };
 
-export type InboundQueueMessage = InboundQueueMessageV1;
+export type InboundQueueMessage = InboundQueueMessageV2;
 
 export type InboundQueueParseResult =
   | { ok: true; value: InboundQueueMessage }
@@ -42,9 +43,18 @@ export function parseInboundQueueMessage(input: unknown): InboundQueueParseResul
     issues.push(`schemaVersion must be ${INBOUND_QUEUE_SCHEMA_VERSION}`);
   }
   checkString(input.messageId, 'messageId', issues, 128);
+  checkString(input.mailboxId, 'mailboxId', issues, 128);
   checkString(input.rawKey, 'rawKey', issues, 1024);
   if (typeof input.rawKey === 'string' && !input.rawKey.startsWith('staging/raw/')) {
     issues.push('rawKey must use the staging/raw/ prefix');
+  }
+  if (
+    typeof input.rawKey === 'string'
+    && typeof input.mailboxId === 'string'
+    && typeof input.messageId === 'string'
+    && !input.rawKey.endsWith(`/${input.mailboxId}/${input.messageId}.eml`)
+  ) {
+    issues.push('rawKey must end with mailboxId/messageId.eml');
   }
 
   if (!isRecord(input.envelope)) {

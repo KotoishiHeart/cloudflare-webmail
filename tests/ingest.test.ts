@@ -86,7 +86,7 @@ describe('Email Routing durable handoff', () => {
     expect(await stored.text()).toBe(rawText);
     expect(stored.httpMetadata?.contentType).toBe('message/rfc822');
     expect(stored.customMetadata).toMatchObject({
-      schemaVersion: '1',
+      schemaVersion: '2',
       messageId: result.queueMessage.messageId,
       mailboxId: MAILBOX_ID,
       receivedAt: String(NOW),

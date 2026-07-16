@@ -1,8 +1,11 @@
-import type { InboundQueueMessage } from '@cf-webmail/contracts';
-import { deferUnimplementedInbound } from './inbound-consumer.js';
+import { handleInboundBatch } from './inbound-consumer.js';
 
 export default {
-  queue(batch: MessageBatch<InboundQueueMessage>): void {
-    deferUnimplementedInbound(batch.messages);
+  async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+    await handleInboundBatch(batch.messages, {
+      db: env.DB,
+      rawEmails: env.RAW_EMAILS,
+      now: Date.now,
+    });
   },
-} satisfies ExportedHandler<Env, InboundQueueMessage>;
+} satisfies ExportedHandler<Env>;

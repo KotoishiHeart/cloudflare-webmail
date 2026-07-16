@@ -102,6 +102,7 @@ function createQueueMessage(
   return {
     schemaVersion: INBOUND_QUEUE_SCHEMA_VERSION,
     messageId: receipt.messageId,
+    mailboxId: route.mailboxId,
     rawKey,
     envelope: { from: message.from, to: route.address },
     headers: {

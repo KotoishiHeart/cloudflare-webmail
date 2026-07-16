@@ -10,7 +10,8 @@ function validMessage(): InboundQueueMessage {
   return {
     schemaVersion: INBOUND_QUEUE_SCHEMA_VERSION,
     messageId: '0190f721-5f4c-7de3-9ec1-66c8619f748c',
-    rawKey: 'staging/raw/2026/07/16/0190f721.eml',
+    mailboxId: '0190f721-5f4c-7de3-9ec1-66c8619f748d',
+    rawKey: 'staging/raw/2026/07/16/0190f721-5f4c-7de3-9ec1-66c8619f748d/0190f721-5f4c-7de3-9ec1-66c8619f748c.eml',
     envelope: { from: 'sender@example.net', to: 'inbox@example.com' },
     headers: { subject: 'hello', messageId: '<message@example.net>' },
     receivedAt: 1_752_688_800_000,
@@ -31,11 +32,11 @@ describe('inbound Queue contract', () => {
   });
 
   it('rejects unknown versions and unsafe R2 keys', () => {
-    const input = { ...validMessage(), schemaVersion: 2, rawKey: 'raw/message.eml' };
+    const input = { ...validMessage(), schemaVersion: 1, rawKey: 'raw/message.eml' };
     const result = parseInboundQueueMessage(input);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.issues).toContain('schemaVersion must be 1');
+      expect(result.issues).toContain('schemaVersion must be 2');
       expect(result.issues).toContain('rawKey must use the staging/raw/ prefix');
     }
   });

@@ -3,7 +3,7 @@ export {
   MAX_INBOUND_MESSAGE_BYTES,
   parseInboundQueueMessage,
   type InboundQueueMessage,
-  type InboundQueueMessageV1,
+  type InboundQueueMessageV2,
   type InboundQueueParseResult,
   type InboundRoutingAction,
 } from './inbound.js';
