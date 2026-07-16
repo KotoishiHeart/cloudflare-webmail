@@ -1,13 +1,14 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import { createLegacyInventory, createLegacyMappingTemplate } from '../lib/legacy-inventory.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from '../lib/legacy-snapshot.mjs';
+import { fetchLegacySnapshotBulk } from '../lib/legacy-snapshot-bulk.mjs';
 import { importLegacySafeSql } from '../lib/legacy-sqlite.mjs';
 
 let root;
@@ -66,6 +67,62 @@ describe('archived raw R2 snapshot', () => {
     await assert.rejects(
       verifyLegacySnapshot({ database, mapping, snapshot }),
       /verification failed for 1 object/u,
+    );
+  });
+
+  it('downloads the fixed raw-key set with one resumable rclone copy', async () => {
+    const snapshot = join(root, 'snapshot-bulk');
+    const remote = join(root, 'fake-rclone-remote');
+    await mkdir(join(remote, 'raw'), { recursive: true });
+    await Promise.all([
+      writeFile(join(remote, 'raw', 'one.eml.gz'), gzipSync(rawOne)),
+      writeFile(join(remote, 'raw', 'two.eml.gz'), gzipSync(rawTwo)),
+    ]);
+    const calls = [];
+    const io = {
+      async execFile(command, args) {
+        calls.push({ command, args });
+        if (args[0] === 'version') return { status: 0 };
+        assert.deepEqual(args.slice(0, 2), ['copy', 'archive:old-bucket']);
+        const destination = args[2];
+        const list = args[args.indexOf('--files-from-raw') + 1];
+        const keys = (await readFile(list, 'utf8')).trim().split('\n');
+        for (const key of keys) {
+          const target = join(destination, key);
+          await mkdir(dirname(target), { recursive: true });
+          await writeFile(target, await readFile(join(remote, key)));
+        }
+        return { status: 0 };
+      },
+    };
+    const result = await fetchLegacySnapshotBulk({
+      database,
+      mapping,
+      snapshot,
+      rcloneSource: 'archive:old-bucket',
+      concurrency: 2,
+      io,
+      now: 3456,
+    });
+    assert.equal(result.complete, true);
+    assert.equal(result.bulkSource.sourceObjects, 2);
+    assert.equal(result.bulkSource.copied, 2);
+    assert.match(result.bulkSource.sourceListSha256, /^[0-9a-f]{64}$/u);
+    assert.equal(
+      await readFile(result.bulkSource.sourceList, 'utf8'),
+      'raw/one.eml.gz\nraw/two.eml.gz\n',
+    );
+    await assert.rejects(readFile(join(snapshot, '.rclone-source', 'raw', 'one.eml.gz')), /ENOENT/u);
+    const resumed = await fetchLegacySnapshotBulk({
+      database, mapping, snapshot, rcloneSource: 'archive:old-bucket', io,
+    });
+    assert.equal(resumed.bulkSource.copied, 0);
+    assert.equal(calls.filter((call) => call.args[0] === 'copy').length, 1);
+    await assert.rejects(
+      fetchLegacySnapshotBulk({
+        database, mapping, snapshot, rcloneSource: 'other:old-bucket', io,
+      }),
+      /different R2 source/u,
     );
   });
 });

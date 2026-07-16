@@ -8,6 +8,7 @@ import {
 } from './legacy-inventory.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
+import { fetchLegacySnapshotBulk } from './legacy-snapshot-bulk.mjs';
 import { prepareLegacyMigrationStage } from './legacy-stage.mjs';
 import { verifyMigrationStage } from './migration-stage.mjs';
 import { applyLegacyStageBulk } from './legacy-bulk-apply.mjs';
@@ -97,25 +98,25 @@ export async function runLegacyMigrationCli(argv, io = {
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
-  if (command === 'fetch') {
+  if (command === 'fetch' || command === 'bulk-fetch') {
     const database = required(options, 'database');
     const mapping = await loadAndValidateLegacyMapping(
       required(options, 'mapping'),
       createLegacyInventory(database),
     );
-    const result = await fetchLegacySnapshot({
-      database,
-      mapping,
-      snapshot: required(options, 'snapshot'),
-      objectRoot: options['object-root'],
-      bucket: options.bucket,
-      local: Boolean(options.local),
-      remote: Boolean(options.remote),
-      config: options.config,
-      persistTo: options['persist-to'],
-      concurrency: options.concurrency,
-      io,
-    });
+    const common = { database, mapping, snapshot: required(options, 'snapshot'), io };
+    const result = command === 'bulk-fetch'
+      ? await fetchLegacySnapshotBulk({
+        ...common, rcloneSource: required(options, 'rclone-source'),
+        rcloneConfig: options['rclone-config'], transfers: options.transfers,
+        checkers: options.checkers, concurrency: options.concurrency,
+      })
+      : await fetchLegacySnapshot({
+        ...common, objectRoot: options['object-root'], bucket: options.bucket,
+        local: Boolean(options.local), remote: Boolean(options.remote),
+        config: options.config, persistTo: options['persist-to'],
+        concurrency: options.concurrency,
+      });
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return result.complete ? 0 : 2;
   }
@@ -226,6 +227,8 @@ function usage() {
     `    --deployment deployment.json --output verification.json\n` +
     `  fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
     `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
+    `  bulk-fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
+    `    --rclone-source REMOTE:BUCKET [--rclone-config FILE]\n` +
     `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +
     `  prepare --database legacy.sqlite --mapping mapping.json --snapshot DIR --stage DIR\n` +
     `  verify-stage --stage DIR\n` +

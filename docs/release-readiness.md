@@ -71,6 +71,8 @@ deployment. Require:
   review, and deployment manifest by digest;
 - every mapped mailbox ID and primary address provisioned with at least one
   verified Access-backed owner before any migration chunk is applied;
+- the frozen bulk source-key list matches the mapped archive and read-only
+  rclone acquisition completes without per-object process fan-out;
 - a fully verified archived raw snapshot and complete conversion stage;
 - successful download-based R2 comparison;
 - matching per-account D1 message, direction, flag, attachment, and object

@@ -24,7 +24,7 @@ export async function fetchLegacySnapshot(options) {
   try {
     validateLegacySnapshotIdentity(state, options);
     const source = sourceIdentity(options);
-    bindLegacySnapshotSource(state, source);
+    bindLegacySnapshotSource(state, options.sourceIdentity ?? source);
     const rows = state.prepare(`
       SELECT source_key, file, compressed, expected_raw_sha256, expected_raw_size
       FROM snapshot_objects WHERE status <> 'ready' ORDER BY source_key

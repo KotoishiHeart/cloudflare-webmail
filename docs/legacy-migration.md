@@ -125,8 +125,31 @@ npm run migrate:legacy -- fetch \
   --object-root /srv/legacy-r2
 ```
 
-To read the archived bucket directly, select the target explicitly. The
-command only downloads objects and does not mutate the source bucket:
+For a production-sized archive, use one read-only rclone bulk copy. Configure
+a named S3 remote for the archived R2 bucket outside this repository, using a
+credential that cannot write or delete objects:
+
+```bash
+npm run migrate:legacy -- bulk-fetch \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --snapshot ops/legacy-raw-snapshot \
+  --rclone-source legacy-r2:cf-webmail-starter-mail-objects \
+  --rclone-config /secure/legacy-rclone.conf \
+  --transfers 16 --checkers 32 --concurrency 8
+```
+
+Bulk fetch freezes the complete mapped raw-key list and its SHA-256 inside the
+snapshot, passes only unfinished keys to a single `rclone copy`, and never uses
+delete or move against the source. Each download is then decompressed and
+checked against the old D1 raw size and SHA-256 before entering the hashed
+snapshot. Verified keys are skipped on resume, the transient key-shaped copy is
+removed locally, and changing the named source or rclone configuration is
+rejected. This avoids launching one Wrangler process for each of tens of
+thousands of archived messages.
+
+The per-object Wrangler path remains useful for a small rehearsal or diagnostic.
+Select its local/remote target explicitly; it also only reads the source bucket:
 
 ```bash
 npm run migrate:legacy -- fetch \

@@ -205,3 +205,6 @@ real email delivery has been verified.
 15. Completed: hash-bound legacy provisioning verification across account
     mapping, Access identities, mail domains, reviewed directory artifacts, and
     the exact production deployment manifest.
+16. Completed: production-scale archived R2 acquisition using a frozen raw-key
+    list, one read-only rclone transfer, per-object D1 hash verification, and
+    resumable cleanup without source mutation.
