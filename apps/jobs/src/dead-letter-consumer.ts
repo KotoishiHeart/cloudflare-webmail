@@ -9,6 +9,7 @@ import {
   saveQueueDeadLetter,
   type DeadLetterSource,
 } from '@cf-webmail/database';
+import { queueRetryDelay } from './queue-retry.js';
 
 export type DeadLetterQueueItem = Pick<
   Message<unknown>,
@@ -64,7 +65,7 @@ export async function handleDeadLetterBatch(
         sourceMessageId: message.id,
         errorType: error instanceof Error ? error.name : typeof error,
       }));
-      message.retry({ delaySeconds: retryDelay(message.attempts) });
+      message.retry({ delaySeconds: queueRetryDelay(error, message.attempts, now) });
       result.retried += 1;
     }
   }
@@ -108,9 +109,4 @@ async function bestEffortMarkInboundDeadLetter(
       errorType: error instanceof Error ? error.name : typeof error,
     }));
   }
-}
-
-function retryDelay(attempts: number): number {
-  const exponent = Math.max(0, Math.min(7, Math.floor(attempts) - 1));
-  return Math.min(30 * (2 ** exponent), 3600);
 }

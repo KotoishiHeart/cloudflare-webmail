@@ -5,6 +5,7 @@ import {
   RetryableOutboundError,
   outboundErrorType,
 } from './outbound-errors.js';
+import { isD1DailyLimitError, queueRetryDelay } from './queue-retry.js';
 import {
   processOutboundQueueMessage,
   type OutboundProcessorDependencies,
@@ -50,28 +51,31 @@ export async function handleOutboundBatch(
       result.acknowledged += 1;
     } catch (error) {
       const permanent = error instanceof PermanentOutboundError;
-      const delaySeconds = permanent ? 0 : retryDelay(message.attempts);
+      const dailyLimit = !permanent && isD1DailyLimitError(error);
+      const delaySeconds = permanent ? 0 : queueRetryDelay(error, message.attempts, dependencies.now());
+      const errorCode = dailyLimit
+        ? 'd1_daily_limit'
+        : error instanceof PermanentOutboundError || error instanceof RetryableOutboundError
+          ? error.code
+          : 'retryable';
       console.error(JSON.stringify({
         event: 'outbound.processing_failed',
         messageId: parsed.value.messageId,
         errorType: outboundErrorType(error),
-        errorCode: error instanceof PermanentOutboundError || error instanceof RetryableOutboundError
-          ? error.code
-          : 'retryable',
+        errorCode,
         attempt: message.attempts,
         retryDelaySeconds: delaySeconds,
       }));
       await recordDeliveryEventSafely(dependencies.db, {
         direction: 'outbound', stage: 'queue',
         status: permanent ? 'failed' : 'retrying',
-        category: permanent ? 'outbound_permanent_failure' : 'outbound_retry',
+        category: permanent ? 'outbound_permanent_failure'
+          : dailyLimit ? 'd1_daily_limit' : 'outbound_retry',
         severity: permanent ? 'high' : 'medium', mailboxId: parsed.value.mailboxId,
         messageId: parsed.value.messageId,
-        errorCode: error instanceof PermanentOutboundError || error instanceof RetryableOutboundError
-          ? error.code
-          : 'retryable',
+        errorCode,
         summary: error instanceof Error ? error.message : 'Outbound processing failed',
-        details: { attempt: message.attempts, retryDelaySeconds: delaySeconds },
+        details: { attempt: message.attempts, retryDelaySeconds: delaySeconds, dailyLimit },
         now: dependencies.now(),
       });
       if (permanent) {
@@ -90,7 +94,7 @@ export async function handleOutboundBatch(
             messageId: parsed.value.messageId,
             errorType: outboundErrorType(resolutionError),
           }));
-          message.retry({ delaySeconds: retryDelay(message.attempts) });
+          message.retry({ delaySeconds: queueRetryDelay(resolutionError, message.attempts, dependencies.now()) });
           result.retried += 1;
         }
       } else {
@@ -100,9 +104,4 @@ export async function handleOutboundBatch(
     }
   }
   return result;
-}
-
-function retryDelay(attempts: number): number {
-  const exponent = Math.max(0, Math.min(7, Math.floor(attempts) - 1));
-  return Math.min(30 * (2 ** exponent), 3600);
 }

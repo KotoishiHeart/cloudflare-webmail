@@ -5,6 +5,7 @@ import {
   resolveDeadLettersForMessage,
 } from '@cf-webmail/database';
 import { PermanentInboundError, errorType } from './inbound-errors.js';
+import { isD1DailyLimitError, queueRetryDelay } from './queue-retry.js';
 import {
   processInboundQueueMessage,
   type InboundProcessorDependencies,
@@ -51,29 +52,32 @@ export async function handleInboundBatch(
       result.acknowledged += 1;
     } catch (error) {
       const permanent = error instanceof PermanentInboundError;
-      const delaySeconds = permanent ? 0 : retryDelay(message.attempts);
+      const dailyLimit = !permanent && isD1DailyLimitError(error);
+      const delaySeconds = permanent ? 0 : queueRetryDelay(error, message.attempts, dependencies.now());
+      const errorCode = permanent ? error.code : dailyLimit ? 'd1_daily_limit' : 'transient';
       await recordHandoffFailure(
         dependencies,
         parsed.value.messageId,
-        permanent ? error.code : 'transient',
+        errorCode,
         error,
       );
       await recordDeliveryEventSafely(dependencies.db, {
         direction: 'inbound', stage: 'storage',
         status: permanent ? 'failed' : 'retrying',
-        category: permanent ? 'inbound_permanent_failure' : 'inbound_retry',
+        category: permanent ? 'inbound_permanent_failure'
+          : dailyLimit ? 'd1_daily_limit' : 'inbound_retry',
         severity: permanent ? 'high' : 'medium', mailboxId: parsed.value.mailboxId,
         messageId: parsed.value.messageId,
-        errorCode: permanent ? error.code : 'transient',
+        errorCode,
         summary: error instanceof Error ? error.message : 'Inbound processing failed',
-        details: { attempt: message.attempts, retryDelaySeconds: delaySeconds },
+        details: { attempt: message.attempts, retryDelaySeconds: delaySeconds, dailyLimit },
         now: dependencies.now(),
       });
       console.error(JSON.stringify({
         event: 'inbound.processing_failed',
         messageId: parsed.value.messageId,
         errorType: errorType(error),
-        errorCode: permanent ? error.code : 'transient',
+        errorCode,
         attempt: message.attempts,
         retryDelaySeconds: delaySeconds,
       }));
@@ -105,9 +109,4 @@ async function recordHandoffFailure(
       errorType: errorType(handoffError),
     }));
   }
-}
-
-function retryDelay(attempts: number): number {
-  const exponent = Math.max(0, Math.min(7, Math.floor(attempts) - 1));
-  return Math.min(30 * (2 ** exponent), 3600);
 }
