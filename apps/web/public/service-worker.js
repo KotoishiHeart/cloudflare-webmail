@@ -1,4 +1,4 @@
-const CACHE = 'cf-webmail-shell-v1';
+const CACHE = 'cf-webmail-shell-v2';
 const SHELL = [
   '/',
   '/index.html',
@@ -21,9 +21,11 @@ const SHELL = [
   '/ui/admin-mailboxes.js',
   '/ui/admin-retention.js',
   '/ui/admin-users.js',
+  '/ui/bulk-controller.js',
   '/ui/compose.js',
   '/ui/format.js',
   '/ui/message-detail.js',
+  '/ui/message-actions-controller.js',
   '/ui/message-list.js',
   '/ui/mailbox-settings-controller.js',
   '/ui/pwa.js',

@@ -27,6 +27,7 @@
   .close-button { display: inline-flex; }
   .detail-placeholder { display: none; }
   .message-row { border-radius: 13px; padding: 0.85rem 0.75rem; }
+  .bulk-actions { width: 100%; margin-left: 0; }
   .search-primary { grid-template-columns: minmax(0, 1fr) auto; }
   .search-primary .secondary { grid-column: 1 / -1; }
   .search-grid { grid-template-columns: 1fr; }

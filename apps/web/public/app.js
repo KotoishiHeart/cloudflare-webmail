@@ -5,8 +5,11 @@ import {
   getPreferences,
   getSession,
   patchMessage,
+  patchMessages,
   createMessage,
 } from './ui/api.js';
+import { createBulkController } from './ui/bulk-controller.js';
+import { createMessageActionsController } from './ui/message-actions-controller.js';
 import {
   bindCompose,
   openCompose,
@@ -49,6 +52,18 @@ const settings = createMailboxSettingsController({
   selectedMailbox,
   status: showStatus,
   error: handleError,
+});
+const bulk = createBulkController({
+  state,
+  getMailbox: selectedMailbox,
+  patchMessages,
+  loadMessages,
+  status: showStatus,
+  error: handleError,
+});
+const messageActions = createMessageActionsController({
+  state, patchMessage, loadMessages, openMessage, closeDetail,
+  status: showStatus, error: handleError,
 });
 
 bindShell({
@@ -93,7 +108,7 @@ async function start() {
     renderFolder(state.folder);
     renderSearch(state.searchFilters);
     if (!firstMailbox) {
-      renderMessageList(state, openMessage);
+      renderCurrentMessages();
       showStatus('このAccess identityにはメールボックスが割り当てられていません。', true);
       return;
     }
@@ -144,7 +159,7 @@ async function loadMessages(append) {
     if (revision !== state.revision) return;
     if (append) appendMessagePage(page);
     else replaceMessagePage(page);
-    renderMessageList(state, openMessage);
+    renderCurrentMessages();
   } catch (error) {
     if (revision === state.revision) {
       handleError(error, 'メール一覧を取得できませんでした。');
@@ -168,14 +183,14 @@ async function applySearch(filters) {
 
 async function openMessage(messageId) {
   state.selectedMessageId = messageId;
-  renderMessageList(state, openMessage);
+  renderCurrentMessages();
   showDetailLoading();
   try {
     const detail = await getMessage(messageId);
     const body = await getMessageBody(detail.message);
     if (state.selectedMessageId !== messageId) return;
     showMessageDetail(detail, body, {
-      onPatch: (patch) => applyPatch(messageId, patch),
+      onPatch: (patch) => messageActions.apply(messageId, patch, detail.message),
       onReply: () => openReplyCompose(selectedMailbox(), detail, body),
       onForward: () => openForwardCompose(selectedMailbox(), detail, body),
       onLabels: (labelIds) => settings.saveMessageLabels(messageId, labelIds),
@@ -185,21 +200,6 @@ async function openMessage(messageId) {
   } catch (error) {
     handleError(error, 'メッセージを取得できませんでした。');
     closeDetail();
-  }
-}
-
-async function applyPatch(messageId, patch) {
-  try {
-    await patchMessage(messageId, patch);
-    showStatus('メッセージを更新しました。');
-    await loadMessages(false);
-    if (state.messages.some((message) => message.id === messageId)) {
-      await openMessage(messageId);
-    } else {
-      closeDetail();
-    }
-  } catch (error) {
-    handleError(error, 'メッセージを更新できませんでした。');
   }
 }
 
@@ -221,7 +221,17 @@ function selectedMailbox() {
 function closeDetail() {
   state.selectedMessageId = '';
   closeMessageDetail();
-  renderMessageList(state, openMessage);
+  renderCurrentMessages();
+}
+
+function renderCurrentMessages() {
+  const mailbox = selectedMailbox();
+  renderMessageList(state, {
+    onSelect: openMessage,
+    onToggle: bulk.toggle,
+    selectable: Boolean(mailbox && mailbox.role !== 'viewer'),
+  });
+  bulk.render();
 }
 
 function handleError(error, fallback) {

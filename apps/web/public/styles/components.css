@@ -59,6 +59,13 @@
 .sidebar-note strong { margin-top: 0.25rem; color: var(--forest); }
 
 .message-list { display: grid; gap: 0.62rem; }
+.bulk-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; margin: 0 0 0.8rem; border: 1px solid var(--line); border-radius: 12px; padding: 0.55rem 0.65rem; background: var(--field); font-size: 0.68rem; }
+.bulk-toolbar[hidden] { display: none; }
+.bulk-toolbar label { display: flex; align-items: center; gap: 0.35rem; }
+.bulk-toolbar > span { color: var(--muted); }
+.bulk-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-left: auto; }
+.bulk-actions button { border: 1px solid var(--line); border-radius: 8px; padding: 0.38rem 0.52rem; color: var(--ink); background: var(--surface); cursor: pointer; font-size: 0.65rem; }
+.bulk-actions button:disabled { opacity: 0.45; cursor: wait; }
 .mail-search {
   display: grid;
   gap: 0.65rem;
@@ -100,20 +107,22 @@
 .search-grid label { display: grid; gap: 0.25rem; min-width: 0; color: var(--muted); font-size: 0.65rem; }
 .message-row {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr) auto;
-  gap: 0.8rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
   width: 100%;
   border: 1px solid transparent;
   border-radius: 16px;
   padding: 1rem;
   background: var(--surface-translucent);
-  text-align: left;
-  cursor: pointer;
   transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
 .message-row:hover { transform: translateY(-1px); border-color: var(--muted); box-shadow: 0 10px 30px rgb(29 62 52 / 7%); }
 .message-row.active { border-color: #86aa9d; background: var(--surface); box-shadow: var(--shadow); }
+.message-row.selected { border-color: var(--orange); }
 .message-row.read .unread-dot { opacity: 0; }
+.message-select { display: grid; place-items: center; padding: 0.2rem; }
+.message-open { display: grid; grid-template-columns: 8px minmax(0, 1fr); gap: 0.8rem; min-width: 0; border: 0; padding: 0; color: inherit; background: transparent; text-align: left; cursor: pointer; }
 .unread-dot { width: 7px; height: 7px; margin-top: 0.35rem; border-radius: 50%; background: var(--orange); }
 .message-main, .message-line { min-width: 0; }
 .message-line { display: flex; justify-content: space-between; gap: 0.7rem; }
@@ -179,6 +188,7 @@
 
 .status-toast { position: fixed; z-index: 10; right: 1.2rem; bottom: 1.2rem; max-width: min(28rem, calc(100vw - 2.4rem)); border-radius: 12px; padding: 0.8rem 1rem; color: var(--on-forest); background: var(--forest); box-shadow: var(--shadow); font-size: 0.78rem; }
 .status-toast.error { background: var(--danger); }
+.status-toast button { margin-left: 0.8rem; border: 1px solid currentcolor; border-radius: 7px; padding: 0.3rem 0.48rem; color: inherit; background: transparent; cursor: pointer; font: inherit; font-weight: 750; }
 
 .compose-dialog {
   width: min(680px, calc(100vw - 2rem));

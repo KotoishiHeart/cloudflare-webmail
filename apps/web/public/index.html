@@ -103,6 +103,17 @@
               </div>
             </details>
           </form>
+          <div id="bulk-toolbar" class="bulk-toolbar" hidden>
+            <label><input id="bulk-select-all" type="checkbox">表示中を全選択</label>
+            <span id="bulk-count">0件選択</span>
+            <div class="bulk-actions">
+              <button type="button" data-bulk-field="isRead" data-bulk-value="true">既読</button>
+              <button type="button" data-bulk-field="isRead" data-bulk-value="false">未読</button>
+              <button type="button" data-bulk-field="isStarred" data-bulk-value="true">スター</button>
+              <button type="button" data-bulk-field="isArchived" data-bulk-value="true">アーカイブ</button>
+              <button type="button" data-bulk-field="isDeleted" data-bulk-value="true">ゴミ箱へ</button>
+            </div>
+          </div>
           <div id="empty-state" class="empty-state" hidden>
             <span class="empty-mark" aria-hidden="true">✦</span>
             <h2 id="empty-title">ここにはまだメールがありません</h2>
@@ -257,15 +268,18 @@
     </dialog>
 
     <template id="message-template">
-      <button class="message-row" type="button">
-        <span class="unread-dot" aria-hidden="true"></span>
-        <span class="message-main">
-          <span class="message-line"><strong class="message-sender"></strong><time></time></span>
-          <span class="message-subject"></span>
-          <span class="message-preview"></span>
-        </span>
+      <div class="message-row">
+        <label class="message-select"><input type="checkbox" data-message-select><span class="sr-only">選択</span></label>
+        <button class="message-open" type="button">
+          <span class="unread-dot" aria-hidden="true"></span>
+          <span class="message-main">
+            <span class="message-line"><strong class="message-sender"></strong><time></time></span>
+            <span class="message-subject"></span>
+            <span class="message-preview"></span>
+          </span>
+        </button>
         <span class="message-badges"></span>
-      </button>
+      </div>
     </template>
 
     <template id="attachment-template">

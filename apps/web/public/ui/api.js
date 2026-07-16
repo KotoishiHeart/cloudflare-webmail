@@ -163,6 +163,14 @@ export async function patchMessage(messageId, patch) {
   });
 }
 
+export async function patchMessages(mailboxId, messageIds, patch) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/messages`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ messageIds, patch }),
+  });
+}
+
 export async function createMessage(mailboxId, input) {
   const { requestId, attachments = [], ...message } = input;
   if (attachments.length > 0) {

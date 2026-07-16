@@ -32,16 +32,26 @@ export function renderFolder(folder) {
   }
 }
 
-export function showStatus(message, error = false) {
+export function showStatus(message, error = false, action = null) {
   window.clearTimeout(statusTimer);
-  status.textContent = message;
+  status.replaceChildren(document.createTextNode(message));
   status.classList.toggle('error', error);
   status.setAttribute('role', error ? 'alert' : 'status');
   status.setAttribute('aria-live', error ? 'assertive' : 'polite');
   status.hidden = false;
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = action.label;
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      await action.activate();
+    }, { once: true });
+    status.append(button);
+  }
   statusTimer = window.setTimeout(() => {
     status.hidden = true;
-  }, error ? 7000 : 3500);
+  }, error ? 7000 : action ? 7000 : 3500);
 }
 
 export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose, onCompose, onSettings }) {

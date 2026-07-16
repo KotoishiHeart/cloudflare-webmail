@@ -7,6 +7,7 @@ export const state = {
   messages: [],
   nextCursor: null,
   selectedMessageId: '',
+  selectedMessageIds: new Set(),
   busy: false,
   activeLoads: 0,
   revision: 0,
@@ -28,12 +29,14 @@ export function setSearchFilters(filters) {
   state.selectedMessageId = '';
   state.messages = [];
   state.nextCursor = null;
+  state.selectedMessageIds.clear();
   state.revision += 1;
 }
 
 export function replaceMessagePage(page) {
   state.messages = page.messages;
   state.nextCursor = page.nextCursor;
+  state.selectedMessageIds.clear();
 }
 
 export function appendMessagePage(page) {
@@ -47,6 +50,7 @@ export function selectMailbox(mailboxId) {
   state.selectedMessageId = '';
   state.messages = [];
   state.nextCursor = null;
+  state.selectedMessageIds.clear();
   state.labels = [];
   state.rules = [];
   state.ruleRuns = [];
@@ -71,5 +75,6 @@ export function selectFolder(folder) {
   state.selectedMessageId = '';
   state.messages = [];
   state.nextCursor = null;
+  state.selectedMessageIds.clear();
   state.revision += 1;
 }

@@ -6,7 +6,7 @@ const template = document.querySelector('#message-template');
 const empty = document.querySelector('#empty-state');
 const loadMore = document.querySelector('#load-more');
 
-export function renderMessageList(state, onSelect) {
+export function renderMessageList(state, handlers) {
   list.replaceChildren();
   empty.hidden = state.messages.length !== 0;
   document.querySelector('#empty-title').textContent = hasActiveSearch(state.searchFilters)
@@ -21,6 +21,7 @@ export function renderMessageList(state, onSelect) {
     row.dataset.messageId = message.id;
     row.classList.toggle('read', message.isRead);
     row.classList.toggle('active', message.id === state.selectedMessageId);
+    row.classList.toggle('selected', state.selectedMessageIds.has(message.id));
     row.querySelector('.message-sender').textContent = message.direction === 'outbound'
       ? `宛先: ${message.recipients || 'BCCのみ'}`
       : senderLabel(message.sender);
@@ -29,8 +30,18 @@ export function renderMessageList(state, onSelect) {
     row.querySelector('.message-subject').textContent = message.subject || '（件名なし）';
     row.querySelector('.message-preview').textContent = message.textPreview || '本文プレビューなし';
     row.querySelector('.message-badges').textContent = badges(message);
-    row.setAttribute('aria-pressed', String(message.id === state.selectedMessageId));
-    row.addEventListener('click', () => onSelect(message.id));
+    const open = row.querySelector('.message-open');
+    open.setAttribute('aria-pressed', String(message.id === state.selectedMessageId));
+    open.addEventListener('click', () => handlers.onSelect(message.id));
+    const checkbox = row.querySelector('[data-message-select]');
+    checkbox.closest('.message-select').hidden = !handlers.selectable;
+    checkbox.disabled = !handlers.selectable;
+    checkbox.checked = state.selectedMessageIds.has(message.id);
+    checkbox.setAttribute('aria-label', `${message.subject || '件名なし'}を選択`);
+    checkbox.addEventListener('change', () => {
+      row.classList.toggle('selected', checkbox.checked);
+      handlers.onToggle(message.id, checkbox.checked);
+    });
     list.append(row);
   }
 }
