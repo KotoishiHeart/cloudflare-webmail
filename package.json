@@ -20,6 +20,7 @@
     "ops": "node tools/cf-webmail.mjs",
     "migrate:mail": "node tools/migrate-mail.mjs",
     "backup": "node tools/backup.mjs",
+    "deploy": "node tools/deploy.mjs",
     "db:migrate:local": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler d1 migrations apply cf-webmail --local --config apps/web/wrangler.jsonc",
     "build:dry": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler deploy --dry-run --config apps/web/wrangler.jsonc --outdir dist/web && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler deploy --dry-run --config apps/ingest/wrangler.jsonc --outdir dist/ingest && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler deploy --dry-run --config apps/jobs/wrangler.jsonc --outdir dist/jobs",
     "check": "npm run typecheck && npm test && npm run build:dry"

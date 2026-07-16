@@ -17,11 +17,13 @@ npx wrangler queues create cf-webmail-outbound
 npx wrangler queues create cf-webmail-outbound-dlq
 ```
 
-Copy the returned D1 `database_id` into all three `wrangler.jsonc` files. Then
-onboard each sender domain in **Compute > Email Service > Email Sending** and
-confirm SPF/DKIM before enabling outbound delivery. Configure Cloudflare Access
-for the Web hostname and replace `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` in the
-Web Worker configuration.
+Put the returned D1 `database_id`, Cloudflare account ID, and resource names in
+an ignored deployment manifest as described in [`deployment.md`](deployment.md).
+The deployment tool generates all three production configurations, avoiding
+independent binding edits. Then onboard each sender domain in **Compute > Email
+Service > Email Sending** and confirm SPF/DKIM before enabling outbound
+delivery. Configure Cloudflare Access for the Web hostname and put its team
+domain and audience tag in the same deployment manifest.
 
 ## Migrations
 
@@ -29,7 +31,8 @@ Preview locally first, then apply remotely only after a backup:
 
 ```bash
 npm run ops -- migrate --local --yes
-npm run ops -- migrate --remote --yes
+npm run ops -- migrate --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json
 ```
 
 The `--yes` flag confirms that the command changes D1; it does not bypass a
@@ -54,7 +57,8 @@ Apply the reviewed file:
 
 ```bash
 npm run ops -- apply --plan ops/provision.sql --local --yes
-npm run ops -- apply --plan ops/provision.sql --remote --yes
+npm run ops -- apply --plan ops/provision.sql --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json
 ```
 
 The SQL intentionally does not move an existing Access identity to another
@@ -69,7 +73,8 @@ addresses:
 
 ```bash
 npm run ops -- status --local
-npm run ops -- status --remote
+npm run ops -- status --remote \
+  --config ops/deploy-production/configs/web.wrangler.json
 ```
 
 After fixing a terminal sender-domain, recipient, or content error, explicitly
@@ -79,7 +84,8 @@ recovery republishes it to the outbound Queue:
 ```bash
 npm run ops -- retry-outbound \
   --message-id 019c315c-1f20-7000-8000-000000000000 \
-  --remote --yes
+  --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json
 ```
 
 Do not retry a message whose provider outcome was ambiguous without first

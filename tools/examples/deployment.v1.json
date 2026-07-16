@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "environment": "production",
+  "mode": "initial",
+  "accountId": "REPLACE_WITH_32_HEX_ACCOUNT_ID",
+  "hostname": "mail.example.com",
+  "workers": {
+    "web": "cf-webmail-web",
+    "ingest": "cf-webmail-ingest",
+    "jobs": "cf-webmail-jobs"
+  },
+  "access": {
+    "teamDomain": "https://REPLACE_WITH_TEAM.cloudflareaccess.com",
+    "audience": "REPLACE_WITH_64_HEX_ACCESS_AUD"
+  },
+  "resources": {
+    "d1": {
+      "name": "cf-webmail",
+      "id": "REPLACE_WITH_D1_UUID"
+    },
+    "r2": {
+      "bucket": "cf-webmail-raw"
+    },
+    "queues": {
+      "inbound": "cf-webmail-inbound",
+      "inboundDlq": "cf-webmail-inbound-dlq",
+      "outbound": "cf-webmail-outbound",
+      "outboundDlq": "cf-webmail-outbound-dlq"
+    }
+  },
+  "email": {
+    "sendingDomains": ["example.com"],
+    "routingDomains": ["example.com"]
+  },
+  "limits": {
+    "queueMaxConcurrency": 1
+  }
+}

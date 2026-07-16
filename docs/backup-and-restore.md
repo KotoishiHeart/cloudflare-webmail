@@ -12,7 +12,8 @@ as sensitive data, encrypt it at rest, restrict access, and define retention.
 
 ```bash
 npm run backup -- create --output ops/backups/2026-07-16 --local
-npm run backup -- create --output ops/backups/2026-07-16 --remote
+npm run backup -- create --output ops/backups/2026-07-16 --remote \
+  --config ops/deploy-production/configs/web.wrangler.json
 npm run backup -- verify --backup ops/backups/2026-07-16
 ```
 
@@ -47,6 +48,7 @@ npm run backup -- restore \
   --backup ops/backups/2026-07-16 \
   --database cf-webmail-restore \
   --bucket cf-webmail-raw-restore \
+  --config ops/deploy-restore/configs/web.wrangler.json \
   --remote --empty-target --yes
 ```
 

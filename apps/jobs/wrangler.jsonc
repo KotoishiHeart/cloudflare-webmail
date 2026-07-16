@@ -35,14 +35,16 @@
         "max_batch_size": 1,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "cf-webmail-inbound-dlq"
+        "dead_letter_queue": "cf-webmail-inbound-dlq",
+        "max_concurrency": 1
       },
       {
         "queue": "cf-webmail-outbound",
         "max_batch_size": 1,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "cf-webmail-outbound-dlq"
+        "dead_letter_queue": "cf-webmail-outbound-dlq",
+        "max_concurrency": 1
       }
     ]
   },

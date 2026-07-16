@@ -48,7 +48,8 @@ before continuing; do not ignore messages silently.
 ```bash
 npm run migrate:mail -- verify --stage ops/migration-user-inbound
 npm run migrate:mail -- apply --stage ops/migration-user-inbound --local --yes
-npm run migrate:mail -- apply --stage ops/migration-user-inbound --remote --yes
+npm run migrate:mail -- apply --stage ops/migration-user-inbound --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json
 ```
 
 For an isolated local rehearsal, add `--persist-to /tmp/cf-webmail-migration`

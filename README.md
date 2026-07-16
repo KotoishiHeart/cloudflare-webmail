@@ -44,10 +44,11 @@ npm run db:migrate:local
 npm run check
 ```
 
-The committed Worker configuration declares the `DB` binding without a
-production `database_id`. Create the `cf-webmail` D1 database and add the ID to
-all three Worker configurations before a remote migration or deployment. Local
-migrations and tests do not require a Cloudflare account.
+The committed development configurations declare the `DB` binding without a
+production `database_id`. Create the `cf-webmail` D1 database and put its ID in
+an ignored deployment manifest; the deployment tool generates all three
+production configurations from that single value. Local migrations and tests
+do not require a Cloudflare account.
 
 Inbound and outbound processing expect these account resources before remote
 deployment:
@@ -72,8 +73,9 @@ a production Email Routing rule. The jobs consumer retries each message up to
 five times and then sends it to the dead-letter queue for inspection.
 
 Before deploying the web Worker, create a Cloudflare Access self-hosted
-application for its public hostname with an explicit Allow policy. Then replace
-the fail-closed values in `apps/web/wrangler.jsonc`:
+application for its public hostname with an explicit Allow policy. Put the
+following values in the ignored deployment manifest. The committed development
+configuration deliberately remains fail closed:
 
 - `ACCESS_TEAM_DOMAIN`: the `https://<team>.cloudflareaccess.com` issuer.
 - `ACCESS_AUD`: the Access application's Audience tag.
@@ -107,6 +109,11 @@ Portable D1/R2 backups and empty-target restores are documented in
 bundle has an offline-verifiable manifest with hashes for the D1 export and
 every referenced R2 object.
 
+Production configuration and Worker upload use the review-first staged process
+in [`docs/deployment.md`](docs/deployment.md). A non-secret manifest generates
+hash-bound configs for the exact Git commit; remote preflight remains separate
+from the confirmation-required migration and deploy step.
+
 ## Implementation stages
 
 1. Completed: Worker entrypoints, versioned contracts, generated binding types,
@@ -117,3 +124,5 @@ every referenced R2 object.
 5. Completed: Access-protected Web API and Static Assets UI.
 6. Completed: Queue-backed outbound delivery, review-first operations,
    resumable mail migration, and portable D1/R2 backup and restore tooling.
+7. Completed: manifest-driven production configuration, remote preflight, and
+   dependency-ordered Worker deployment tooling.
