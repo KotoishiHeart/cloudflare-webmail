@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
+      - name: Audit production dependencies
+        run: npm run audit:prod
       - name: Check generated bindings and TypeScript
         run: npm run typecheck
       - name: Run operations tests

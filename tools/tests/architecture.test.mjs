@@ -43,6 +43,36 @@ test('git ignore policy covers local credentials and generated operator data', a
   }
 });
 
+test('workspace and lockfile package versions cannot drift', async () => {
+  const paths = [
+    'package.json',
+    'apps/web/package.json',
+    'apps/ingest/package.json',
+    'apps/jobs/package.json',
+    'packages/contracts/package.json',
+    'packages/database/package.json',
+  ];
+  const manifests = await Promise.all(paths.map(async (path) => (
+    JSON.parse(await readFile(path, 'utf8'))
+  )));
+  const releaseVersion = manifests[0].version;
+  assert.match(releaseVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u);
+  for (const [index, manifest] of manifests.entries()) {
+    assert.equal(manifest.version, releaseVersion, `${paths[index]} version drifted`);
+    for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
+      if (name.startsWith('@cf-webmail/')) {
+        assert.equal(version, releaseVersion, `${paths[index]} dependency ${name} drifted`);
+      }
+    }
+  }
+  const lock = JSON.parse(await readFile('package-lock.json', 'utf8'));
+  assert.equal(lock.version, releaseVersion);
+  for (const path of paths) {
+    const key = path === 'package.json' ? '' : path.slice(0, -'/package.json'.length);
+    assert.equal(lock.packages[key].version, releaseVersion, `lockfile ${key || 'root'} drifted`);
+  }
+});
+
 test('ordered migrations create the complete schema from an empty database', async () => {
   const migrationNames = (await readdir('migrations'))
     .filter((name) => name.endsWith('.sql'))

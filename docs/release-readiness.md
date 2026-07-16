@@ -11,6 +11,7 @@ Run from a clean commit with Node.js 22 or later:
 
 ```bash
 npm ci
+npm run audit:prod
 npm run typecheck
 npm run test:node
 npm run test:workers

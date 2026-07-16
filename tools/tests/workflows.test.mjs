@@ -9,6 +9,7 @@ describe('GitHub workflow safety boundaries', () => {
     assert.match(workflow, /pull_request:/u);
     assert.match(workflow, /actions\/checkout@v6/u);
     assert.match(workflow, /actions\/setup-node@v6/u);
+    assert.match(workflow, /npm run audit:prod/u);
     assert.match(workflow, /npm run typecheck/u);
     assert.match(workflow, /npm run test:node/u);
     assert.match(workflow, /npm run test:workers/u);
