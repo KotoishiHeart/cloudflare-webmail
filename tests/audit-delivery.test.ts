@@ -5,6 +5,7 @@ import {
   persistInboundMessage,
   provisionMailboxWithOwner,
   provisionUserWithIdentity,
+  pruneExpiredEvents,
   recordDeliveryEventSafely,
 } from '@cf-webmail/database';
 import type { AccessIdentity } from '../apps/web/src/access-auth.js';
@@ -95,6 +96,31 @@ describe('audit and delivery events', () => {
       category: 'message_stored', summary: 'Inbound message stored',
     });
     expect(String(event?.details_json)).toBe('{"quarantined":false}');
+  });
+
+  it('prunes event history incrementally at separate retention boundaries', async () => {
+    const day = 24 * 60 * 60 * 1000;
+    await env.DB.batch([
+      env.DB.prepare(`
+        INSERT INTO audit_events (id, category, action, created_at)
+        VALUES (?, 'admin', 'old.audit', ?), (?, 'admin', 'recent.audit', ?)
+      `).bind('old-audit', NOW - 366 * day, 'recent-audit', NOW - 365 * day),
+      env.DB.prepare(`
+        INSERT INTO delivery_events (id, direction, stage, status, category, created_at)
+        VALUES (?, 'system', 'completed', 'succeeded', 'old.delivery', ?),
+          (?, 'system', 'completed', 'succeeded', 'recent.delivery', ?)
+      `).bind('old-delivery', NOW - 91 * day, 'recent-delivery', NOW - 90 * day),
+    ]);
+    await expect(pruneExpiredEvents(env.DB, NOW)).resolves.toEqual({
+      auditDeleted: 1,
+      deliveryDeleted: 1,
+    });
+    const remaining = await env.DB.prepare(`
+      SELECT id FROM audit_events WHERE id LIKE '%-audit'
+      UNION ALL SELECT id FROM delivery_events WHERE id LIKE '%-delivery'
+      ORDER BY id
+    `).all<{ id: string }>();
+    expect(remaining.results).toEqual([{ id: 'recent-audit' }, { id: 'recent-delivery' }]);
   });
 });
 

@@ -5,6 +5,7 @@ export * from './admin-mailbox-operations.js';
 export * from './admin-user-operations.js';
 export * from './audit-events.js';
 export * from './delivery-events.js';
+export * from './event-retention.js';
 export * from './dead-letter.js';
 export * from './inbound-handoff.js';
 export * from './incoming-mail-rules.js';

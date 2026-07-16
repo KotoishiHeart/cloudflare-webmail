@@ -134,6 +134,13 @@ successful primary consumer changes it to `resolved`. If Queue publication is
 ambiguous, the row stays requested and a later run may publish a duplicate;
 both primary processors are idempotent by message ID.
 
+The same five-minute Cron bounds operational history independently from mail
+retention. It removes at most 500 delivery events older than 90 days and at
+most 500 audit events older than 365 days per run. Failures are isolated from
+queue recovery, storage audit, and approved mail-retention work. These fixed
+periods apply only to diagnostic event rows; they never delete messages or R2
+objects.
+
 ## Retention and permanent deletion
 
 Retention is off for every new mailbox. A system administrator must configure

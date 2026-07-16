@@ -13,6 +13,7 @@ import { recoverOutboundDeliveries } from './outbound-recovery.js';
 import { reconcileInboundStaging } from './staging-reconciliation.js';
 import { auditCanonicalStorage } from './storage-audit.js';
 import { processApprovedRetentionRuns } from './retention-runner.js';
+import { pruneExpiredEvents } from '@cf-webmail/database';
 
 type JobsEnv = {
   DB: D1Database;
@@ -60,13 +61,14 @@ export default {
       throw new Error('INBOUND_QUEUE and OUTBOUND_QUEUE bindings are required');
     }
     const now = Date.now();
-    const [inbound, deadLetters, outbound, staging, storage, retention] = await Promise.allSettled([
+    const [inbound, deadLetters, outbound, staging, storage, retention, events] = await Promise.allSettled([
       recoverInboundHandoffs(env.DB, env.INBOUND_QUEUE, now),
       recoverRequestedDeadLetters(env.DB, env.INBOUND_QUEUE, env.OUTBOUND_QUEUE, now),
       recoverOutboundDeliveries(env.DB, env.OUTBOUND_QUEUE, now),
       reconcileInboundStaging(env.DB, env.RAW_EMAILS, env.INBOUND_QUEUE, now),
       auditCanonicalStorage(env.DB, env.RAW_EMAILS, now),
       processApprovedRetentionRuns(env.DB, env.RAW_EMAILS),
+      pruneExpiredEvents(env.DB, now),
     ]);
     logRecovery('inbound_handoff', inbound);
     logRecovery('dead_letter', deadLetters);
@@ -74,6 +76,7 @@ export default {
     logRecovery('staging', staging);
     logRecovery('storage_audit', storage);
     logRecovery('retention', retention);
+    logRecovery('event_retention', events);
   },
 } satisfies ExportedHandler<JobsEnv>;
 
