@@ -15,6 +15,14 @@ import {
   adminUserResource,
   adminUsersCollection,
 } from './admin-users-api.js';
+import {
+  adminApproveRetentionRun,
+  adminCancelRetentionRun,
+  adminMailboxRetentionRuns,
+  adminRetentionPolicy,
+  adminRetentionRunResource,
+  adminRetentionRuns,
+} from './admin-retention-api.js';
 
 export async function routeAdminApi(
   request: Request,
@@ -57,6 +65,25 @@ async function routeAuthorizedAdminApi(
       ? adminDeliveryEvents(request, db)
       : apiError('method_not_allowed', 405, 'GET');
   }
+  if (pathname === '/api/admin/retention-runs') {
+    return request.method === 'GET'
+      ? adminRetentionRuns(request, db)
+      : apiError('method_not_allowed', 405, 'GET');
+  }
+  const retentionAction = pathname.match(
+    /^\/api\/admin\/retention-runs\/([^/]+)\/(approve|cancel)$/u,
+  );
+  if (retentionAction !== null) {
+    return retentionAction[2] === 'approve'
+      ? adminApproveRetentionRun(
+        request, db, administrator, retentionAction[1] ?? '', now,
+      )
+      : adminCancelRetentionRun(request, db, retentionAction[1] ?? '', now);
+  }
+  const retentionRun = pathname.match(/^\/api\/admin\/retention-runs\/([^/]+)$/u);
+  if (retentionRun !== null) {
+    return adminRetentionRunResource(request, db, retentionRun[1] ?? '');
+  }
   if (pathname === '/api/admin/users') {
     return adminUsersCollection(request, db, administrator, now);
   }
@@ -72,6 +99,20 @@ async function routeAuthorizedAdminApi(
   if (user !== null) return adminUserResource(request, db, administrator, user[1] ?? '', now);
 
   if (pathname === '/api/admin/mailboxes') return adminMailboxesCollection(request, db, now);
+  const retentionPolicy = pathname.match(
+    /^\/api\/admin\/mailboxes\/([^/]+)\/retention-policy$/u,
+  );
+  if (retentionPolicy !== null) {
+    return adminRetentionPolicy(request, db, retentionPolicy[1] ?? '', now);
+  }
+  const mailboxRetentionRuns = pathname.match(
+    /^\/api\/admin\/mailboxes\/([^/]+)\/retention-runs$/u,
+  );
+  if (mailboxRetentionRuns !== null) {
+    return adminMailboxRetentionRuns(
+      request, db, administrator, mailboxRetentionRuns[1] ?? '', now,
+    );
+  }
   const addresses = pathname.match(/^\/api\/admin\/mailboxes\/([^/]+)\/addresses$/u);
   if (addresses !== null) {
     return adminMailboxAddresses(request, db, addresses[1] ?? '', now);

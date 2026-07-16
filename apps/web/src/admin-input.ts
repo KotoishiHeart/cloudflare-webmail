@@ -86,6 +86,53 @@ export async function readAdminMembership(request: Request): Promise<{ role: Mai
   return { role };
 }
 
+export async function readRetentionPolicyPatch(request: Request) {
+  const input = await adminObject(request, [
+    'retentionDays', 'excludeStarred', 'excludeLabeled', 'enabled',
+  ]);
+  if (Object.keys(input).length === 0) throw new ApiInputError('retention policy patch is empty');
+  const retentionDays = input.retentionDays;
+  if (retentionDays !== undefined && (
+    !Number.isSafeInteger(retentionDays) || Number(retentionDays) < 1 || Number(retentionDays) > 3650
+  )) {
+    throw new ApiInputError('retentionDays must be between 1 and 3650');
+  }
+  return {
+    ...(retentionDays === undefined ? {} : { retentionDays: Number(retentionDays) }),
+    ...optionalBooleanField(input, 'excludeStarred'),
+    ...optionalBooleanField(input, 'excludeLabeled'),
+    ...optionalBooleanField(input, 'enabled'),
+  };
+}
+
+export async function readRetentionPreview(request: Request): Promise<{ limit: number }> {
+  const input = await adminObject(request, ['limit']);
+  const limit = input.limit ?? 100;
+  if (!Number.isSafeInteger(limit) || Number(limit) < 1 || Number(limit) > 200) {
+    throw new ApiInputError('limit must be between 1 and 200');
+  }
+  return { limit: Number(limit) };
+}
+
+export async function readRetentionApproval(request: Request) {
+  const input = await adminObject(request, [
+    'backupReference', 'backupManifestSha256', 'backupCreatedAt', 'confirmation',
+  ]);
+  if (input.confirmation !== 'BACKUP_VERIFIED') {
+    throw new ApiInputError('confirmation must be BACKUP_VERIFIED');
+  }
+  if (!Number.isSafeInteger(input.backupCreatedAt) || Number(input.backupCreatedAt) <= 0) {
+    throw new ApiInputError('backupCreatedAt must be a positive timestamp');
+  }
+  return {
+    backupReference: requiredString(input.backupReference, 'backupReference'),
+    backupManifestSha256: requiredString(
+      input.backupManifestSha256, 'backupManifestSha256',
+    ),
+    backupCreatedAt: Number(input.backupCreatedAt),
+  };
+}
+
 async function adminObject(request: Request, allowed: string[]): Promise<Record<string, unknown>> {
   const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
   if (contentType !== 'application/json') throw new ApiInputError('JSON content type is required');
@@ -121,6 +168,14 @@ function optionalBoolean(value: unknown, field: string): boolean | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') throw new ApiInputError(`${field} must be boolean`);
   return value;
+}
+
+function optionalBooleanField(
+  input: Record<string, unknown>,
+  field: string,
+): Record<string, boolean> {
+  const value = optionalBoolean(input[field], field);
+  return value === undefined ? {} : { [field]: value };
 }
 
 function optionalStatusField(input: Record<string, unknown>) {

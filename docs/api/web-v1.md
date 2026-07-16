@@ -91,9 +91,21 @@ All `/api/admin/*` routes require an active user with an explicit row in
 - `PUT|DELETE /api/admin/mailboxes/:mailboxId/members/:userId`
 - `GET /api/admin/audit-events`
 - `GET /api/admin/delivery-events`
+- `GET|PATCH /api/admin/mailboxes/:mailboxId/retention-policy`
+- `GET|POST /api/admin/mailboxes/:mailboxId/retention-runs`
+- `GET /api/admin/retention-runs`
+- `GET /api/admin/retention-runs/:runId`
+- `POST /api/admin/retention-runs/:runId/approve`
+- `POST /api/admin/retention-runs/:runId/cancel`
 
 User and mailbox deletion are reversible `status: "disabled"` transitions.
 The API rejects disabling the current administrator, revoking the current or
 last active administrator, removing an active user's last Access identity,
 deleting a primary address, and deleting a mailbox's last owner. Event lists
 use `before` plus `beforeId` keyset cursors and a maximum page size of 100.
+
+Retention is disabled by default. A preview freezes no more than 200 candidates.
+Approval requires `confirmation: "BACKUP_VERIFIED"`, a backup reference, the
+lowercase SHA-256 of its manifest, and a `backupCreatedAt` timestamp between
+preview and approval. Approval only queues durable work; the scheduled jobs
+Worker rechecks every candidate and performs the permanent D1/R2 deletion.

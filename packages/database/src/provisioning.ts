@@ -97,6 +97,12 @@ export async function provisionMailboxWithOwner(
       )
       VALUES (?, ?, 'owner', ?, ?)
     `).bind(mailboxId, ownerUserId, now, now),
+    db.prepare(`
+      INSERT INTO retention_policies (
+        mailbox_id, retention_days, exclude_starred, exclude_labeled,
+        enabled, created_at, updated_at
+      ) VALUES (?, 30, 1, 1, 0, ?, ?)
+    `).bind(mailboxId, now, now),
   ]);
 }
 

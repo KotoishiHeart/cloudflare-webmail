@@ -34,6 +34,12 @@ database requests and should be scheduled for a quiet period.
 mismatches, and objects not referenced by the exported D1 SQL. Run it after
 copying a bundle and as a periodic restore-readiness check.
 
+For a retention approval, create the preview first, then create and verify the
+backup so the D1 export includes that frozen run. Record the backup reference,
+manifest creation timestamp, and `sha256sum <backup>/manifest.json` output in
+the approval. Keep that exact backup at least until the run and post-checks are
+complete.
+
 Staged inbound objects and other unreferenced R2 orphans are intentionally not
 included. They are not committed mail records and require a separate retention
 policy.

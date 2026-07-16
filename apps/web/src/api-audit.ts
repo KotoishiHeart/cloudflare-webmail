@@ -35,6 +35,7 @@ function shouldAudit(method: string, pathname: string): boolean {
 }
 
 function categoryForPath(pathname: string): AuditCategory {
+  if (pathname.includes('/retention-')) return 'retention';
   if (pathname.includes('/rules') || pathname.includes('/rule-runs')) return 'rule';
   if (pathname.includes('/labels')) return 'label';
   if (pathname === '/api/preferences') return 'preference';
@@ -43,6 +44,8 @@ function categoryForPath(pathname: string): AuditCategory {
 }
 
 function actionFor(method: string, pathname: string, category: AuditCategory): string {
+  if (pathname.endsWith('/approve')) return 'retention.approve';
+  if (pathname.endsWith('/cancel')) return 'retention.cancel';
   if (pathname.endsWith('/preview')) return 'rule.preview';
   if (pathname.endsWith('/apply')) return 'rule.apply';
   if (pathname.endsWith('/undo')) return 'rule.undo';
@@ -54,7 +57,7 @@ function actionFor(method: string, pathname: string, category: AuditCategory): s
 function targetForPath(pathname: string): { type: string; id: string } {
   const segments = pathname.split('/').filter(Boolean);
   for (const marker of [
-    'rule-runs', 'rules', 'messages', 'labels', 'users', 'mailboxes',
+    'retention-runs', 'rule-runs', 'rules', 'messages', 'labels', 'users', 'mailboxes',
   ]) {
     const index = segments.lastIndexOf(marker);
     const candidate = segments[index + 1];
@@ -68,7 +71,10 @@ function severityFor(
   pathname: string,
   status: number,
 ): 'low' | 'medium' | 'high' {
-  if (status >= 500 || method === 'DELETE' || pathname.endsWith('/apply')) return 'high';
+  if (
+    status >= 500 || method === 'DELETE' || pathname.endsWith('/apply')
+    || pathname.endsWith('/approve')
+  ) return 'high';
   if (status >= 400 || method !== 'GET') return 'medium';
   return 'low';
 }

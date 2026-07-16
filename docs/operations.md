@@ -133,3 +133,28 @@ original inbound or outbound Queue, and changes the row to `requeued`. A
 successful primary consumer changes it to `resolved`. If Queue publication is
 ambiguous, the row stays requested and a later run may publish a duplicate;
 both primary processors are idempotent by message ID.
+
+## Retention and permanent deletion
+
+Retention is off for every new mailbox. A system administrator must configure
+and enable the mailbox policy in the administration API or UI. Keep starred and
+labeled exclusions enabled unless a separately approved data policy requires
+otherwise.
+
+Permanent deletion follows this fixed sequence:
+
+1. Create a retention preview for one mailbox and review every frozen item.
+2. Create and verify a fresh portable backup after the preview.
+3. Record the manifest digest with `sha256sum <backup>/manifest.json`.
+4. Approve the preview using the backup path/reference, digest, creation time,
+   and the exact `BACKUP_VERIFIED` confirmation.
+5. Monitor the retention run and delivery events until it is `completed`.
+6. If it is `failed`, preserve the backup and inspect each failed item before
+   taking any further destructive action.
+
+Approval does not delete in the web request. The five-minute jobs Cron leases
+items, rechecks that each message is still eligible, deletes D1 metadata, and
+then removes the snapshotted R2 keys in chunks. Restored, newly starred, or
+newly labeled messages are recorded as skipped. Once a run is `running`, it
+cannot be cancelled; this prevents a misleading cancellation while R2 cleanup
+is already in progress.
