@@ -62,10 +62,6 @@ npm run migrate:legacy -- provision-template \
   --system-admin \
   --output ops/provision.legacy.json \
   --report ops/provision.legacy-review.json
-
-npm run ops -- plan \
-  --manifest ops/provision.legacy.json \
-  --output ops/provision.legacy.sql
 ```
 
 The manifest initially assigns one explicitly identified owner to every mapped
@@ -82,6 +78,38 @@ The generated SQL must be applied before the converted mail stage. Every stage
 now starts with a prerequisite guard for the mapped mailbox ID, mapped primary
 address, and at least one owner; a missing or conflicting directory entry stops
 the D1 chunk before configuration or message rows are inserted.
+
+After creating the non-secret deployment manifest, bind all of these local
+decisions into one verification artifact:
+
+```bash
+npm run migrate:legacy -- verify-provisioning \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --manifest ops/provision.legacy.json \
+  --review ops/provision.legacy-review.json \
+  --deployment ops/deployment.production.json \
+  --output ops/evidence/legacy-provisioning-verification.json
+```
+
+`ready: true` proves that every mapped UUID/address and generated local alias
+is present, every mapped owner and system administrator has an identity for the
+deployment's exact Access issuer, every active archived membership suggestion
+has the reviewed role, both Email Routing and Email Sending cover every mapped
+domain, and the source/mapping/review files still agree. It also records SHA-256
+digests for the exact provisioning, review, and deployment artifacts.
+
+The verifier deliberately blocks nonstandard archived account policies and
+external/forward/quarantine/log-only aliases. Those require separately
+verifiable Cloudflare routing evidence; editing a JSON review note cannot make
+them pass. Inactive or excluded old membership suggestions are counted but are
+not granted. Do not plan or apply provisioning until this verifier succeeds.
+
+```bash
+npm run ops -- plan \
+  --manifest ops/provision.legacy.json \
+  --output ops/provision.legacy.sql
+```
 
 ## Snapshot archived raw MIME
 

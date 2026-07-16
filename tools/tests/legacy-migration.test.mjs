@@ -119,6 +119,83 @@ describe('archived SQL isolation', () => {
     assert.equal(writtenManifest.users[0].systemAdmin, true);
     assert.equal(writtenReview.generated.mailboxes, 2);
     assert.match(output.join(''), /"externalAliases": 1/u);
+
+    const deploymentPath = join(root, 'deployment-with-external-alias.json');
+    await writeFile(deploymentPath, `${JSON.stringify(deploymentManifest())}\n`);
+    await assert.rejects(
+      runLegacyMigrationCli([
+        'verify-provisioning', '--database', database, '--mapping', mappingPath,
+        '--manifest', provisionPath, '--review', reviewPath,
+        '--deployment', deploymentPath,
+        '--output', join(root, 'blocked-verification.json'),
+      ], { stdout: () => {} }),
+      /external aliases/u,
+    );
+  });
+
+  it('binds the mapped directory, Access issuer, and mail domains to deployment', async () => {
+    const sql = join(root, 'verification-safe.sql');
+    const database = join(root, 'verification.sqlite');
+    await writeFile(sql, fixtureSql({ externalAlias: false }));
+    await importLegacySafeSql({ sql, database, now: 4000 });
+    const inventory = createLegacyInventory(database, 4100);
+    const mapping = createLegacyMappingTemplate(inventory);
+    const mappingPath = join(root, 'verification-mapping.json');
+    await writeFile(mappingPath, `${JSON.stringify(mapping)}\n`);
+    const provisioning = createLegacyProvisioningDraft({
+      database,
+      mapping,
+      mappingSha256: legacyMappingSha256(mapping),
+      owner: {
+        userId: '019c6f3c-6260-7000-8000-000000000001',
+        email: 'owner@example.com',
+        issuer: 'https://team.cloudflareaccess.com',
+        subject: 'owner-subject',
+        systemAdmin: true,
+      },
+      now: 4200,
+    });
+    const operatorId = '019c6f3c-6260-7000-8000-000000000002';
+    provisioning.manifest.users.push({
+      id: operatorId,
+      email: 'operator@example.com',
+      systemAdmin: false,
+      identities: [{
+        issuer: 'https://team.cloudflareaccess.com',
+        subject: 'operator-subject',
+        email: 'operator@example.com',
+      }],
+    });
+    provisioning.manifest.mailboxes[0].members.push({
+      userId: operatorId,
+      role: 'operator',
+    });
+    const manifestPath = join(root, 'verified-provision.json');
+    const reviewPath = join(root, 'verified-review.json');
+    const deploymentPath = join(root, 'verified-deployment.json');
+    const outputPath = join(root, 'provision-verification.json');
+    await Promise.all([
+      writeFile(manifestPath, `${JSON.stringify(provisioning.manifest)}\n`),
+      writeFile(reviewPath, `${JSON.stringify(provisioning.review)}\n`),
+      writeFile(deploymentPath, `${JSON.stringify(deploymentManifest())}\n`),
+    ]);
+    assert.equal(await runLegacyMigrationCli([
+      'verify-provisioning', '--database', database, '--mapping', mappingPath,
+      '--manifest', manifestPath, '--review', reviewPath,
+      '--deployment', deploymentPath, '--output', outputPath,
+    ], { stdout: () => {} }), 0);
+    const verification = JSON.parse(await readFile(outputPath, 'utf8'));
+    assert.equal(verification.ready, true);
+    assert.deepEqual(verification.counts, {
+      users: 2,
+      mailboxes: 2,
+      aliases: 1,
+      resolvedMemberships: 1,
+      ignoredInactiveMemberships: 0,
+      routingDomains: 1,
+      sendingDomains: 1,
+    });
+    assert.match(verification.artifacts.manifestSha256, /^[0-9a-f]{64}$/u);
   });
 
   it('rejects non-backup SQL without leaving a database behind', async () => {
@@ -145,7 +222,9 @@ describe('archived SQL isolation', () => {
   });
 });
 
-function fixtureSql() {
+function fixtureSql(options = {}) {
+  const externalAlias = options.externalAlias === false ? '' : `
+INSERT INTO "mail_aliases" ("id", "source", "destination", "is_active", "alias_kind", "notes", "created_at") VALUES (2, 'forward@example.com', 'outside@example.net', 1, 'forward', 'external forwarding', 902);`;
   return `-- CF Webmail Starter safe logical backup
 -- fixture with a semicolon and newline inside a SQL string
 PRAGMA foreign_keys=OFF;
@@ -159,7 +238,7 @@ INSERT INTO "mail_domains" ("id", "domain", "display_name", "webmail_url", "is_a
 -- table: mail_aliases
 DELETE FROM "mail_aliases";
 INSERT INTO "mail_aliases" ("id", "source", "destination", "is_active", "alias_kind", "notes", "created_at") VALUES (1, 'info@example.com', 'first@example.com', 1, 'alias', 'local alias', 901);
-INSERT INTO "mail_aliases" ("id", "source", "destination", "is_active", "alias_kind", "notes", "created_at") VALUES (2, 'forward@example.com', 'outside@example.net', 1, 'forward', 'external forwarding', 902);
+${externalAlias}
 -- table: mail_account_users
 DELETE FROM "mail_account_users";
 INSERT INTO "mail_account_users" ("id", "account_email", "access_email", "role", "can_send", "is_active", "created_at") VALUES (1, 'first@example.com', 'operator@example.com', 'user', 1, 1, 903);
@@ -175,4 +254,31 @@ DELETE FROM "attachments";
 INSERT INTO "attachments" ("id", "message_id", "blob_sha256", "filename", "content_type", "size") VALUES (1, 'old-1', '${'c'.repeat(64)}', 'one.txt', 'text/plain', 5);
 PRAGMA foreign_keys=ON;
 `;
+}
+
+function deploymentManifest() {
+  return {
+    version: 1,
+    environment: 'production',
+    mode: 'initial',
+    accountId: 'a'.repeat(32),
+    hostname: 'mail.example.com',
+    workers: { web: 'cf-webmail-web', ingest: 'cf-webmail-ingest', jobs: 'cf-webmail-jobs' },
+    access: {
+      teamDomain: 'https://team.cloudflareaccess.com',
+      audience: 'b'.repeat(64),
+    },
+    resources: {
+      d1: { name: 'cf-webmail', id: '019c6f3c-6260-7000-8000-000000000003' },
+      r2: { bucket: 'cf-webmail-raw' },
+      queues: {
+        inbound: 'cf-webmail-inbound',
+        inboundDlq: 'cf-webmail-inbound-dlq',
+        outbound: 'cf-webmail-outbound',
+        outboundDlq: 'cf-webmail-outbound-dlq',
+      },
+    },
+    email: { sendingDomains: ['example.com'], routingDomains: ['example.com'] },
+    limits: { queueMaxConcurrency: 1 },
+  };
 }

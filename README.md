@@ -202,3 +202,6 @@ real email delivery has been verified.
 14. Completed: archived account-directory provisioning drafts, explicit
     external routing and membership review, and target mailbox/address/owner
     prerequisites for every converted migration stage.
+15. Completed: hash-bound legacy provisioning verification across account
+    mapping, Access identities, mail domains, reviewed directory artifacts, and
+    the exact production deployment manifest.

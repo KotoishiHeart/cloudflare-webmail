@@ -19,6 +19,8 @@ Before the window, record all of the following in the change ticket:
 - Account-to-mailbox mapping digest and every explicit exclusion.
 - Generated provisioning-review digest and the disposition of every account
   policy, domain, external alias, and legacy membership suggestion.
+- Successful legacy provisioning-verification digest binding the exact
+  provisioning and deployment manifests.
 - Access application/policy, production and canary hostnames, and canary mail
   address.
 - Current production Email Routing rule and its archived Worker target.

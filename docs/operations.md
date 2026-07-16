@@ -76,7 +76,8 @@ For an archived deployment, `migrate:legacy provision-template` can generate
 this manifest from the reviewed account mapping. Its companion review report
 keeps directional account policy, external aliases, domains, and legacy
 membership suggestions outside automatic authorization. Follow
-[`legacy-migration.md`](legacy-migration.md) before planning or applying it.
+[`legacy-migration.md`](legacy-migration.md) and require a successful
+`verify-provisioning` artifact before planning or applying it.
 
 ## Status and delivery recovery
 

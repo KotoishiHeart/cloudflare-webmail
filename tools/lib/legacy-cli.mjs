@@ -13,6 +13,7 @@ import { verifyMigrationStage } from './migration-stage.mjs';
 import { applyLegacyStageBulk } from './legacy-bulk-apply.mjs';
 import { auditLegacyStageBulk } from './legacy-bulk-audit.mjs';
 import { createLegacyProvisioningDraft } from './legacy-provisioning.mjs';
+import { verifyLegacyProvisioningFiles } from './legacy-provisioning-verify.mjs';
 
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
@@ -80,6 +81,20 @@ export async function runLegacyMigrationCli(argv, io = {
       externalAliases: result.review.externalAliases.length,
       membershipSuggestions: result.review.membershipSuggestions.length,
     }, null, 2)}\n`);
+    return 0;
+  }
+  if (command === 'verify-provisioning') {
+    const output = required(options, 'output');
+    await requireMissing(output);
+    const result = await verifyLegacyProvisioningFiles({
+      database: required(options, 'database'),
+      mapping: required(options, 'mapping'),
+      manifest: required(options, 'manifest'),
+      review: required(options, 'review'),
+      deployment: required(options, 'deployment'),
+    });
+    await writeExclusive(output, result);
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
   if (command === 'fetch') {
@@ -206,6 +221,9 @@ function usage() {
     `    --owner-user-id UUID --owner-email EMAIL --access-issuer URL \\\n` +
     `    --access-subject SUBJECT [--system-admin] --output provision.json \\\n` +
     `    --report provisioning-review.json\n` +
+    `  verify-provisioning --database legacy.sqlite --mapping mapping.json \\\n` +
+    `    --manifest provision.json --review provisioning-review.json \\\n` +
+    `    --deployment deployment.json --output verification.json\n` +
     `  fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
     `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
     `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +
