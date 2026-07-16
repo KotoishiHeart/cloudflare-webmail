@@ -4,6 +4,9 @@ dist/
 coverage/
 .dev.vars
 .dev.vars.*
+.env
+.env.*
+.generated/
 worker-configuration.d.ts.tmp
 *.log
 /ops/
