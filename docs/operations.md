@@ -100,6 +100,15 @@ hard-delete operation must perform deletion explicitly. Valid raw/contract
 staging pairs without a D1 handoff are re-enqueued automatically, while invalid
 or incomplete pairs remain in R2 with an open issue.
 
+Primary and dead-letter consumers distinguish D1 Free daily-quota errors from
+ordinary transient and permanent failures. A daily-quota error is delayed
+until 00:00 UTC plus a short reset allowance, capped at Cloudflare Queues'
+24-hour per-message delay. Other transient failures use 30-second exponential
+backoff capped at one hour. Storage-capacity errors are not misclassified as a
+daily reset condition; they require capacity cleanup, sharding, or a plan
+change. If the configured primary retry count is still exhausted, the normal
+persisted DLQ workflow remains the recovery boundary.
+
 After fixing a terminal sender-domain, recipient, or content error, explicitly
 reset one failed message. This does not send synchronously; the scheduled jobs
 recovery republishes it to the outbound Queue:
@@ -165,3 +174,7 @@ then removes the snapshotted R2 keys in chunks. Restored, newly starred, or
 newly labeled messages are recorded as skipped. Once a run is `running`, it
 cannot be cancelled; this prevents a misleading cancellation while R2 cleanup
 is already in progress.
+
+The archived behavior comparison and the final account/deployment evidence
+gates are maintained in [`legacy-parity.md`](legacy-parity.md) and
+[`release-readiness.md`](release-readiness.md).

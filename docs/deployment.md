@@ -5,6 +5,10 @@ tool does not copy the archived repository's all-in-one setup script and never
 creates D1, R2, Queues, Access policies, or Email Routing rules. Resource
 provisioning remains an explicit reviewed operation.
 
+This runbook covers configuration and Worker upload. The complete definition
+of source-, account-, data-, deploy-, and cutover-readiness is in
+[`release-readiness.md`](release-readiness.md).
+
 The workflow is:
 
 1. `plan`: validate one manifest and generate three production-only Wrangler

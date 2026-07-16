@@ -146,6 +146,11 @@ documented separately in
 old SQL in a local compatibility database and records account-level counts and
 integrity results before any R2 object is copied.
 
+The behavior-by-behavior completion boundary, deliberate replacements, and
+excluded archived shortcuts are recorded in
+[`docs/legacy-parity.md`](docs/legacy-parity.md). The same document defines the
+reconstructed file roles and the enforced 250-line production-module budget.
+
 Portable D1/R2 backups and empty-target restores are documented in
 [`docs/backup-and-restore.md`](docs/backup-and-restore.md). Each completed
 bundle has an offline-verifiable manifest with hashes for the D1 export and
@@ -161,6 +166,11 @@ The complete archived-to-rebuild production boundary is documented in
 canary route, freezes archived writes before the final snapshot, performs a
 fresh D1/R2 target audit, and treats messages accepted after the Email Routing
 change as data that cannot be discarded by a code rollback.
+
+Use [`docs/release-readiness.md`](docs/release-readiness.md) to distinguish
+source-ready, account-ready, deploy-ready, cutover-ready, and remotely proven
+deployment state. Local checks alone never claim that Cloudflare routing or
+real email delivery has been verified.
 
 ## Implementation stages
 
@@ -183,3 +193,6 @@ change as data that cannot be discarded by a code rollback.
     and delivery events, guarded system administration, and retention deletion.
 11. Completed: accessible administration PWA, deployment rollback points,
     production postflight gating, protected CI, and archived cutover tooling.
+12. Completed: archived behavior parity audit, bounded module responsibilities,
+    empty-schema migration verification, D1 daily-quota recovery, and explicit
+    release-readiness evidence gates.

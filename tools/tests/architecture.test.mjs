@@ -70,6 +70,20 @@ test('ordered migrations create the complete schema from an empty database', asy
   }
 });
 
+test('completion docs preserve the parity and remote-evidence boundaries', async () => {
+  const [parity, readiness] = await Promise.all([
+    readFile('docs/legacy-parity.md', 'utf8'),
+    readFile('docs/release-readiness.md', 'utf8'),
+  ]);
+  for (const status of ['Rebuilt', 'Replaced', 'External', 'Excluded']) {
+    assert.match(parity, new RegExp(`\\*\\*${status}\\*\\*`, 'u'));
+  }
+  assert.match(parity, /250 physical lines/u);
+  assert.match(readiness, /npm run test:workers/u);
+  assert.match(readiness, /cutoverReady: false/u);
+  assert.match(readiness, /remote deployment not yet proven/u);
+});
+
 async function sourceFiles(root) {
   const output = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
