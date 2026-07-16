@@ -1,5 +1,5 @@
 import { parseOutboundQueueMessage } from '@cf-webmail/contracts';
-import { resolveDeadLettersForMessage } from '@cf-webmail/database';
+import { recordDeliveryEventSafely, resolveDeadLettersForMessage } from '@cf-webmail/database';
 import {
   PermanentOutboundError,
   RetryableOutboundError,
@@ -61,6 +61,19 @@ export async function handleOutboundBatch(
         attempt: message.attempts,
         retryDelaySeconds: delaySeconds,
       }));
+      await recordDeliveryEventSafely(dependencies.db, {
+        direction: 'outbound', stage: 'queue',
+        status: permanent ? 'failed' : 'retrying',
+        category: permanent ? 'outbound_permanent_failure' : 'outbound_retry',
+        severity: permanent ? 'high' : 'medium', mailboxId: parsed.value.mailboxId,
+        messageId: parsed.value.messageId,
+        errorCode: error instanceof PermanentOutboundError || error instanceof RetryableOutboundError
+          ? error.code
+          : 'retryable',
+        summary: error instanceof Error ? error.message : 'Outbound processing failed',
+        details: { attempt: message.attempts, retryDelaySeconds: delaySeconds },
+        now: dependencies.now(),
+      });
       if (permanent) {
         try {
           await resolveDeadLettersForMessage(

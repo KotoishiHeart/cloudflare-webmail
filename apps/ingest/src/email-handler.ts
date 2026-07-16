@@ -7,6 +7,7 @@ import {
 import {
   markInboundHandoffEnqueued,
   markInboundHandoffQueueFailed,
+  recordDeliveryEventSafely,
   recordInboundHandoff,
   resolveActiveMailboxAddress,
   type MailboxRoute,
@@ -49,6 +50,11 @@ export async function handleInboundEmail(
   receipt: InboundReceipt,
 ): Promise<InboundResult> {
   if (!isValidRawSize(message.rawSize)) {
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'routing', status: 'rejected', category: 'invalid_size', severity: 'high',
+      errorCode: 'invalid_size', summary: INVALID_MESSAGE_REASON,
+      details: { rawSize: message.rawSize },
+    });
     return reject(message, 'invalid-size', INVALID_MESSAGE_REASON);
   }
 
@@ -57,9 +63,17 @@ export async function handleInboundEmail(
     route = await resolveActiveMailboxAddress(dependencies.db, message.to);
   } catch (error) {
     logFailure('inbound.routing_failed', receipt.messageId, error);
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'routing', status: 'failed', category: 'routing_failed', severity: 'high',
+      errorCode: errorType(error), summary: PROCESSING_FAILURE_REASON,
+    });
     return reject(message, 'routing-failed', PROCESSING_FAILURE_REASON);
   }
   if (route === null) {
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'routing', status: 'rejected', category: 'unknown_recipient',
+      severity: 'medium', errorCode: 'unknown_recipient', summary: UNKNOWN_RECIPIENT_REASON,
+    });
     return reject(message, 'unknown-recipient', UNKNOWN_RECIPIENT_REASON);
   }
 
@@ -72,6 +86,11 @@ export async function handleInboundEmail(
       messageId: receipt.messageId,
       issues: parsed.issues,
     }));
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'queue', status: 'rejected', category: 'invalid_contract', severity: 'high',
+      mailboxId: route.mailboxId, errorCode: 'invalid_contract', summary: INVALID_MESSAGE_REASON,
+      details: { issueCount: parsed.issues.length },
+    });
     return reject(message, 'invalid-contract', INVALID_MESSAGE_REASON, rawKey);
   }
 
@@ -79,6 +98,10 @@ export async function handleInboundEmail(
     await stageRawEmail(dependencies.rawEmails, message.raw, parsed.value, route.mailboxId);
   } catch (error) {
     logFailure('inbound.staging_failed', receipt.messageId, error);
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'staging', status: 'failed', category: 'r2_save_failed', severity: 'high',
+      mailboxId: route.mailboxId, errorCode: errorType(error), summary: PROCESSING_FAILURE_REASON,
+    });
     return reject(message, 'staging-failed', PROCESSING_FAILURE_REASON, rawKey);
   }
 
@@ -87,6 +110,10 @@ export async function handleInboundEmail(
   } catch (error) {
     // The staged object and its Queue payload metadata remain available to the orphan scanner.
     logFailure('inbound.handoff_failed', receipt.messageId, error);
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'storage', status: 'failed', category: 'd1_handoff_failed', severity: 'high',
+      mailboxId: route.mailboxId, errorCode: errorType(error), summary: PROCESSING_FAILURE_REASON,
+    });
     return reject(message, 'handoff-failed', PROCESSING_FAILURE_REASON, rawKey);
   }
 
@@ -96,6 +123,10 @@ export async function handleInboundEmail(
     // Keep the staged object: Queue delivery can be ambiguous after an exception.
     await recordQueueFailure(dependencies.db, receipt, error);
     logFailure('inbound.queue_failed', receipt.messageId, error);
+    await inboundEvent(dependencies.db, receipt, {
+      stage: 'queue', status: 'retrying', category: 'queue_publish_failed', severity: 'high',
+      mailboxId: route.mailboxId, errorCode: errorType(error), summary: PROCESSING_FAILURE_REASON,
+    });
     return reject(message, 'queue-failed', PROCESSING_FAILURE_REASON, rawKey);
   }
 
@@ -113,6 +144,11 @@ export async function handleInboundEmail(
     mailboxId: route.mailboxId,
     rawSize: message.rawSize,
   }));
+  await inboundEvent(dependencies.db, receipt, {
+    stage: 'queue', status: 'succeeded', category: 'message_accepted',
+    mailboxId: route.mailboxId, summary: 'Inbound message staged and queued',
+    details: { rawSize: message.rawSize },
+  });
   return { accepted: true, rawKey, queueMessage: parsed.value };
 }
 
@@ -173,4 +209,27 @@ function logFailure(event: string, messageId: string, error: unknown): void {
     messageId,
     errorType: error instanceof Error ? error.name : typeof error,
   }));
+}
+
+async function inboundEvent(
+  db: D1Database,
+  receipt: InboundReceipt,
+  input: {
+    stage: 'routing' | 'staging' | 'queue' | 'storage';
+    status: 'succeeded' | 'retrying' | 'failed' | 'rejected';
+    category: string;
+    severity?: 'low' | 'medium' | 'high';
+    mailboxId?: string;
+    errorCode?: string;
+    summary: string;
+    details?: Record<string, unknown>;
+  },
+): Promise<void> {
+  await recordDeliveryEventSafely(db, {
+    direction: 'inbound', messageId: receipt.messageId, now: receipt.receivedAt, ...input,
+  });
+}
+
+function errorType(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
 }

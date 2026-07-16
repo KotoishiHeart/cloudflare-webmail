@@ -26,6 +26,7 @@ function validateUser(input, index) {
     id: uuid(input.id, `${path}.id`),
     email,
     displayName: optionalText(input.displayName, `${path}.displayName`, 160),
+    systemAdmin: optionalBoolean(input.systemAdmin, `${path}.systemAdmin`, false),
     identities: array(input.identities, `${path}.identities`, 20, 1)
       .map((identity, identityIndex) => validateIdentity(
         identity,
@@ -127,6 +128,12 @@ function emailAddress(value, path) {
 function optionalText(value, path, max) {
   if (value === undefined || value === null) return undefined;
   return text(value, path, max);
+}
+
+function optionalBoolean(value, path, fallback) {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'boolean') fail(`${path} must be boolean`);
+  return value;
 }
 
 function text(value, path, max) {

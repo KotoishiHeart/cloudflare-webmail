@@ -12,11 +12,15 @@ export async function updateWebMessageFlags(
   const mailboxId = normalizeId(mailboxIdInput, 'mailboxId');
   const now = requireTimestamp(nowInput);
   const assignments: string[] = [];
-  const values: number[] = [];
+  const values: Array<number | null> = [];
   addFlag(assignments, values, 'is_read', patch.isRead);
   addFlag(assignments, values, 'is_starred', patch.isStarred);
   addFlag(assignments, values, 'is_archived', patch.isArchived);
   addFlag(assignments, values, 'is_deleted', patch.isDeleted);
+  if (patch.isDeleted !== undefined) {
+    assignments.push('deleted_at = ?');
+    values.push(patch.isDeleted ? now : null);
+  }
   if (assignments.length === 0) throw new Error('at least one message flag is required');
 
   await db.prepare(`
@@ -28,7 +32,7 @@ export async function updateWebMessageFlags(
 
 function addFlag(
   assignments: string[],
-  values: number[],
+  values: Array<number | null>,
   column: string,
   value: boolean | undefined,
 ): void {

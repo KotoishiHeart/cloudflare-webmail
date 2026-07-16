@@ -10,6 +10,7 @@ import {
   activeMailboxOwnsPrimaryAddress,
   applyIncomingMailRulesSafely,
   persistInboundMessage,
+  recordDeliveryEventSafely,
   resolveStorageIssuesForKeys,
 } from '@cf-webmail/database';
 import { PermanentInboundError, errorType } from './inbound-errors.js';
@@ -94,12 +95,20 @@ export async function processInboundQueueMessage(
     stored.rawEtag,
     now,
   ));
-  await applyIncomingMailRulesSafely(
+  const rules = await applyIncomingMailRulesSafely(
     dependencies.db,
     result.message.mailboxId,
     result.message.id,
     dependencies.now(),
   );
+  if (rules.failed) {
+    await recordDeliveryEventSafely(dependencies.db, {
+      direction: 'inbound', stage: 'rules', status: 'failed', category: 'rule_apply_failed',
+      severity: 'medium', mailboxId: result.message.mailboxId,
+      messageId: result.message.id, summary: 'Message stored but incoming rule evaluation failed',
+      details: { evaluated: rules.evaluated, matched: rules.matched }, now: dependencies.now(),
+    });
+  }
   const stagingDeleted = await deleteStaging(dependencies, queueMessage);
   await completeInboundHandoff(
     dependencies.db,
@@ -109,6 +118,14 @@ export async function processInboundQueueMessage(
     dependencies.now(),
   );
   await resolveStagingIssues(dependencies, queueMessage, stagingDeleted);
+  await recordDeliveryEventSafely(dependencies.db, {
+    direction: 'inbound', stage: 'completed', status: 'succeeded',
+    category: result.created ? 'message_stored' : 'duplicate_message',
+    mailboxId: result.message.mailboxId, messageId: result.message.id,
+    summary: result.created ? 'Inbound message stored' : 'Inbound duplicate resolved',
+    details: { stagingDeleted, quarantined: result.message.status === 'quarantined' },
+    now: dependencies.now(),
+  });
   console.log(JSON.stringify({
     event: result.created ? 'inbound.persisted' : 'inbound.duplicate',
     messageId: result.message.id,
@@ -142,6 +159,12 @@ async function completeDuplicate(
     dependencies.now(),
   );
   await resolveStagingIssues(dependencies, queueMessage, stagingDeleted);
+  await recordDeliveryEventSafely(dependencies.db, {
+    direction: 'inbound', stage: 'completed', status: 'succeeded',
+    category: 'duplicate_message', mailboxId: queueMessage.mailboxId,
+    messageId: storedMessageId, summary: 'Inbound duplicate resolved',
+    details: { stagingDeleted }, now: dependencies.now(),
+  });
   return duplicateResult(storedMessageId, stagingDeleted);
 }
 

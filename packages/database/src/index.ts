@@ -1,4 +1,6 @@
 export * from './domain.js';
+export * from './audit-events.js';
+export * from './delivery-events.js';
 export * from './dead-letter.js';
 export * from './inbound-handoff.js';
 export * from './incoming-mail-rules.js';
@@ -23,6 +25,7 @@ export * from './provisioning.js';
 export * from './preferences.js';
 export { resolveActiveMailboxAddress } from './routing.js';
 export * from './storage-reconciliation.js';
+export * from './system-administrators.js';
 export * from './validation.js';
 export * from './web-message-detail.js';
 export * from './web-message-domain.js';

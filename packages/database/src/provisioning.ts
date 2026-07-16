@@ -135,3 +135,23 @@ export async function addMailboxAlias(
     VALUES (?, ?, 'alias', 'active', ?, ?)
   `).bind(address, mailboxId, now, now).run();
 }
+
+export async function grantSystemAdministrator(
+  db: D1Database,
+  input: { userId: string; grantedByUserId?: string; source?: 'provisioning' | 'admin'; now: number },
+): Promise<void> {
+  const userId = normalizeId(input.userId, 'userId');
+  const grantedBy = input.grantedByUserId === undefined
+    ? userId
+    : normalizeId(input.grantedByUserId, 'grantedByUserId');
+  const source = input.source ?? 'provisioning';
+  const now = requireTimestamp(input.now);
+  await db.prepare(`
+    INSERT INTO system_administrators (user_id, granted_by_user_id, source, granted_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET
+      granted_by_user_id = excluded.granted_by_user_id,
+      source = excluded.source,
+      granted_at = excluded.granted_at
+  `).bind(userId, grantedBy, source, now).run();
+}

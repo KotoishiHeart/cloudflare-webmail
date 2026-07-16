@@ -8,7 +8,7 @@ JWT. A missing or invalid token is rejected before routing. JSON responses use
 
 | Method | Route | Required capability | Result |
 | --- | --- | --- | --- |
-| `GET` | `/api/session` | linked identity | User display email and authorized mailboxes |
+| `GET` | `/api/session` | linked identity | User email, system-admin flag, and authorized mailboxes |
 | `GET` | `/api/mailboxes/:id/messages` | read | Cursor-paginated message summaries |
 | `POST` | `/api/mailboxes/:id/messages` | operate | Persist and enqueue a new outbound message |
 | `GET` | `/api/messages/:id` | read | Message metadata and attachment links |

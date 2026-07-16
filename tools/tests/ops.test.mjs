@@ -19,6 +19,7 @@ describe('operations manifest', () => {
         id: USER_ID,
         email: 'Owner@Example.COM',
         displayName: "O'Brien",
+        systemAdmin: true,
         identities: [{
           issuer: 'https://team.cloudflareaccess.com/',
           subject: 'subject-1',
@@ -39,6 +40,7 @@ describe('operations manifest', () => {
     assert.match(sql, /ON CONFLICT\(issuer, subject\)/u);
     assert.match(sql, /'primary'/u);
     assert.match(sql, /CF_WEBMAIL_OWNERSHIP_CONFLICT/u);
+    assert.match(sql, /INSERT INTO system_administrators/u);
     assert.doesNotMatch(sql, /BEGIN TRANSACTION/u);
   });
 

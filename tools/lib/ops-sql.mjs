@@ -16,6 +16,15 @@ export function renderProvisionSql(manifest, now = Date.now()) {
         status = 'active',
         updated_at = excluded.updated_at
     `));
+    if (user.systemAdmin) {
+      statements.push(sql(`
+        INSERT INTO system_administrators (user_id, granted_by_user_id, source, granted_at)
+        VALUES (${q(user.id)}, ${q(user.id)}, 'provisioning', ${now})
+        ON CONFLICT(user_id) DO UPDATE SET
+          source = 'provisioning',
+          granted_at = excluded.granted_at
+      `));
+    }
     for (const identity of user.identities) {
       statements.push(sql(`
         INSERT INTO access_identities (

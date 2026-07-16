@@ -1,6 +1,7 @@
 import { parseInboundQueueMessage } from '@cf-webmail/contracts';
 import {
   failInboundHandoffProcessing,
+  recordDeliveryEventSafely,
   resolveDeadLettersForMessage,
 } from '@cf-webmail/database';
 import { PermanentInboundError, errorType } from './inbound-errors.js';
@@ -57,6 +58,17 @@ export async function handleInboundBatch(
         permanent ? error.code : 'transient',
         error,
       );
+      await recordDeliveryEventSafely(dependencies.db, {
+        direction: 'inbound', stage: 'storage',
+        status: permanent ? 'failed' : 'retrying',
+        category: permanent ? 'inbound_permanent_failure' : 'inbound_retry',
+        severity: permanent ? 'high' : 'medium', mailboxId: parsed.value.mailboxId,
+        messageId: parsed.value.messageId,
+        errorCode: permanent ? error.code : 'transient',
+        summary: error instanceof Error ? error.message : 'Inbound processing failed',
+        details: { attempt: message.attempts, retryDelaySeconds: delaySeconds },
+        now: dependencies.now(),
+      });
       console.error(JSON.stringify({
         event: 'inbound.processing_failed',
         messageId: parsed.value.messageId,

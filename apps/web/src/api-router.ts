@@ -1,5 +1,6 @@
 import { DatabaseInputError } from '@cf-webmail/database';
 import type { AccessIdentity } from './access-auth.js';
+import { auditApiResponse } from './api-audit.js';
 import { ApiInputError, UnsupportedMediaTypeError } from './api-input.js';
 import { apiError } from './api-response.js';
 import {
@@ -44,20 +45,20 @@ export async function routeApi(
   identity: AccessIdentity,
   now: number,
 ): Promise<Response> {
+  let response: Response;
   try {
-    return await routeKnownApi(request, env, identity, now);
+    response = await routeKnownApi(request, env, identity, now);
   } catch (error) {
     if (error instanceof UnsupportedMediaTypeError || error instanceof ComposeMediaTypeError) {
-      return apiError('unsupported_media_type', 415);
-    }
-    if (error instanceof ApiInputError || error instanceof DatabaseInputError) {
-      return apiError('invalid_request', 400);
-    }
-    if (error instanceof OutboundQueueUnavailableError) {
-      return apiError('outbound_queue_unavailable', 503);
-    }
-    throw error;
+      response = apiError('unsupported_media_type', 415);
+    } else if (error instanceof ApiInputError || error instanceof DatabaseInputError) {
+      response = apiError('invalid_request', 400);
+    } else if (error instanceof OutboundQueueUnavailableError) {
+      response = apiError('outbound_queue_unavailable', 503);
+    } else throw error;
   }
+  await auditApiResponse(request, env.DB, identity, response, now);
+  return response;
 }
 
 async function routeKnownApi(

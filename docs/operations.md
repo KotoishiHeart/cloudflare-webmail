@@ -45,6 +45,12 @@ directory is ignored), replace every example value, and keep the generated
 UUIDs stable. A manifest may contain up to 100 users and mailboxes. Each user
 must have at least one exact Access issuer/subject pair.
 
+Set `systemAdmin: true` only on users who should access cross-mailbox
+administration, delivery diagnostics, and audit data. Mailbox `owner` grants
+do not imply this global role. Provision plans add explicit administrator
+grants but do not revoke an existing grant merely because a later manifest
+omits or sets the flag to false; revocation is a separately audited operation.
+
 Generate and review an idempotent SQL plan:
 
 ```bash

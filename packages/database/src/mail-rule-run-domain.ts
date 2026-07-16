@@ -42,5 +42,6 @@ export type RuleMessageState = {
   isStarred: boolean;
   isArchived: boolean;
   isDeleted: boolean;
+  deletedAt: number | null;
   labelIds: string[];
 };

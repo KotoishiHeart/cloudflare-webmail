@@ -31,7 +31,7 @@ export async function applyMailRuleActions(
     if (processed.has(messageId)) continue;
     const before = await getRuleMessageState(db, mailboxId, messageId);
     if (before === null) continue;
-    const after = stateAfterActions(before, input.actions);
+    const after = stateAfterActions(before, input.actions, now);
     const statements = actionStatements(
       db, mailboxId, messageId, ruleId, input.actions, before, after, now,
     );
@@ -106,12 +106,13 @@ async function getRuleMessageState(
   messageId: string,
 ): Promise<RuleMessageState | null> {
   const row = await db.prepare(`
-    SELECT is_starred, is_archived, is_deleted FROM messages
+    SELECT is_starred, is_archived, is_deleted, deleted_at FROM messages
     WHERE mailbox_id = ? AND id = ?
   `).bind(mailboxId, messageId).first<{
     is_starred: number;
     is_archived: number;
     is_deleted: number;
+    deleted_at: number | null;
   }>();
   if (row === null) return null;
   const labels = await db.prepare(`
@@ -122,6 +123,7 @@ async function getRuleMessageState(
     isStarred: row.is_starred === 1,
     isArchived: row.is_archived === 1,
     isDeleted: row.is_deleted === 1,
+    deletedAt: row.deleted_at,
     labelIds: labels.results.map((label) => label.label_id),
   };
 }
@@ -139,11 +141,12 @@ function actionStatements(
   const statements: D1PreparedStatement[] = [];
   if (actions.star || actions.archive || actions.trash) {
     statements.push(db.prepare(`
-      UPDATE messages SET is_starred = ?, is_archived = ?, is_deleted = ?, updated_at = ?
+      UPDATE messages SET is_starred = ?, is_archived = ?, is_deleted = ?,
+        deleted_at = ?, updated_at = ?
       WHERE mailbox_id = ? AND id = ?
     `).bind(
       after.isStarred ? 1 : 0, after.isArchived ? 1 : 0, after.isDeleted ? 1 : 0,
-      now, mailboxId, messageId,
+      after.deletedAt, now, mailboxId, messageId,
     ));
   }
   for (const labelId of actions.labelIds) {
@@ -174,13 +177,15 @@ function restoreStatements(
       UPDATE messages SET
         is_starred = CASE WHEN is_starred = ? THEN ? ELSE is_starred END,
         is_archived = CASE WHEN is_archived = ? THEN ? ELSE is_archived END,
-        is_deleted = CASE WHEN is_deleted = ? THEN ? ELSE is_deleted END,
+        is_deleted = CASE WHEN is_deleted = ? AND deleted_at IS ? THEN ? ELSE is_deleted END,
+        deleted_at = CASE WHEN is_deleted = ? AND deleted_at IS ? THEN ? ELSE deleted_at END,
         updated_at = ?
       WHERE mailbox_id = ? AND id = ?
     `).bind(
       applied.isStarred ? 1 : 0, before.isStarred ? 1 : 0,
       applied.isArchived ? 1 : 0, before.isArchived ? 1 : 0,
-      applied.isDeleted ? 1 : 0, before.isDeleted ? 1 : 0,
+      applied.isDeleted ? 1 : 0, applied.deletedAt, before.isDeleted ? 1 : 0,
+      applied.isDeleted ? 1 : 0, applied.deletedAt, before.deletedAt,
       now, mailboxId, messageId,
     ));
   }
@@ -194,11 +199,18 @@ function restoreStatements(
   return statements;
 }
 
-function stateAfterActions(before: RuleMessageState, actions: MailRuleActions): RuleMessageState {
+function stateAfterActions(
+  before: RuleMessageState,
+  actions: MailRuleActions,
+  now: number,
+): RuleMessageState {
   return {
     isStarred: actions.star || before.isStarred,
     isArchived: actions.trash ? false : actions.archive || before.isArchived,
     isDeleted: actions.archive ? false : actions.trash || before.isDeleted,
+    deletedAt: actions.archive ? null : actions.trash
+      ? before.deletedAt ?? now
+      : before.deletedAt,
     labelIds: [...new Set([...before.labelIds, ...actions.labelIds])].sort(),
   };
 }
@@ -211,10 +223,13 @@ function optimisticRestore(
   sourcedLabels: Set<string>,
 ): RuleMessageState {
   const removable = new Set(actions.labelIds.filter((id) => !before.labelIds.includes(id)));
+  const deletionUnchanged = current.isDeleted === applied.isDeleted
+    && current.deletedAt === applied.deletedAt;
   return {
     isStarred: current.isStarred === applied.isStarred ? before.isStarred : current.isStarred,
     isArchived: current.isArchived === applied.isArchived ? before.isArchived : current.isArchived,
-    isDeleted: current.isDeleted === applied.isDeleted ? before.isDeleted : current.isDeleted,
+    isDeleted: deletionUnchanged ? before.isDeleted : current.isDeleted,
+    deletedAt: deletionUnchanged ? before.deletedAt : current.deletedAt,
     labelIds: current.labelIds.filter((id) => !removable.has(id) || !sourcedLabels.has(id)),
   };
 }
@@ -247,5 +262,6 @@ function sameState(left: RuleMessageState, right: RuleMessageState): boolean {
   return left.isStarred === right.isStarred
     && left.isArchived === right.isArchived
     && left.isDeleted === right.isDeleted
+    && left.deletedAt === right.deletedAt
     && left.labelIds.join('\0') === right.labelIds.join('\0');
 }

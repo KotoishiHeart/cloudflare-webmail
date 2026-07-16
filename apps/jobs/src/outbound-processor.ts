@@ -5,6 +5,7 @@ import {
   exhaustOutboundDelivery,
   failOutboundDelivery,
   getOutboundDeliveryMessage,
+  recordDeliveryEventSafely,
 } from '@cf-webmail/database';
 import { PermanentOutboundError, RetryableOutboundError } from './outbound-errors.js';
 import { loadOutboundAttachments } from './outbound-attachment-loader.js';
@@ -54,6 +55,12 @@ export async function processOutboundQueueMessage(
     const now = dependencies.now();
     const exhausted = await exhaustOutboundDelivery(dependencies.db, current.messageId, now);
     if (!exhausted) throw new RetryableOutboundError('delivery_busy', 'outbound delivery is not claimable');
+    await recordDeliveryEventSafely(dependencies.db, {
+      direction: 'outbound', stage: 'provider', status: 'failed',
+      category: 'retry_exhausted', severity: 'high', mailboxId: current.mailboxId,
+      messageId: current.messageId, provider: 'cloudflare-email-service',
+      errorCode: 'retry_exhausted', summary: 'Outbound retry limit reached', now,
+    });
     throw new PermanentOutboundError('retry_exhausted', 'outbound retry limit reached');
   }
 
@@ -104,6 +111,13 @@ export async function processOutboundQueueMessage(
         'delivery lease was lost after Email Service accepted the message',
       );
     }
+    await recordDeliveryEventSafely(dependencies.db, {
+      direction: 'outbound', stage: 'completed', status: 'succeeded',
+      category: 'message_sent', mailboxId: current.mailboxId,
+      messageId: current.messageId, provider: 'cloudflare-email-service',
+      summary: 'Email Service accepted the outbound message',
+      details: { providerMessageId: response.messageId }, now: dependencies.now(),
+    });
     return 'sent';
   } catch (error) {
     const emailError = normalizeEmailError(error);
@@ -120,6 +134,15 @@ export async function processOutboundQueueMessage(
       permanent ? now : now + retryDelayMilliseconds(current.attemptCount + 1),
       now,
     );
+    await recordDeliveryEventSafely(dependencies.db, {
+      direction: 'outbound', stage: 'provider',
+      status: permanent ? 'failed' : 'retrying',
+      category: permanent ? 'provider_rejected' : 'provider_retry',
+      severity: permanent ? 'high' : 'medium', mailboxId: current.mailboxId,
+      messageId: current.messageId, provider: 'cloudflare-email-service',
+      errorCode: emailError.code, summary: emailError.message,
+      details: { attempt: current.attemptCount + 1 }, now,
+    });
     if (permanent) throw new PermanentOutboundError(emailError.code, emailError.message);
     throw new RetryableOutboundError(emailError.code, emailError.message);
   }
