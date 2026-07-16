@@ -86,7 +86,7 @@ export async function processOutboundQueueMessage(
       subject: current.subject,
       text,
       html,
-      headers: { 'X-CF-Webmail-Delivery-ID': current.messageId },
+      headers: deliveryHeaders(current),
     });
     const completed = await completeOutboundDelivery(
       dependencies.db,
@@ -120,6 +120,18 @@ export async function processOutboundQueueMessage(
     if (permanent) throw new PermanentOutboundError(emailError.code, emailError.message);
     throw new RetryableOutboundError(emailError.code, emailError.message);
   }
+}
+
+function deliveryHeaders(current: {
+  messageId: string;
+  inReplyTo: string;
+  referencesHeader: string;
+}): Record<string, string> {
+  return {
+    'X-CF-Webmail-Delivery-ID': current.messageId,
+    ...(current.inReplyTo === '' ? {} : { 'In-Reply-To': current.inReplyTo }),
+    ...(current.referencesHeader === '' ? {} : { References: current.referencesHeader }),
+  };
 }
 
 function destinationFields(to: string[], cc: string[], bcc: string[]): EmailDestinations {

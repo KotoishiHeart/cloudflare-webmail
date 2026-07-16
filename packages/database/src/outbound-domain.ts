@@ -2,6 +2,7 @@ import type { AccessIdentityKey, MailboxRole } from './domain.js';
 
 export type OutboundDeliveryStatus = 'queued' | 'sending' | 'sent' | 'failed';
 export type OutboundRecipientKind = 'to' | 'cc' | 'bcc';
+export type OutboundComposeMode = 'new' | 'reply' | 'forward';
 
 export type OutboundComposeContext = {
   userId: string;
@@ -34,8 +35,17 @@ export type OutboundMessageRecord = {
   bodyTextKey: string;
   bodyHtmlKey: string;
   archiveMessageId: string;
+  composeMode: OutboundComposeMode;
+  sourceMessageId: string | null;
+  inReplyTo: string;
+  referencesHeader: string;
   createdAt: number;
 };
+
+export type OutboundThreadContext = Pick<
+  OutboundMessageRecord,
+  'composeMode' | 'sourceMessageId' | 'inReplyTo' | 'referencesHeader'
+>;
 
 export type StoredOutboundRequest = {
   messageId: string;
@@ -57,6 +67,8 @@ export type OutboundDeliveryMessage = StoredOutboundRequest & {
   subject: string;
   bodyTextKey: string;
   bodyHtmlKey: string;
+  inReplyTo: string;
+  referencesHeader: string;
   to: string[];
   cc: string[];
   bcc: string[];

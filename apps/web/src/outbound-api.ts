@@ -4,6 +4,7 @@ import {
   mailboxRoleGrants,
   normalizeIdempotencyKey,
   persistOutboundMessage,
+  resolveOutboundThreadContext,
   type OutboundRecipient,
   type StoredOutboundRequest,
 } from '@cf-webmail/database';
@@ -38,12 +39,19 @@ export async function createOutboundMessage(
   }
 
   const input = await readComposeInput(request);
+  const thread = await resolveOutboundThreadContext(
+    env.DB,
+    context.mailboxId,
+    input.composeMode,
+    input.sourceMessageId,
+  );
   const messageId = crypto.randomUUID();
   const archive = buildOutboundArchive(
     messageId,
     context.address,
     context.displayName,
     input,
+    thread,
     now,
   );
   if (archive.raw.byteLength > MAX_OUTBOUND_ARCHIVE_BYTES) {
@@ -87,6 +95,7 @@ export async function createOutboundMessage(
       bodyTextKey,
       bodyHtmlKey,
       archiveMessageId: archive.archiveMessageId,
+      ...thread,
       createdAt: now,
     });
     persisted = result.created;

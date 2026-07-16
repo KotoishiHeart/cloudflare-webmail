@@ -8,6 +8,7 @@ export * from './message-queries.js';
 export * from './outbound-delivery.js';
 export * from './outbound-domain.js';
 export * from './outbound-persistence.js';
+export * from './outbound-thread.js';
 export * from './provisioning.js';
 export { resolveActiveMailboxAddress } from './routing.js';
 export * from './storage-reconciliation.js';

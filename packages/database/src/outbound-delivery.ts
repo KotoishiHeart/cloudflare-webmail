@@ -17,6 +17,8 @@ type DeliveryRow = {
   subject: string;
   body_text_key: string;
   body_html_key: string;
+  in_reply_to: string;
+  references_header: string;
   attempt_count: number;
   next_attempt_at: number;
   lease_expires_at: number;
@@ -41,7 +43,8 @@ export async function getOutboundDeliveryMessage(
       od.provider_message_id, od.created_at, od.attempt_count,
       od.next_attempt_at, od.lease_expires_at, od.lease_token,
       od.sender_address, od.sender_name,
-      m.subject, m.body_text_key, m.body_html_key
+      m.subject, m.body_text_key, m.body_html_key,
+      m.in_reply_to, m.references_header
     FROM outbound_deliveries AS od
     JOIN messages AS m
       ON m.id = od.message_id AND m.mailbox_id = od.mailbox_id
@@ -77,6 +80,8 @@ export async function getOutboundDeliveryMessage(
     subject: row.subject,
     bodyTextKey: row.body_text_key,
     bodyHtmlKey: row.body_html_key,
+    inReplyTo: row.in_reply_to,
+    referencesHeader: row.references_header,
     ...grouped,
     attemptCount: row.attempt_count,
     nextAttemptAt: row.next_attempt_at,

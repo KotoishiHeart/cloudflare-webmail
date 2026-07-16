@@ -8,7 +8,7 @@ const attachmentSection = document.querySelector('#attachment-section');
 const attachmentList = document.querySelector('#attachment-list');
 const attachmentTemplate = document.querySelector('#attachment-template');
 
-export function showMessageDetail(detail, body, onPatch) {
+export function showMessageDetail(detail, body, handlers) {
   const { message, attachments } = detail;
   placeholder.hidden = true;
   content.hidden = false;
@@ -23,7 +23,7 @@ export function showMessageDetail(detail, body, onPatch) {
   renderBody(message, body);
   const rawLink = document.querySelector('#raw-link');
   rawLink.href = message.rawUrl;
-  renderActions(message, onPatch);
+  renderActions(message, handlers);
   renderAttachments(attachments);
   document.querySelector('#detail-subject').focus({ preventScroll: true });
 }
@@ -83,7 +83,7 @@ function clearHtmlBody() {
   document.querySelector('#body-modes').hidden = true;
 }
 
-function renderActions(message, onPatch) {
+function renderActions(message, handlers) {
   actions.replaceChildren();
   if (message.role === 'viewer') {
     const notice = document.createElement('span');
@@ -91,24 +91,30 @@ function renderActions(message, onPatch) {
     actions.append(notice);
     return;
   }
-  addAction(message.isRead ? '未読にする' : '既読にする', { isRead: !message.isRead }, onPatch);
-  addAction(message.isStarred ? 'スター解除' : 'スター', { isStarred: !message.isStarred }, onPatch);
+  addCallbackAction('返信', handlers.onReply);
+  addCallbackAction('転送', handlers.onForward);
+  addPatchAction(message.isRead ? '未読にする' : '既読にする', { isRead: !message.isRead }, handlers.onPatch);
+  addPatchAction(message.isStarred ? 'スター解除' : 'スター', { isStarred: !message.isStarred }, handlers.onPatch);
   if (!message.isDeleted) {
-    addAction(message.isArchived ? '受信箱へ戻す' : 'アーカイブ', {
+    addPatchAction(message.isArchived ? '受信箱へ戻す' : 'アーカイブ', {
       isArchived: !message.isArchived,
-    }, onPatch);
-    addAction('ゴミ箱へ', { isDeleted: true }, onPatch, 'danger');
+    }, handlers.onPatch);
+    addPatchAction('ゴミ箱へ', { isDeleted: true }, handlers.onPatch, 'danger');
   } else {
-    addAction('復元', { isDeleted: false }, onPatch);
+    addPatchAction('復元', { isDeleted: false }, handlers.onPatch);
   }
 }
 
-function addAction(label, patch, onPatch, className = '') {
+function addPatchAction(label, patch, onPatch, className = '') {
+  addCallbackAction(label, () => onPatch(patch), className);
+}
+
+function addCallbackAction(label, callback, className = '') {
   const button = document.createElement('button');
   button.type = 'button';
   button.textContent = label;
   button.className = className;
-  button.addEventListener('click', () => onPatch(patch));
+  button.addEventListener('click', callback);
   actions.append(button);
 }
 

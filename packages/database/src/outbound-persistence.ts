@@ -102,6 +102,7 @@ export async function persistOutboundMessage(
   for (const recipient of record.recipients) {
     statements.push(prepareRecipientInsert(db, record.id, recipient));
   }
+  statements.push(prepareCompositionInsert(db, record));
   statements.push(prepareDeliveryInsert(db, record));
 
   try {
@@ -147,7 +148,7 @@ function prepareOutboundMessageInsert(
       is_read, created_at, updated_at
     ) VALUES (
       ?, ?, 'outbound', 'queued', '',
-      ?, ?, ?, '', '',
+      ?, ?, ?, ?, ?,
       ?, ?, ?, ?, '', ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, 0,
@@ -159,6 +160,8 @@ function prepareOutboundMessageInsert(
     record.senderAddress,
     record.senderAddress,
     record.archiveMessageId,
+    record.inReplyTo,
+    record.referencesHeader,
     record.subject,
     record.sender,
     to.join(', '),
@@ -175,6 +178,17 @@ function prepareOutboundMessageInsert(
     record.createdAt,
     record.createdAt,
   );
+}
+
+function prepareCompositionInsert(
+  db: D1Database,
+  record: OutboundMessageRecord,
+): D1PreparedStatement {
+  return db.prepare(`
+    INSERT INTO outbound_compositions (
+      message_id, compose_mode, source_message_id, created_at
+    ) VALUES (?, ?, ?, ?)
+  `).bind(record.id, record.composeMode, record.sourceMessageId, record.createdAt);
 }
 
 function prepareRecipientInsert(
@@ -225,6 +239,19 @@ function validateOutboundRecord(record: OutboundMessageRecord): void {
   normalizeEmailAddress(record.senderAddress, 'senderAddress');
   requireSha256(record.rawSha256);
   requireTimestamp(record.createdAt, 'createdAt');
+  if (!['new', 'reply', 'forward'].includes(record.composeMode)) {
+    throw new DatabaseInputError('composeMode', 'must be new, reply, or forward');
+  }
+  if ((record.composeMode === 'new') !== (record.sourceMessageId === null)) {
+    throw new DatabaseInputError(
+      'sourceMessageId',
+      'must be null only when composeMode is new',
+    );
+  }
+  if (record.sourceMessageId !== null) normalizeId(record.sourceMessageId, 'sourceMessageId');
+  if (record.inReplyTo.length > 998 || record.referencesHeader.length > 2048) {
+    throw new DatabaseInputError('threadHeaders', 'exceed the Email Service header limit');
+  }
   if (record.rawSize < 0 || record.rawSize > 5 * 1024 * 1024) {
     throw new DatabaseInputError('rawSize', 'must not exceed 5 MiB');
   }

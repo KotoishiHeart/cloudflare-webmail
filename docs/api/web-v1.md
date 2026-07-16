@@ -26,8 +26,11 @@ request `Origin` to match the application origin.
 
 `POST` also requires a matching `Origin`, `Content-Type: application/json`, and
 a UUID `Idempotency-Key`. Its body contains `to`, optional `cc` and `bcc`
-address arrays, plus `subject` and a nonempty `text` body. A combined maximum of
-50 unique recipients and 512 KiB of UTF-8 text is accepted. The result is
+address arrays, plus `subject` and a nonempty `text` body. `composeMode` is
+`new`, `reply`, or `forward`; replies and forwards also require a
+`sourceMessageId` in the selected mailbox. Reply headers are derived from that
+stored source and cannot be supplied by the client. A combined maximum of 50
+unique recipients and 512 KiB of UTF-8 text is accepted. The result is
 `202` for a newly queued message and `200` for the existing record when the
 same idempotency key is retried. This API does not yet accept attachments.
 

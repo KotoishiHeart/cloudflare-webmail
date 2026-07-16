@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  persistInboundMessage,
   provisionMailboxWithOwner,
   provisionUserWithIdentity,
   setMailboxMembership,
@@ -15,6 +16,7 @@ const NOW = Date.UTC(2026, 6, 16, 16);
 const USER_ID = '019c315c-1f20-7000-8000-000000000511';
 const MAILBOX_ID = '019c315c-1f20-7000-8000-000000000512';
 const VIEWER_ID = '019c315c-1f20-7000-8000-000000000516';
+const SOURCE_ID = '019c315c-1f20-7000-8000-000000000520';
 const IDENTITY: AccessIdentity = {
   issuer: 'https://team.cloudflareaccess.com',
   subject: 'outbound-owner',
@@ -52,6 +54,37 @@ describe('outbound delivery', () => {
       userId: VIEWER_ID,
       role: 'viewer',
       now: NOW + 1,
+    });
+    const sourcePrefix = `mailboxes/${MAILBOX_ID}/messages/${SOURCE_ID}`;
+    const raw = await env.RAW_EMAILS.put(`${sourcePrefix}/raw.eml`, 'reply source');
+    if (raw === null) throw new Error('expected source R2 object metadata');
+    await env.RAW_EMAILS.put(`${sourcePrefix}/body.txt`, 'original body');
+    await persistInboundMessage(env.DB, {
+      id: SOURCE_ID,
+      mailboxId: MAILBOX_ID,
+      status: 'ready',
+      processingError: '',
+      envelopeFrom: 'original@example.net',
+      deliveredTo: 'sender@example.com',
+      rfcMessageId: '<original-message@example.net>',
+      inReplyTo: '<older-message@example.net>',
+      referencesHeader: '<root-message@example.net> <older-message@example.net>',
+      subject: 'Original subject',
+      sender: 'Original Sender <original@example.net>',
+      recipients: 'sender@example.com',
+      cc: '',
+      replyTo: '',
+      dateHeader: 'Thu, 16 Jul 2026 15:00:00 GMT',
+      receivedAt: NOW - 60_000,
+      textPreview: 'original body',
+      rawKey: `${sourcePrefix}/raw.eml`,
+      rawSha256: 'c'.repeat(64),
+      rawEtag: raw.etag,
+      rawSize: 12,
+      bodyTextKey: `${sourcePrefix}/body.txt`,
+      bodyHtmlKey: null,
+      attachments: [],
+      createdAt: NOW - 60_000,
     });
   });
 
@@ -136,6 +169,99 @@ describe('outbound delivery', () => {
     });
   });
 
+  it('derives reply threading from an authorized source and sends the headers', async () => {
+    const created = await compose(
+      '019c315c-1f20-7000-8000-000000000521',
+      'Re: Original subject',
+      IDENTITY,
+      ORIGIN,
+      { composeMode: 'reply', sourceMessageId: SOURCE_ID },
+    );
+    expect(created.status).toBe(202);
+    const payload = await created.json<{ data: { messageId: string } }>();
+    const row = await env.DB.prepare(`
+      SELECT m.in_reply_to, m.references_header,
+        oc.compose_mode, oc.source_message_id
+      FROM messages AS m
+      JOIN outbound_compositions AS oc ON oc.message_id = m.id
+      WHERE m.id = ?
+    `).bind(payload.data.messageId).first<Record<string, string>>();
+    expect(row).toEqual({
+      in_reply_to: '<original-message@example.net>',
+      references_header: '<root-message@example.net> <older-message@example.net> <original-message@example.net>',
+      compose_mode: 'reply',
+      source_message_id: SOURCE_ID,
+    });
+    const raw = await env.RAW_EMAILS.get(
+      `mailboxes/${MAILBOX_ID}/messages/${payload.data.messageId}/raw.eml`,
+    );
+    await expect(raw?.text()).resolves.toContain('In-Reply-To: <original-message@example.net>');
+
+    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+      messageId: '<provider-reply@example.com>',
+    }));
+    const queued = queueItem(payload.data.messageId);
+    await handleOutboundBatch([queued.item], {
+      db: env.DB,
+      rawEmails: env.RAW_EMAILS,
+      email: { send } as SendEmail,
+      now: () => NOW + 90_000,
+    });
+    expect(send.mock.calls[0]?.[0]).toMatchObject({
+      headers: {
+        'In-Reply-To': '<original-message@example.net>',
+        References: '<root-message@example.net> <older-message@example.net> <original-message@example.net>',
+      },
+    });
+  });
+
+  it('records forward provenance without incorrectly threading it as a reply', async () => {
+    const created = await compose(
+      '019c315c-1f20-7000-8000-000000000522',
+      'Fwd: Original subject',
+      IDENTITY,
+      ORIGIN,
+      { composeMode: 'forward', sourceMessageId: SOURCE_ID },
+    );
+    expect(created.status).toBe(202);
+    const payload = await created.json<{ data: { messageId: string } }>();
+    const row = await env.DB.prepare(`
+      SELECT m.in_reply_to, m.references_header,
+        oc.compose_mode, oc.source_message_id
+      FROM messages AS m
+      JOIN outbound_compositions AS oc ON oc.message_id = m.id
+      WHERE m.id = ?
+    `).bind(payload.data.messageId).first<Record<string, string>>();
+    expect(row).toEqual({
+      in_reply_to: '',
+      references_header: '',
+      compose_mode: 'forward',
+      source_message_id: SOURCE_ID,
+    });
+  });
+
+  it('rejects forged or contradictory source-message relationships', async () => {
+    const missing = await compose(
+      '019c315c-1f20-7000-8000-000000000523',
+      'Forged reply',
+      IDENTITY,
+      ORIGIN,
+      {
+        composeMode: 'reply',
+        sourceMessageId: '019c315c-1f20-7000-8000-000000009999',
+      },
+    );
+    expect(missing.status).toBe(400);
+    const contradictory = await compose(
+      '019c315c-1f20-7000-8000-000000000524',
+      'Contradictory new message',
+      IDENTITY,
+      ORIGIN,
+      { composeMode: 'new', sourceMessageId: SOURCE_ID },
+    );
+    expect(contradictory.status).toBe(400);
+  });
+
   it('records permanent provider errors without retrying the Queue message', async () => {
     const created = await compose('019c315c-1f20-7000-8000-000000000515', 'Permanent failure');
     const payload = await created.json<{ data: { messageId: string } }>();
@@ -217,6 +343,7 @@ function compose(
   subject: string,
   identity = IDENTITY,
   origin = ORIGIN,
+  extra: Record<string, unknown> = {},
 ): Promise<Response> {
   return handleWebRequest(new Request(`${ORIGIN}/api/mailboxes/${MAILBOX_ID}/messages`, {
     method: 'POST',
@@ -231,6 +358,7 @@ function compose(
       bcc: ['hidden@example.net'],
       subject,
       text: '本文です。',
+      ...extra,
     }),
   }), env, {
     authenticate: async () => ({ ok: true, identity }),

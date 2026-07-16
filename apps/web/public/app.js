@@ -6,7 +6,12 @@ import {
   patchMessage,
   createMessage,
 } from './ui/api.js';
-import { bindCompose, openCompose } from './ui/compose.js';
+import {
+  bindCompose,
+  openCompose,
+  openForwardCompose,
+  openReplyCompose,
+} from './ui/compose.js';
 import {
   closeMessageDetail,
   showDetailLoading,
@@ -126,7 +131,11 @@ async function openMessage(messageId) {
     const detail = await getMessage(messageId);
     const body = await getMessageBody(detail.message);
     if (state.selectedMessageId !== messageId) return;
-    showMessageDetail(detail, body, (patch) => applyPatch(messageId, patch));
+    showMessageDetail(detail, body, {
+      onPatch: (patch) => applyPatch(messageId, patch),
+      onReply: () => openReplyCompose(selectedMailbox(), detail, body),
+      onForward: () => openForwardCompose(selectedMailbox(), detail, body),
+    });
   } catch (error) {
     handleError(error, 'メッセージを取得できませんでした。');
     closeDetail();

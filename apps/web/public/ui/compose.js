@@ -3,6 +3,8 @@ const form = document.querySelector('#compose-form');
 const submit = document.querySelector('#compose-submit');
 let requestId = '';
 let submitHandler;
+let composeMode = 'new';
+let sourceMessageId = '';
 
 export function bindCompose(onSubmit) {
   submitHandler = onSubmit;
@@ -14,18 +16,63 @@ export function bindCompose(onSubmit) {
   form.addEventListener('submit', submitCompose);
 }
 
-export function openCompose(mailbox) {
+export function openCompose(mailbox, draft = {}) {
   if (!mailbox || mailbox.role === 'viewer') return;
   requestId = crypto.randomUUID();
+  composeMode = draft.composeMode || 'new';
+  sourceMessageId = draft.sourceMessageId || '';
   form.reset();
+  document.querySelector('#compose-title').textContent = composeTitle(composeMode);
   document.querySelector('#compose-from').textContent = `差出人: ${mailbox.address}`;
+  setValue('#compose-to', draft.to);
+  setValue('#compose-cc', draft.cc);
+  setValue('#compose-bcc', draft.bcc);
+  setValue('#compose-subject', draft.subject);
+  setValue('#compose-text', draft.text);
   dialog.showModal();
   document.querySelector('#compose-to').focus();
+}
+
+export function openReplyCompose(mailbox, detail, body) {
+  const { message } = detail;
+  const replyAddress = extractAddresses(message.replyTo || message.sender)[0] || '';
+  const cc = extractAddresses(message.cc)
+    .filter((address) => address !== mailbox.address.toLowerCase() && address !== replyAddress);
+  openCompose(mailbox, {
+    composeMode: 'reply',
+    sourceMessageId: message.id,
+    to: [replyAddress].filter(Boolean),
+    cc,
+    subject: withPrefix(message.subject, 'Re:'),
+    text: `\n\nOn ${message.dateHeader || new Date(message.receivedAt).toLocaleString()} ${message.sender || ''} wrote:\n${quoteText(body.text || message.textPreview)}`,
+  });
+}
+
+export function openForwardCompose(mailbox, detail, body) {
+  const { message } = detail;
+  openCompose(mailbox, {
+    composeMode: 'forward',
+    sourceMessageId: message.id,
+    subject: withPrefix(message.subject, 'Fwd:'),
+    text: [
+      '',
+      '',
+      '---------- Forwarded message ---------',
+      `From: ${message.sender || ''}`,
+      `Date: ${message.dateHeader || new Date(message.receivedAt).toLocaleString()}`,
+      `Subject: ${message.subject || ''}`,
+      `To: ${message.recipients || message.deliveredTo || ''}`,
+      '',
+      body.text || message.textPreview || '',
+    ].join('\n'),
+  });
 }
 
 export function closeCompose() {
   if (dialog.open) dialog.close();
   requestId = '';
+  composeMode = 'new';
+  sourceMessageId = '';
 }
 
 async function submitCompose(event) {
@@ -40,6 +87,8 @@ async function submitCompose(event) {
       bcc: addresses('#compose-bcc'),
       subject: document.querySelector('#compose-subject').value,
       text: document.querySelector('#compose-text').value,
+      composeMode,
+      sourceMessageId: sourceMessageId || null,
     });
     closeCompose();
   } catch {
@@ -47,6 +96,31 @@ async function submitCompose(event) {
   } finally {
     submit.disabled = false;
   }
+}
+
+function setValue(selector, value) {
+  document.querySelector(selector).value = Array.isArray(value) ? value.join(', ') : value || '';
+}
+
+function composeTitle(mode) {
+  if (mode === 'reply') return '返信';
+  if (mode === 'forward') return '転送';
+  return 'メールを作成';
+}
+
+function withPrefix(subject, prefix) {
+  const value = subject || '';
+  const covered = prefix === 'Re:' ? /^\s*re\s*:/iu : /^\s*(?:fwd?|転送)\s*:/iu;
+  return covered.test(value) ? value : `${prefix} ${value}`.trim();
+}
+
+function quoteText(value) {
+  return String(value || '').split('\n').map((line) => `> ${line}`).join('\n');
+}
+
+function extractAddresses(value) {
+  const matches = String(value || '').toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?/gu);
+  return [...new Set(matches || [])];
 }
 
 function addresses(selector) {

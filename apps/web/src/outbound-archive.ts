@@ -1,3 +1,4 @@
+import type { OutboundThreadContext } from '@cf-webmail/database';
 import type { ComposeInput } from './compose-input.js';
 
 export const MAX_OUTBOUND_ARCHIVE_BYTES = 5 * 1024 * 1024;
@@ -13,6 +14,7 @@ export function buildOutboundArchive(
   senderAddress: string,
   senderName: string,
   input: ComposeInput,
+  thread: OutboundThreadContext,
   createdAt: number,
 ): OutboundArchive {
   const boundary = `cf-webmail-${messageId}`;
@@ -25,6 +27,8 @@ export function buildOutboundArchive(
     `To: ${input.to.join(', ')}`,
     ...(input.cc.length > 0 ? [`Cc: ${input.cc.join(', ')}`] : []),
     `Subject: ${encodedPhrase(input.subject)}`,
+    ...(thread.inReplyTo === '' ? [] : [`In-Reply-To: ${thread.inReplyTo}`]),
+    ...(thread.referencesHeader === '' ? [] : [`References: ${thread.referencesHeader}`]),
     'MIME-Version: 1.0',
     'X-CF-Webmail-Archive: compose-snapshot',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
