@@ -4,6 +4,14 @@ import { legacyMappingSha256 } from './legacy-inventory.mjs';
 import { prepareMigratedMessage, deterministicUuid, sha256 } from './migration-message.mjs';
 import { renderLegacyBatchSql, renderLegacyMessageSql } from './legacy-stage-sql.mjs';
 import {
+  legacyMessageLabels,
+  readLegacyConfiguration,
+} from './legacy-configuration.mjs';
+import {
+  buildLegacyConfigurationPlan,
+  renderLegacyMessageLabelSql,
+} from './legacy-configuration-sql.mjs';
+import {
   loadLegacyRaw,
   normalizeLegacyMessage,
   openLegacyStageSource,
@@ -17,8 +25,8 @@ export async function prepareLegacyMigrationStage(options) {
   await assertMissing(stage);
   await mkdir(join(stage, 'objects'), { recursive: true });
   await mkdir(join(stage, 'd1'), { recursive: true });
-  const source = openLegacyStageSource(options);
   const createdAt = options.now ?? Date.now();
+  const source = openLegacyStageSource(options);
   const mappingSha256 = legacyMappingSha256(options.mapping);
   const batchId = deterministicUuid([
     'cloudflare-webmail-archived', source.imported.sourceSha256,
@@ -28,6 +36,19 @@ export async function prepareLegacyMigrationStage(options) {
   const failures = [];
   const sqlChunks = [];
   const seen = new Set();
+  const configuration = readLegacyConfiguration(
+    source.database, options.mapping.mappings, createdAt,
+  );
+  const configurationPlan = buildLegacyConfigurationPlan(
+    configuration, options.mapping.mappings, batchId, createdAt,
+  );
+  for (let index = 0; index < configurationPlan.statements.length; index += SQL_CHUNK_SIZE) {
+    sqlChunks.push(await writeSqlChunk(
+      stage,
+      sqlChunks.length + 1,
+      configurationPlan.statements.slice(index, index + SQL_CHUNK_SIZE),
+    ));
+  }
   const accountCounts = new Map(options.mapping.mappings.map((mapping) => [mapping.sourceAddress, {
     sourceAddress: mapping.sourceAddress,
     mailboxId: mapping.mailboxId,
@@ -86,7 +107,15 @@ export async function prepareLegacyMigrationStage(options) {
         for (const attachment of message.attachments) {
           await addObject(stage, objects, attachment.key, attachment.content, attachment.contentType);
         }
-        currentSql.push(renderLegacyMessageSql(message, legacy, batchId, createdAt));
+        const labelSql = legacyMessageLabels(
+          configuration, legacy.id, legacy.targetMailboxId,
+        ).map((association) => renderLegacyMessageLabelSql(
+          configurationPlan, association, message.id, batchId, createdAt,
+        ));
+        currentSql.push([
+          renderLegacyMessageSql(message, legacy, batchId, createdAt),
+          ...labelSql,
+        ].join('\n\n'));
         if (message.status === 'quarantined') quarantined += 1;
         prepared += 1;
         const account = accountCounts.get(mapping.sourceAddress);
@@ -140,7 +169,7 @@ export async function prepareLegacyMigrationStage(options) {
   );
   const complete = failures.length === 0 && duplicates === 0 && prepared === discovered;
   const manifest = {
-    version: 2,
+    version: 3,
     kind: 'cf-webmail-migration-stage',
     sourceFormat: 'cloudflare-webmail-archived-d1-r2',
     createdAt,
@@ -151,6 +180,10 @@ export async function prepareLegacyMigrationStage(options) {
     complete,
     mappings: [...accountCounts.values()],
     exclusions: options.mapping.exclusions,
+    configuration: {
+      source: configuration.sourceCounts,
+      target: configurationPlan.counts,
+    },
     counts: {
       discovered,
       prepared,

@@ -59,6 +59,8 @@ function validateSingleMailboxManifest(manifest) {
 
 function validateLegacyManifest(manifest) {
   if (
+    ![LEGACY_STAGE_VERSION, 3].includes(manifest.version)
+    ||
     manifest.sourceFormat !== 'cloudflare-webmail-archived-d1-r2'
     || !uuid(manifest.batchId)
     || !hash(manifest.sourceDatabaseSha256)
@@ -118,7 +120,27 @@ function validateLegacyManifest(manifest) {
       && manifest.counts.prepared === manifest.counts.discovered
     )
   ) throw new Error('legacy stage counts are inconsistent');
+  if (manifest.version === 3) validateLegacyConfiguration(manifest.configuration);
   return mailboxIds;
+}
+
+function validateLegacyConfiguration(configuration) {
+  const source = configuration?.source;
+  const target = configuration?.target;
+  if (
+    !source || !target
+    || !count(source.labels)
+    || !count(source.messageLabels)
+    || !count(source.rules)
+    || !count(source.preferences)
+    || !count(target.labels)
+    || !count(target.labelSources)
+    || !count(target.messageLabels)
+    || !count(target.rules)
+    || !count(target.preferences)
+    || target.messageLabels > source.messageLabels
+    || target.preferences > source.preferences
+  ) throw new Error('legacy stage configuration counts are inconsistent');
 }
 
 function uuid(value) {

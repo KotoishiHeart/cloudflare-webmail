@@ -3,6 +3,7 @@ import { readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { defaultRunner, queryD1 } from './backup-cloudflare.mjs';
 import { materializeLegacyR2Tree } from './legacy-bulk-stage.mjs';
+import { auditLegacyConfiguration } from './legacy-bulk-configuration-audit.mjs';
 
 export async function applyLegacyStageBulk(stageInput, options, runner = defaultRunner()) {
   if (!options.yes) throw new Error('bulk apply changes R2 and D1; pass --yes after verification');
@@ -135,7 +136,15 @@ export function auditLegacyTarget(manifest, options, runner) {
     actual.delete(expected.sourceAddress);
   }
   if (actual.size !== 0) throw new Error('target D1 contains unexpected migration source accounts');
-  return { batchId: manifest.batchId, messages: manifest.counts.prepared, objects: manifest.counts.objects };
+  const result = {
+    batchId: manifest.batchId,
+    messages: manifest.counts.prepared,
+    objects: manifest.counts.objects,
+  };
+  if (manifest.version === 3) {
+    result.configuration = auditLegacyConfiguration(manifest, options, runner);
+  }
+  return result;
 }
 
 function run(runner, command, args) {

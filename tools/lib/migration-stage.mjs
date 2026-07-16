@@ -8,6 +8,7 @@ import { validateStageManifest } from './migration-stage-validation.mjs';
 
 const STAGE_VERSION = 1;
 const LEGACY_STAGE_VERSION = 2;
+const LEGACY_CONFIGURATION_STAGE_VERSION = 3;
 const SQL_CHUNK_SIZE = 50;
 
 export async function prepareMigrationStage(options) {
@@ -92,7 +93,8 @@ export async function verifyMigrationStage(stageInput) {
   const stage = resolve(stageInput);
   const manifest = JSON.parse(await readFile(join(stage, 'manifest.json'), 'utf8'));
   if (
-    (manifest.version !== STAGE_VERSION && manifest.version !== LEGACY_STAGE_VERSION)
+    ![STAGE_VERSION, LEGACY_STAGE_VERSION, LEGACY_CONFIGURATION_STAGE_VERSION]
+      .includes(manifest.version)
     || manifest.kind !== 'cf-webmail-migration-stage'
   ) {
     throw new Error('unsupported migration stage');
@@ -120,7 +122,7 @@ export async function verifyMigrationStage(stageInput) {
 export async function applyMigrationStage(stageInput, options, io = { spawn: spawnSync }) {
   const stage = resolve(stageInput);
   const verified = await verifyMigrationStage(stage);
-  if (verified.manifest.version === LEGACY_STAGE_VERSION && verified.manifest.complete !== true) {
+  if (verified.manifest.version >= LEGACY_STAGE_VERSION && verified.manifest.complete !== true) {
     throw new Error('incomplete legacy migration stages cannot be applied');
   }
   const target = {

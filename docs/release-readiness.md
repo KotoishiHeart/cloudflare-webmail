@@ -68,6 +68,8 @@ deployment. Require:
 - successful download-based R2 comparison;
 - matching per-account D1 message, direction, flag, attachment, and object
   reference counts;
+- matching migrated label, message-label, rule, and user-preference provenance
+  with every target row still present;
 - a portable target backup that verifies offline and a representative restore
   or download check.
 
@@ -84,7 +86,7 @@ writes `rollback-plan.json` before the first mutation and refuses split Worker
 traffic as an ambiguous rollback point.
 
 Run authenticated postflight with an Access service token held only in the
-operator environment. It must prove new active Worker versions, all 30 D1
+operator environment. It must prove new active Worker versions, all 31 D1
 tables, `/healthz`, and no unresolved handoffs, outbound work, dead letters,
 storage issues, or retention runs. `cutoverReady: false` or exit status 2 is a
 hard stop.

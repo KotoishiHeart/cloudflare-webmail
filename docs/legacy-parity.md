@@ -38,8 +38,8 @@ Status meanings:
 
 | Archived behavior | Rebuild status | Current implementation/evidence |
 | --- | --- | --- |
-| Labels and user display settings | Rebuilt | Labels are mailbox-scoped with composite foreign keys; preferences, including the authorized default mailbox, are keyed by the stable internal user ID. |
-| Sender/recipient/subject/domain/attachment/size/keyword rules | Rebuilt | Rules support preview, frozen match runs, explicit apply, automatic inbound application, and optimistic undo for star/archive/trash/label actions. |
+| Labels and user display settings | Rebuilt | Labels are mailbox-scoped with composite foreign keys; preferences, including the authorized default mailbox, are keyed by the stable internal user ID. Archived global labels, assignments, and display preferences are deterministically converted with provenance. |
+| Sender/recipient/subject/domain/attachment/size/keyword rules | Rebuilt | Rules support preview, frozen match runs, explicit apply, automatic inbound application, and optimistic undo for star/archive/trash/label actions. Archived definitions are copied per mapped mailbox; incompatible historical run snapshots remain in the offline archive rather than being reactivated. |
 | Account, alias, membership, and administrator management | Rebuilt | A separate `/admin.html` PWA uses an explicit `system_administrators` grant. It manages users, identities, mailboxes, addresses, memberships, and administrator grants with last-admin/last-owner protections. |
 | Delivery, rule, lifecycle, and security history | Rebuilt | Structured delivery and audit events are bounded, filterable, and mailbox-linked. Cron removes at most 500 delivery rows older than 90 days and 500 audit rows older than 365 days. |
 | Content-wide administrator cross-search | Excluded | Administrators get structured event and directory views; mail content search remains inside an authorized mailbox. A global content endpoint would unnecessarily bypass the membership boundary. |
@@ -93,6 +93,6 @@ Worker entrypoint:
 Production TypeScript/JavaScript modules are limited to 250 physical lines.
 `tools/tests/architecture.test.mjs` enforces that boundary, the credential
 ignore policy, ordered migration filenames, empty-database migration success,
-the exact 30-table schema, and foreign-key integrity. Generated bundles,
+the exact 31-table schema, and foreign-key integrity. Generated bundles,
 binding declarations, SQL migrations, tests, and documentation are excluded
 from the module line budget.

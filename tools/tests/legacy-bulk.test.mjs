@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { applyLegacyStageBulk } from '../lib/legacy-bulk-apply.mjs';
 import { auditLegacyStageBulk } from '../lib/legacy-bulk-audit.mjs';
+import { auditLegacyConfiguration } from '../lib/legacy-bulk-configuration-audit.mjs';
 import { materializeLegacyR2Tree } from '../lib/legacy-bulk-stage.mjs';
 
 const MAILBOX_ID = '019c315c-1f20-7000-8000-000000000701';
@@ -92,7 +93,57 @@ describe('legacy bulk apply', () => {
     assert.ok(!auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'copy'));
     assert.ok(!auditCalls.some((call) => call.command === 'npx' && call.args.includes('--file')));
   });
+
+  it('audits every migrated configuration source against its target row', () => {
+    const manifest = {
+      version: 3,
+      batchId: BATCH_ID,
+      configuration: {
+        target: { labels: 2, labelSources: 2, messageLabels: 1, rules: 2, preferences: 1 },
+      },
+    };
+    const rows = [
+      configurationRow('label', 2, 2),
+      configurationRow('mail_rule', 2, 2),
+      configurationRow('message_label', 1, 1),
+      configurationRow('user_preference', 1, 1),
+    ];
+    const result = auditLegacyConfiguration(manifest, {
+      local: true,
+      remote: false,
+      database: 'cf-webmail',
+      config: 'apps/web/wrangler.jsonc',
+    }, queryRunner(rows));
+    assert.deepEqual(result, { labels: 2, messageLabels: 1, rules: 2, preferences: 1 });
+    rows[0].existing_rows = 1;
+    assert.throws(
+      () => auditLegacyConfiguration(manifest, {
+        local: true,
+        remote: false,
+        database: 'cf-webmail',
+        config: 'apps/web/wrangler.jsonc',
+      }, queryRunner(rows)),
+      /configuration mismatch: label/u,
+    );
+  });
 });
+
+function configurationRow(sourceKind, provenanceRows, targetRows) {
+  return {
+    source_kind: sourceKind,
+    provenance_rows: provenanceRows,
+    target_rows: targetRows,
+    existing_rows: provenanceRows,
+  };
+}
+
+function queryRunner(rows) {
+  return { spawn: () => ({
+    status: 0,
+    stdout: JSON.stringify([{ results: rows }]),
+    stderr: '',
+  }) };
+}
 
 async function createStage(stage) {
   await mkdir(join(stage, 'objects'), { recursive: true });

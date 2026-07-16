@@ -106,10 +106,12 @@ npm run migrate:legacy -- bulk-audit \
 npm run deploy -- postflight --stage ops/deploy-production --force
 ```
 
-Require `cutoverReady: true`, matching D1 per-account counts, a successful
-download-based R2 comparison, and zero unexplained migration failures. Repeat
-the inbound/outbound canaries through the production addresses. Then enable
-normal users in the new Access policy.
+Require `cutoverReady: true`, matching D1 per-account and migrated
+configuration counts, a successful download-based R2 comparison, and zero
+unexplained migration failures. Confirm the expected labels, default mailbox,
+and one migrated incoming rule with an owner identity. Repeat the
+inbound/outbound canaries through the production addresses. Then enable normal
+users in the new Access policy.
 
 ## 5. Observe and retire safely
 

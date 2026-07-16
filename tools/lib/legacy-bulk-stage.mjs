@@ -7,7 +7,7 @@ export async function materializeLegacyR2Tree(stageInput, outputInput) {
   const stage = resolve(stageInput);
   const output = resolve(outputInput);
   const verified = await verifyMigrationStage(stage);
-  if (verified.manifest.version !== 2 || verified.manifest.complete !== true) {
+  if (![2, 3].includes(verified.manifest.version) || verified.manifest.complete !== true) {
     throw new Error('bulk R2 materialization requires a complete legacy stage');
   }
   await mkdir(output, { recursive: true });

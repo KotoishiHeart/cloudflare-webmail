@@ -35,6 +35,14 @@ export function createLegacyInventory(databasePath, now = Date.now()) {
           UNION SELECT storage_key FROM blobs WHERE COALESCE(storage_key, '') <> ''
         )
       `),
+      labels: optionalScalar(database, ['labels'], 'SELECT COUNT(*) FROM labels'),
+      messageLabels: optionalScalar(
+        database, ['message_labels'], 'SELECT COUNT(*) FROM message_labels',
+      ),
+      rules: optionalScalar(database, ['mail_rules'], 'SELECT COUNT(*) FROM mail_rules'),
+      userPreferences: optionalScalar(database, ['app_settings'], `
+        SELECT COUNT(*) FROM app_settings WHERE key LIKE 'user_pref:%'
+      `),
     };
     const integrity = {
       messagesWithoutAccount: scalar(database, "SELECT COUNT(*) FROM messages WHERE COALESCE(account_email, '') = ''"),
@@ -47,6 +55,24 @@ export function createLegacyInventory(databasePath, now = Date.now()) {
       missingAttachmentBlobs: scalar(database, `
         SELECT COUNT(*) FROM attachments AS a
         LEFT JOIN blobs AS b ON b.sha256 = a.blob_sha256 WHERE b.sha256 IS NULL
+      `),
+      orphanMessageLabels: optionalScalar(database, ['message_labels', 'messages'], `
+        SELECT COUNT(*) FROM message_labels AS ml
+        LEFT JOIN messages AS m ON m.id = ml.message_id WHERE m.id IS NULL
+      `),
+      missingMessageLabelDefinitions: optionalScalar(
+        database, ['message_labels', 'labels'], `
+          SELECT COUNT(*) FROM message_labels AS ml
+          LEFT JOIN labels AS l ON l.id = ml.label_id WHERE l.id IS NULL
+        `,
+      ),
+      invalidRuleJson: optionalScalar(database, ['mail_rules'], `
+        SELECT COUNT(*) FROM mail_rules
+        WHERE NOT json_valid(match_json) OR NOT json_valid(action_json)
+      `),
+      invalidUserPreferences: optionalScalar(database, ['app_settings'], `
+        SELECT COUNT(*) FROM app_settings
+        WHERE key LIKE 'user_pref:%' AND NOT json_valid(value)
       `),
     };
     return {
@@ -131,4 +157,11 @@ function emptyCounts() {
 function scalar(database, sql) {
   const row = database.prepare(sql).get();
   return Number(Object.values(row ?? {})[0] ?? 0);
+}
+
+function optionalScalar(database, tables, sql) {
+  const existing = tables.every((name) => database.prepare(
+    "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?",
+  ).get(name) !== undefined);
+  return existing ? scalar(database, sql) : 0;
 }

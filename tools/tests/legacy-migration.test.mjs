@@ -35,6 +35,10 @@ describe('archived SQL isolation', () => {
       blobs: 1,
       r2References: 6,
       uniqueR2Objects: 6,
+      labels: 0,
+      messageLabels: 0,
+      rules: 0,
+      userPreferences: 0,
     });
     assert.deepEqual(inventory.integrity, {
       messagesWithoutAccount: 0,
@@ -42,6 +46,10 @@ describe('archived SQL isolation', () => {
       unsupportedDirections: 0,
       orphanAttachments: 0,
       missingAttachmentBlobs: 0,
+      orphanMessageLabels: 0,
+      missingMessageLabelDefinitions: 0,
+      invalidRuleJson: 0,
+      invalidUserPreferences: 0,
     });
     assert.equal(inventory.accounts[0].counts.attachments, 1);
     assert.equal(inventory.accounts[1].counts.outbound, 1);

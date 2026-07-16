@@ -196,3 +196,6 @@ real email delivery has been verified.
 12. Completed: archived behavior parity audit, bounded module responsibilities,
     empty-schema migration verification, D1 daily-quota recovery, and explicit
     release-readiness evidence gates.
+13. Completed: archived default-mailbox preferences plus provenance-verified
+    conversion of legacy labels, assignments, mailbox-scoped rules, and user
+    display settings.

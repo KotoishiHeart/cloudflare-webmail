@@ -1,7 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
@@ -31,6 +31,13 @@ describe('archived current-format stage', () => {
     await writeFile(sql, safeSql(rawInbound, rawOutbound));
     await importLegacySafeSql({ sql, database, now: 1000 });
     const inventory = createLegacyInventory(database);
+    assert.deepEqual({
+      labels: inventory.counts.labels,
+      messageLabels: inventory.counts.messageLabels,
+      rules: inventory.counts.rules,
+      userPreferences: inventory.counts.userPreferences,
+    }, { labels: 1, messageLabels: 1, rules: 1, userPreferences: 1 });
+    assert.equal(Object.values(inventory.integrity).every((count) => count === 0), true);
     const mapping = createLegacyMappingTemplate(inventory);
 
     const objectRoot = join(root, 'old-r2');
@@ -47,7 +54,7 @@ describe('archived current-format stage', () => {
     const manifest = await prepareLegacyMigrationStage({
       database, mapping, snapshot, stage, now: 3000,
     });
-    assert.equal(manifest.version, 2);
+    assert.equal(manifest.version, 3);
     assert.equal(manifest.complete, true);
     assert.deepEqual(manifest.counts, {
       discovered: 2,
@@ -58,23 +65,33 @@ describe('archived current-format stage', () => {
       sourceObjects: 2,
       objects: 5,
     });
+    assert.deepEqual(manifest.configuration, {
+      source: { labels: 1, messageLabels: 1, rules: 1, preferences: 1 },
+      target: { labels: 2, labelSources: 2, messageLabels: 1, rules: 2, preferences: 1 },
+    });
     const verified = await verifyMigrationStage(stage);
     assert.equal(verified.objects.length, 5);
 
     const target = new DatabaseSync(join(root, 'target.sqlite'));
     try {
       target.exec('PRAGMA foreign_keys = ON;');
-      for (const file of [
-        'migrations/0001_identity_and_mailboxes.sql',
-        'migrations/0002_messages_and_attachments.sql',
-        'migrations/0003_outbound_delivery.sql',
-        'migrations/0004_migration_provenance.sql',
-      ]) target.exec(await readFile(file, 'utf8'));
+      for (const name of (await readdir('migrations')).filter((item) => item.endsWith('.sql')).sort()) {
+        target.exec(await readFile(`migrations/${name}`, 'utf8'));
+      }
+      target.prepare(`
+        INSERT INTO users (id, email, created_at, updated_at)
+        VALUES ('owner-1', 'owner@example.com', 1, 1)
+      `).run();
       for (const item of mapping.mappings) {
         target.prepare(`
           INSERT INTO mailboxes (id, display_name, status, created_at, updated_at)
           VALUES (?, ?, 'active', 1, 1)
         `).run(item.mailboxId, item.address);
+        target.prepare(`
+          INSERT INTO mailbox_memberships (
+            mailbox_id, user_id, role, created_at, updated_at
+          ) VALUES (?, 'owner-1', 'owner', 1, 1)
+        `).run(item.mailboxId);
       }
       for (const sqlFile of manifest.sqlFiles) {
         target.exec(await readFile(join(stage, sqlFile.file), 'utf8'));
@@ -114,6 +131,55 @@ describe('archived current-format stage', () => {
         SELECT expected_messages, source_objects, staged_objects FROM migration_batches
       `).get();
       assert.deepEqual({ ...batch }, { expected_messages: 2, source_objects: 2, staged_objects: 5 });
+      assert.deepEqual(configurationCounts(target), {
+        labels: 2,
+        messageLabels: 1,
+        rules: 2,
+        ruleLabels: 2,
+        preferences: 1,
+      });
+      const preference = target.prepare(`
+        SELECT page_size, compact_layout, default_mailbox_id
+        FROM user_preferences WHERE user_id = 'owner-1'
+      `).get();
+      assert.deepEqual({ ...preference }, {
+        page_size: 50,
+        compact_layout: 1,
+        default_mailbox_id: mapping.mappings[0].mailboxId,
+      });
+      const rule = target.prepare(`
+        SELECT conditions_json, actions_json FROM mail_rules
+        WHERE mailbox_id = ?
+      `).get(mapping.mappings[0].mailboxId);
+      assert.deepEqual(JSON.parse(rule.conditions_json), {
+        fromContains: 'billing@example.net',
+        toContains: '',
+        subjectContains: 'Legacy',
+        participantDomain: 'example.net',
+        keyword: 'invoice',
+        attachment: 'with',
+        minimumBytes: 1024,
+        maximumBytes: 2048,
+        direction: 'inbound',
+      });
+      assert.deepEqual(JSON.parse(rule.actions_json), {
+        star: true,
+        archive: false,
+        trash: false,
+        labelIds: [target.prepare(`
+          SELECT id FROM mailbox_labels WHERE mailbox_id = ?
+        `).get(mapping.mappings[0].mailboxId).id],
+      });
+      const provenanceCounts = Object.fromEntries(target.prepare(`
+        SELECT source_kind, COUNT(*) AS count FROM migration_configuration_sources
+        GROUP BY source_kind ORDER BY source_kind
+      `).all().map((row) => [row.source_kind, row.count]));
+      assert.deepEqual(provenanceCounts, {
+        label: 2,
+        mail_rule: 2,
+        message_label: 1,
+        user_preference: 1,
+      });
     } finally {
       target.close();
     }
@@ -188,8 +254,31 @@ INSERT INTO "blobs" ("sha256", "size", "content_type", "storage_key", "filename_
 -- table: attachments
 DELETE FROM "attachments";
 INSERT INTO "attachments" ("id", "message_id", "blob_sha256", "filename", "content_type", "size") VALUES (1, 'old-in', '${hash(Buffer.from('hello'))}', 'hello.txt', 'text/plain', 5);
+-- table: labels
+DELETE FROM "labels";
+INSERT INTO "labels" ("id", "name", "color", "description", "created_at", "updated_at") VALUES (1, 'Important', '#2563eb', 'Legacy label', 1200, 1300);
+-- table: message_labels
+DELETE FROM "message_labels";
+INSERT INTO "message_labels" ("message_id", "label_id", "source_rule_id", "created_at") VALUES ('old-in', 1, 'rule-old', 1400);
+-- table: mail_rules
+DELETE FROM "mail_rules";
+INSERT INTO "mail_rules" ("id", "name", "enabled", "priority", "match_json", "action_json", "apply_existing", "apply_incoming", "last_preview_count", "last_preview_at", "last_run_at", "created_at", "updated_at") VALUES ('rule-old', 'Legacy filing', 1, 20, '{"from":"billing@example.net","subject":"Legacy","domain":"example.net","keyword":"invoice","has_attachments":"yes","min_size_kb":1,"max_size_kb":2,"direction":"in"}', '{"star":true,"archive":false,"trash":false,"label":"Important"}', 1, 1, 1, 1500, 1600, 1450, 1600);
+-- table: app_settings
+DELETE FROM "app_settings";
+INSERT INTO "app_settings" ("key", "value", "updated_at") VALUES ('user_pref:owner@example.com', '{"default_account":"first@example.com","page_size":100,"dense_list":true}', 1700);
 PRAGMA foreign_keys=ON;
 `;
+}
+
+function configurationCounts(database) {
+  const count = (table) => database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count;
+  return {
+    labels: count('mailbox_labels'),
+    messageLabels: count('message_labels'),
+    rules: count('mail_rules'),
+    ruleLabels: count('mail_rule_labels'),
+    preferences: count('user_preferences'),
+  };
 }
 
 const MESSAGE_COLUMNS = [

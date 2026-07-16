@@ -23,14 +23,19 @@ npm run migrate:legacy -- inventory \
 ```
 
 The inventory records source hashes, global counts, account-level message and
-flag counts, attachment counts, raw bytes, R2 reference counts, and relational
-integrity failures. Exit status `2` means the inventory was written but at
-least one integrity count is nonzero.
+flag counts, attachment counts, raw bytes, R2 reference counts, labels,
+message-label assignments, rules, user preferences, and relational-integrity
+failures. Exit status `2` means the inventory was written but at least one
+integrity count is nonzero.
 
 Review the generated mapping. Every account containing messages must either
 map to one unique target mailbox or have an explicit exclusion with a reason.
 The generated target UUIDs are deterministic, but the corresponding mailboxes
 must be included in the reviewed provisioning manifest before mail is applied.
+Every mapped mailbox must have an owner. A user whose archived
+`user_pref:<email>` setting is to be restored must be provisioned with that
+same normalized user email and must be a member of its archived default
+mailbox.
 
 ```bash
 npm run migrate:legacy -- validate-mapping \
@@ -82,8 +87,19 @@ npm run migrate:legacy -- verify-snapshot \
 Preparation reads only the isolated database and verified raw snapshot. It
 preserves old flags, direction, received/created timestamps, Message-ID and
 thread headers, while rebuilding body and attachment objects from raw MIME.
-The old record ID, account, Bcc, compose/send metadata, deletion time, and old
-R2 keys are retained in dedicated migration provenance tables.
+It also converts labels, message-label assignments, active rule definitions,
+and per-user page density/default-mailbox preferences. Archived labels and
+rules were global, so each is deterministically copied into every mapped
+mailbox and assigned to that mailbox's owner. Page sizes above the rebuilt
+50-message request bound are reduced to 50. The old record ID, account, Bcc,
+compose/send metadata, deletion time, old R2 keys, and every configuration
+source-to-target mapping are retained in dedicated migration provenance
+tables.
+
+Historical preview/apply/undo rule runs are not reactivated: their frozen
+before/after format belongs to the archived global rule engine. Keep the
+isolated SQL database as immutable history; the rebuilt engine starts new
+mailbox-scoped run history from the migrated definitions.
 
 ```bash
 npm run migrate:legacy -- prepare \
@@ -130,6 +146,8 @@ runs parallel immutable R2 copy, then performs a full `rclone check --download`
 before changing D1. It saves the complete comparison report and its SHA-256,
 applies D1 chunks resumably, and finally compares the target migration batch,
 message/object counts, direction, flags, and attachment counts with the stage.
+It also requires every migrated label, assignment, rule, and preference
+provenance row to resolve to its current target row.
 An existing remote object with different content or any missing/different
 download blocks D1 application.
 
@@ -150,9 +168,9 @@ npm run migrate:legacy -- bulk-audit \
 
 This performs a fresh download-based `rclone check` of every staged object and
 rechecks the migration batch, source hashes, per-account direction and flag
-counts, attachment counts, and object-reference count in D1. The JSON records
-the R2 report digest but no mail content or credential. Any mismatch exits
-without changing R2 or D1.
+counts, attachment counts, object-reference count, and configuration
+provenance in D1. The JSON records the R2 report digest but no mail content or
+credential. Any mismatch exits without changing R2 or D1.
 
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext

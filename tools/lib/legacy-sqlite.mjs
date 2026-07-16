@@ -27,6 +27,14 @@ const REQUIRED_COLUMNS = {
     'id', 'email', 'local_part', 'domain', 'display_name', 'password_hash', 'quota_mb',
     'is_active', 'created_at', 'updated_at', 'allow_receive', 'allow_send', 'address_kind', 'notes',
   ],
+  labels: ['id', 'name', 'color', 'description', 'created_at', 'updated_at'],
+  message_labels: ['message_id', 'label_id', 'source_rule_id', 'created_at'],
+  mail_rules: [
+    'id', 'name', 'enabled', 'priority', 'match_json', 'action_json',
+    'apply_existing', 'apply_incoming', 'last_preview_count', 'last_preview_at',
+    'last_run_at', 'created_at', 'updated_at',
+  ],
+  app_settings: ['key', 'value', 'updated_at'],
 };
 
 export async function importLegacySafeSql(options) {

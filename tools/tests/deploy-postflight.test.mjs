@@ -14,7 +14,8 @@ const TABLES = [
   'inbound_handoffs', 'mail_rule_labels', 'mail_rule_run_matches', 'mail_rule_runs',
   'mail_rules', 'mailbox_addresses', 'mailbox_labels', 'mailbox_memberships',
   'mailboxes', 'maintenance_cursors', 'message_labels', 'message_migration_sources',
-  'message_search_documents', 'messages', 'migration_batches', 'outbound_compositions',
+  'message_search_documents', 'messages', 'migration_batches',
+  'migration_configuration_sources', 'outbound_compositions',
   'outbound_deliveries', 'outbound_recipients', 'queue_dead_letters',
   'retention_policies', 'retention_run_items', 'retention_runs', 'storage_issues',
   'system_administrators', 'user_preferences', 'users',
@@ -60,7 +61,7 @@ describe('production postflight', () => {
     );
     assert.equal(report.cutoverReady, true);
     assert.equal(report.activeVersions.length, 3);
-    assert.equal(report.requiredTableCount, 30);
+    assert.equal(report.requiredTableCount, 31);
     assert.deepEqual(report.blockers, []);
     assert.ok(calls.some((args) => args.includes('execute')));
     assert.ok(calls.some((args) => args[0] === 'fetch'));
