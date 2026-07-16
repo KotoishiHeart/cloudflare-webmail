@@ -1,5 +1,10 @@
-import type { InboundQueueMessage } from '@cf-webmail/contracts';
 import {
+  buildInboundQueuePayloadKey,
+  type InboundQueueMessage,
+} from '@cf-webmail/contracts';
+import {
+  beginInboundHandoffProcessing,
+  completeInboundHandoff,
   findInboundMessageByContent,
   findInboundMessageById,
   activeMailboxOwnsPrimaryAddress,
@@ -27,12 +32,17 @@ export async function processInboundQueueMessage(
   queueMessage: InboundQueueMessage,
   dependencies: InboundProcessorDependencies,
 ): Promise<InboundProcessResult> {
+  await beginInboundHandoffProcessing(
+    dependencies.db,
+    queueMessage.messageId,
+    dependencies.now(),
+  );
   const existingId = await findInboundMessageById(dependencies.db, queueMessage.messageId);
   if (existingId !== null) {
     if (existingId.mailboxId !== queueMessage.mailboxId) {
       throw new PermanentInboundError('message-id-collision', 'message ID belongs to another mailbox');
     }
-    return duplicateResult(existingId.id, await deleteStaging(dependencies, queueMessage));
+    return completeDuplicate(dependencies, queueMessage, existingId.id);
   }
 
   if (!await activeMailboxOwnsPrimaryAddress(
@@ -59,7 +69,7 @@ export async function processInboundQueueMessage(
     parsed.rawSha256,
   );
   if (existingContent !== null) {
-    return duplicateResult(existingContent.id, await deleteStaging(dependencies, queueMessage));
+    return completeDuplicate(dependencies, queueMessage, existingContent.id);
   }
 
   const now = dependencies.now();
@@ -83,6 +93,13 @@ export async function processInboundQueueMessage(
     now,
   ));
   const stagingDeleted = await deleteStaging(dependencies, queueMessage);
+  await completeInboundHandoff(
+    dependencies.db,
+    queueMessage.messageId,
+    result.message.id,
+    stagingDeleted,
+    dependencies.now(),
+  );
   console.log(JSON.stringify({
     event: result.created ? 'inbound.persisted' : 'inbound.duplicate',
     messageId: result.message.id,
@@ -96,12 +113,31 @@ export async function processInboundQueueMessage(
   };
 }
 
+async function completeDuplicate(
+  dependencies: InboundProcessorDependencies,
+  queueMessage: InboundQueueMessage,
+  storedMessageId: string,
+): Promise<InboundProcessResult> {
+  const stagingDeleted = await deleteStaging(dependencies, queueMessage);
+  await completeInboundHandoff(
+    dependencies.db,
+    queueMessage.messageId,
+    storedMessageId,
+    stagingDeleted,
+    dependencies.now(),
+  );
+  return duplicateResult(storedMessageId, stagingDeleted);
+}
+
 async function deleteStaging(
   dependencies: InboundProcessorDependencies,
   message: InboundQueueMessage,
 ): Promise<boolean> {
   try {
-    await dependencies.rawEmails.delete(message.rawKey);
+    await dependencies.rawEmails.delete([
+      message.rawKey,
+      buildInboundQueuePayloadKey(message.rawKey),
+    ]);
     return true;
   } catch (error) {
     console.warn(JSON.stringify({

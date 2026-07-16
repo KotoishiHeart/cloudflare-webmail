@@ -75,6 +75,17 @@ export function renderRetryOutboundSql(messageId, now = Date.now()) {
   ].join('\n\n') + '\n';
 }
 
+export function renderRetryDeadLetterSql(deadLetterId, now = Date.now()) {
+  const id = deadLetterId.toLowerCase();
+  if (!/^[0-9a-f]{64}$/u.test(id)) throw new Error('dead-letter ID must be a SHA-256 digest');
+  if (!Number.isSafeInteger(now) || now <= 0) throw new Error('now must be a positive integer');
+  return sql(`
+    UPDATE queue_dead_letters
+    SET status = 'retry_requested', retry_requested_at = ${now}, last_error = ''
+    WHERE id = ${q(id)} AND status = 'pending' AND payload_valid = 1
+  `) + '\n';
+}
+
 function addressSql(address, mailboxId, kind, now) {
   return sql(`
     INSERT INTO mailbox_addresses (

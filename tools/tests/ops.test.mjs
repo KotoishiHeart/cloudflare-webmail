@@ -2,7 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateProvisionManifest } from '../lib/ops-manifest.mjs';
 import { runOpsCli } from '../lib/ops-cli.mjs';
-import { renderProvisionSql, renderRetryOutboundSql } from '../lib/ops-sql.mjs';
+import {
+  renderProvisionSql,
+  renderRetryDeadLetterSql,
+  renderRetryOutboundSql,
+} from '../lib/ops-sql.mjs';
 
 const USER_ID = '019c315c-1f20-7000-8000-000000000601';
 const MAILBOX_ID = '019c315c-1f20-7000-8000-000000000602';
@@ -83,6 +87,20 @@ describe('operations mutations', () => {
     assert.match(sql, /status = 'failed'/u);
     assert.match(sql, new RegExp(MAILBOX_ID, 'u'));
     assert.throws(() => renderRetryOutboundSql('not-an-id'), /UUID/u);
+  });
+
+  it('requests a validated dead-letter retry without sending from the CLI', async () => {
+    const id = 'a'.repeat(64);
+    const sql = renderRetryDeadLetterSql(id, 1234);
+    assert.match(sql, /status = 'retry_requested'/u);
+    assert.match(sql, /payload_valid = 1/u);
+    assert.throws(() => renderRetryDeadLetterSql('not-a-digest'), /SHA-256/u);
+
+    const calls = [];
+    await runOpsCli([
+      'retry-dead-letter', '--dead-letter-id', id, '--remote', '--yes',
+    ], fakeIo(calls));
+    assert.match(calls[0].args[calls[0].args.indexOf('--command') + 1], /retry_requested/u);
   });
 });
 

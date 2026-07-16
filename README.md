@@ -16,8 +16,9 @@ The repository starts with three deliberately small Worker entrypoints:
 - `migrations`: the forward-only D1 schema history shared by all Workers.
 
 The ingest Worker resolves active D1 mailbox addresses, streams the original
-message to R2, and only then publishes a versioned Queue message. Unknown
-recipients, invalid sizes, and failed handoffs are rejected. The jobs Worker
+message and its versioned Queue contract to R2, records a D1 handoff ledger,
+and only then publishes the Queue message. Unknown recipients, invalid sizes,
+and failed durable handoffs are rejected. The jobs Worker
 validates staged objects, parses MIME, stores canonical message objects in R2,
 and records searchable message metadata in D1. Queue redelivery is idempotent by
 message ID and raw-message SHA-256.
@@ -25,7 +26,7 @@ message ID and raw-message SHA-256.
 Outbound compose requests are first persisted as D1/R2 outbox records and then
 sent by the jobs Worker through the Cloudflare Email Service binding. The
 outbound Queue is processed one message at a time, with D1 leases, delayed
-retry, a dead-letter queue, and a scheduled recovery scan. The current compose
+retry, a persisted dead-letter workflow, and scheduled recovery scans. The current compose
 surface sends text plus generated safe HTML and intentionally does not accept
 attachments yet.
 
@@ -69,8 +70,10 @@ mailbox's primary address. Keep DMARC policy and monitoring under operational
 control.
 
 Apply all D1 migrations and deploy the ingest and jobs Workers before enabling
-a production Email Routing rule. The jobs consumer retries each message up to
-five times and then sends it to the dead-letter queue for inspection.
+a production Email Routing rule. The primary consumers retry each message up
+to five times and then send it to a DLQ consumer. That consumer persists the
+payload in D1 before acknowledging it; an operator can then request an
+asynchronous, contract-validated retry.
 
 Before deploying the web Worker, create a Cloudflare Access self-hosted
 application for its public hostname with an explicit Allow policy. Put the
@@ -85,10 +88,11 @@ the D1 `access_identities` table. Email claims are display metadata and are not
 used as the application authorization key. The interactive UI does not accept
 Access service tokens or provide a local authentication bypass.
 
-The ingest Worker deliberately retains a staged R2 object when Queue production
-throws. Queue outcomes can be ambiguous, and deleting the object could make an
-already-enqueued job unrecoverable. A later operational stage will reconcile
-and expire orphaned staging objects.
+The ingest Worker deliberately retains staged R2 objects when Queue production
+throws. Queue outcomes can be ambiguous, and deleting them could make an
+already-enqueued job unrecoverable. The D1 handoff ledger re-enqueues stale
+`staged` and `queue_failed` records idempotently. A later operational stage will
+also reconcile R2 objects created before a handoff row could be written.
 
 `worker-configuration.d.ts` files are generated from each Worker configuration
 with Wrangler and are checked in CI through `npm run types:check`.
@@ -96,8 +100,8 @@ with Wrangler and are checked in CI through `npm run types:check`.
 Operational D1 changes use the review-first CLI described in
 [`docs/operations.md`](docs/operations.md). It generates stable provisioning
 SQL from a versioned manifest, requires an explicit local/remote target and
-confirmation for mutations, and provides aggregate status and single-message
-outbound retry commands.
+confirmation for mutations, and provides aggregate status, single-message
+outbound retry, and persisted DLQ retry commands.
 
 Maildir and archived raw-object migrations use the resumable stage workflow in
 [`docs/migration.md`](docs/migration.md). Preparation and hash verification are

@@ -1,6 +1,9 @@
 import { env } from 'cloudflare:test';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { MAX_INBOUND_MESSAGE_BYTES } from '@cf-webmail/contracts';
+import {
+  MAX_INBOUND_MESSAGE_BYTES,
+  buildInboundQueuePayloadKey,
+} from '@cf-webmail/contracts';
 import {
   addMailboxAlias,
   provisionMailboxWithOwner,
@@ -92,6 +95,19 @@ describe('Email Routing durable handoff', () => {
       receivedAt: String(NOW),
       rawSize: String(result.queueMessage.staging.rawSize),
     });
+    const payloadObject = await env.RAW_EMAILS.get(buildInboundQueuePayloadKey(result.rawKey));
+    expect(payloadObject?.httpMetadata?.contentType).toBe('application/json');
+    await expect(payloadObject?.json()).resolves.toEqual(result.queueMessage);
+    const handoff = await env.DB.prepare(`
+      SELECT status, queue_payload, staging_deleted
+      FROM inbound_handoffs WHERE message_id = ?
+    `).bind(result.queueMessage.messageId).first<{
+      status: string;
+      queue_payload: string;
+      staging_deleted: number;
+    }>();
+    expect(handoff).toMatchObject({ status: 'enqueued', staging_deleted: 0 });
+    expect(JSON.parse(handoff?.queue_payload ?? '{}')).toEqual(result.queueMessage);
   });
 
   it('rejects an unknown recipient before reading or staging the body', async () => {
@@ -168,6 +184,16 @@ describe('Email Routing durable handoff', () => {
     const stored = await env.RAW_EMAILS.get(result.rawKey);
     expect(stored).not.toBeNull();
     await expect(stored?.text()).resolves.toBe(rawText);
+    await expect(env.RAW_EMAILS.get(
+      buildInboundQueuePayloadKey(result.rawKey),
+    )).resolves.not.toBeNull();
+    const handoff = await env.DB.prepare(`
+      SELECT status, last_error_code FROM inbound_handoffs WHERE message_id = ?
+    `).bind('019c315c-1f20-7000-8000-000000000106').first<{
+      status: string;
+      last_error_code: string;
+    }>();
+    expect(handoff).toEqual({ status: 'queue_failed', last_error_code: 'queue_send_failed' });
   });
 
   it('does not enqueue when R2 staging fails', async () => {

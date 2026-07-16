@@ -65,6 +65,10 @@ describe('review-first deployment stage', () => {
     assert.equal(web.vars.ACCESS_AUD, 'b'.repeat(64));
     assert.equal(jobs.queues.consumers[0].max_concurrency, 1);
     assert.equal(jobs.queues.consumers[1].dead_letter_queue, 'cf-webmail-outbound-dlq');
+    assert.equal(jobs.queues.consumers[2].queue, 'cf-webmail-inbound-dlq');
+    assert.equal(jobs.queues.consumers[2].dead_letter_queue, undefined);
+    assert.equal(jobs.queues.consumers[3].queue, 'cf-webmail-outbound-dlq');
+    assert.equal(jobs.queues.producers[0].queue, 'cf-webmail-inbound');
   });
 
   it('runs read-only checks before migrations and deploys in dependency order', async () => {

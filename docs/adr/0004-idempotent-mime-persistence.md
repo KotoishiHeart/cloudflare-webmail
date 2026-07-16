@@ -16,7 +16,8 @@ keys.
 The jobs Worker consumes one message per Queue batch and performs these steps:
 
 1. Validate the version 2 Queue contract and its immutable mailbox ID.
-2. Match the staged R2 size and internal metadata to the contract.
+2. Match the staged R2 size and internal metadata to the contract. The same
+   staging prefix retains a JSON copy of that contract for orphan recovery.
 3. Parse MIME with bounded header and nesting limits while computing SHA-256
    from a second branch of the raw stream.
 4. Detect redelivery by message ID and duplicate content by mailbox plus raw
@@ -24,12 +25,13 @@ The jobs Worker consumes one message per Queue batch and performs these steps:
 5. Write deterministic canonical R2 objects for raw MIME, text, HTML, and
    ordinal attachment keys.
 6. Insert the message and attachment records in one D1 batch.
-7. Delete the staging object only after D1 confirms the record.
+7. Mark the D1 handoff stored and delete the staged raw/contract pair only
+   after D1 confirms the message record.
 
 Malformed MIME and attachment-limit violations retain the canonical raw object
 as a quarantined message. Filenames are metadata only; attachment object keys
 use zero-padded ordinals. Contract, staging, and mailbox mismatches are retried
-until the configured dead-letter queue retains them for inspection.
+until the configured dead-letter queue persists them in D1 for inspection.
 
 ## Consequences
 

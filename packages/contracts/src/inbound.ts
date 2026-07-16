@@ -1,4 +1,6 @@
 export const INBOUND_QUEUE_SCHEMA_VERSION = 2 as const;
+export const INBOUND_QUEUE_NAME = 'cf-webmail-inbound' as const;
+export const INBOUND_DEAD_LETTER_QUEUE_NAME = 'cf-webmail-inbound-dlq' as const;
 export const MAX_INBOUND_MESSAGE_BYTES = 25 * 1024 * 1024;
 
 export type InboundRoutingAction = 'store' | 'quarantine';
@@ -31,6 +33,11 @@ export type InboundQueueMessageV2 = {
 
 export type InboundQueueMessage = InboundQueueMessageV2;
 
+export function buildInboundQueuePayloadKey(rawKey: string): string {
+  if (!rawKey.endsWith('.eml')) throw new Error('staged raw key must end with .eml');
+  return `${rawKey.slice(0, -4)}.queue.json`;
+}
+
 export type InboundQueueParseResult =
   | { ok: true; value: InboundQueueMessage }
   | { ok: false; issues: string[] };
@@ -42,8 +49,8 @@ export function parseInboundQueueMessage(input: unknown): InboundQueueParseResul
   if (input.schemaVersion !== INBOUND_QUEUE_SCHEMA_VERSION) {
     issues.push(`schemaVersion must be ${INBOUND_QUEUE_SCHEMA_VERSION}`);
   }
-  checkString(input.messageId, 'messageId', issues, 128);
-  checkString(input.mailboxId, 'mailboxId', issues, 128);
+  checkUuid(input.messageId, 'messageId', issues);
+  checkUuid(input.mailboxId, 'mailboxId', issues);
   checkString(input.rawKey, 'rawKey', issues, 1024);
   if (typeof input.rawKey === 'string' && !input.rawKey.startsWith('staging/raw/')) {
     issues.push('rawKey must use the staging/raw/ prefix');
@@ -129,4 +136,13 @@ function checkString(
 function checkOptionalString(value: unknown, path: string, issues: string[], maxLength: number) {
   if (value === undefined) return;
   checkString(value, path, issues, maxLength, true);
+}
+
+function checkUuid(value: unknown, path: string, issues: string[]): void {
+  if (
+    typeof value !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
+  ) {
+    issues.push(`${path} must be a UUID`);
+  }
 }

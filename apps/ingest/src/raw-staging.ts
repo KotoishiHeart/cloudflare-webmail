@@ -1,4 +1,7 @@
-import type { InboundQueueMessage } from '@cf-webmail/contracts';
+import {
+  buildInboundQueuePayloadKey,
+  type InboundQueueMessage,
+} from '@cf-webmail/contracts';
 
 const RAW_KEY_PREFIX = 'staging/raw';
 
@@ -21,6 +24,7 @@ export async function stageRawEmail(
   queueMessage: InboundQueueMessage,
   mailboxId: string,
 ): Promise<R2Object> {
+  const payload = JSON.stringify(queueMessage);
   const fixedLength = new FixedLengthStream(queueMessage.staging.rawSize);
   const pipe = raw.pipeTo(fixedLength.writable);
   const put = bucket.put(queueMessage.rawKey, fixedLength.readable, {
@@ -33,9 +37,21 @@ export async function stageRawEmail(
       rawSize: String(queueMessage.staging.rawSize),
     },
   });
-  const [object] = await Promise.all([put, pipe]);
+  const payloadPut = bucket.put(buildInboundQueuePayloadKey(queueMessage.rawKey), payload, {
+    httpMetadata: { contentType: 'application/json' },
+    customMetadata: {
+      schemaVersion: String(queueMessage.schemaVersion),
+      messageId: queueMessage.messageId,
+      mailboxId,
+      kind: 'queue-contract',
+    },
+  });
+  const [object, , payloadObject] = await Promise.all([put, pipe, payloadPut]);
   if (object === null || object.size !== queueMessage.staging.rawSize) {
     throw new Error('R2 did not persist the expected raw message length');
+  }
+  if (payloadObject === null || payloadObject.size !== new TextEncoder().encode(payload).byteLength) {
+    throw new Error('R2 did not persist the expected Queue contract length');
   }
   return object;
 }

@@ -1,4 +1,6 @@
 export * from './domain.js';
+export * from './dead-letter.js';
+export * from './inbound-handoff.js';
 export * from './mailboxes.js';
 export * from './message-domain.js';
 export * from './message-persistence.js';

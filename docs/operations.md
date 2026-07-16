@@ -66,7 +66,7 @@ user or an existing address to another mailbox. Such ownership changes require
 an explicit, separately reviewed migration. A conflicting unique email or ID
 therefore stops the plan instead of silently merging accounts.
 
-## Status and failed outbound delivery
+## Status and delivery recovery
 
 The status command returns aggregate counts and no message content or email
 addresses:
@@ -91,3 +91,22 @@ npm run ops -- retry-outbound \
 Do not retry a message whose provider outcome was ambiguous without first
 checking Email Service logs, because a second delivery can be visible to the
 recipient.
+
+The status output also includes unresolved inbound handoffs, staging cleanup
+work, and DLQ states. Inspect the selected `queue_dead_letters` row directly in
+D1 before requesting a retry. Invalid contracts are retained with
+`payload_valid = 0` and cannot be retried by this command.
+
+```bash
+npm run ops -- retry-dead-letter \
+  --dead-letter-id aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json
+```
+
+The CLI changes the row to `retry_requested`; it never publishes a Queue
+message itself. The jobs cron validates the saved contract, publishes it to the
+original inbound or outbound Queue, and changes the row to `requeued`. A
+successful primary consumer changes it to `resolved`. If Queue publication is
+ambiguous, the row stays requested and a later run may publish a duplicate;
+both primary processors are idempotent by message ID.

@@ -2,7 +2,11 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { validateProvisionManifest } from './ops-manifest.mjs';
-import { renderProvisionSql, renderRetryOutboundSql } from './ops-sql.mjs';
+import {
+  renderProvisionSql,
+  renderRetryDeadLetterSql,
+  renderRetryOutboundSql,
+} from './ops-sql.mjs';
 
 const STATUS_SQL = `
   SELECT 'users' AS metric, COUNT(*) AS value FROM users
@@ -13,6 +17,15 @@ const STATUS_SQL = `
   UNION ALL SELECT 'outbound_sending', COUNT(*) FROM outbound_deliveries WHERE status = 'sending'
   UNION ALL SELECT 'outbound_sent', COUNT(*) FROM outbound_deliveries WHERE status = 'sent'
   UNION ALL SELECT 'outbound_failed', COUNT(*) FROM outbound_deliveries WHERE status = 'failed'
+  UNION ALL SELECT 'inbound_handoff_staged', COUNT(*) FROM inbound_handoffs WHERE status = 'staged'
+  UNION ALL SELECT 'inbound_handoff_queue_failed', COUNT(*) FROM inbound_handoffs WHERE status = 'queue_failed'
+  UNION ALL SELECT 'inbound_handoff_dead_letter', COUNT(*) FROM inbound_handoffs WHERE status = 'dead_letter'
+  UNION ALL SELECT 'inbound_staging_cleanup_pending', COUNT(*) FROM inbound_handoffs
+    WHERE status = 'stored' AND staging_deleted = 0
+  UNION ALL SELECT 'dead_letter_pending', COUNT(*) FROM queue_dead_letters WHERE status = 'pending'
+  UNION ALL SELECT 'dead_letter_retry_requested', COUNT(*) FROM queue_dead_letters
+    WHERE status = 'retry_requested'
+  UNION ALL SELECT 'dead_letter_requeued', COUNT(*) FROM queue_dead_letters WHERE status = 'requeued'
 `;
 
 export async function runOpsCli(argv, io = defaultIo()) {
@@ -60,6 +73,15 @@ export async function runOpsCli(argv, io = defaultIo()) {
     requireYes(options, command);
     await requireTarget(options);
     const query = renderRetryOutboundSql(required(options, 'message-id'));
+    return runWrangler([
+      'd1', 'execute', options.database ?? 'cf-webmail', targetFlag(options),
+      '--command', query, '--config', options.config ?? 'apps/web/wrangler.jsonc',
+    ], io);
+  }
+  if (command === 'retry-dead-letter') {
+    requireYes(options, command);
+    await requireTarget(options);
+    const query = renderRetryDeadLetterSql(required(options, 'dead-letter-id'));
     return runWrangler([
       'd1', 'execute', options.database ?? 'cf-webmail', targetFlag(options),
       '--command', query, '--config', options.config ?? 'apps/web/wrangler.jsonc',
@@ -140,5 +162,6 @@ function usage() {
     `  migrate (--local|--remote) --yes\n` +
     `  status (--local|--remote)\n` +
     `  retry-outbound --message-id UUID (--local|--remote) --yes\n\n` +
+    `  retry-dead-letter --dead-letter-id SHA256 (--local|--remote) --yes\n\n` +
     `Optional: --database NAME --config FILE\n`;
 }

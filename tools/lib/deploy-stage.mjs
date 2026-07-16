@@ -129,13 +129,19 @@ function injectQueues(app, config, deployment) {
     else throw new Error(`${app} has an unexpected Queue producer`);
   }
   const consumers = config.queues?.consumers ?? [];
-  if (app === 'jobs' && consumers.length !== 2) throw new Error('jobs must have two Queue consumers');
+  if (app === 'jobs' && consumers.length !== 4) throw new Error('jobs must have four Queue consumers');
   for (const [index, consumer] of consumers.entries()) {
-    const inbound = index === 0;
-    consumer.queue = inbound ? deployment.resources.queues.inbound : deployment.resources.queues.outbound;
-    consumer.dead_letter_queue = inbound
-      ? deployment.resources.queues.inboundDlq
-      : deployment.resources.queues.outboundDlq;
+    const definitions = [
+      [deployment.resources.queues.inbound, deployment.resources.queues.inboundDlq],
+      [deployment.resources.queues.outbound, deployment.resources.queues.outboundDlq],
+      [deployment.resources.queues.inboundDlq],
+      [deployment.resources.queues.outboundDlq],
+    ];
+    const definition = definitions[index];
+    if (definition === undefined) throw new Error(`${app} has an unexpected Queue consumer`);
+    consumer.queue = definition[0];
+    if (definition[1] === undefined) delete consumer.dead_letter_queue;
+    else consumer.dead_letter_queue = definition[1];
     consumer.max_concurrency = deployment.limits.queueMaxConcurrency;
   }
 }
@@ -151,11 +157,18 @@ function assertGeneratedConfig(app, config, deployment) {
   if (database?.database_id !== deployment.resources.d1.id) throw new Error(`${app} D1 binding mismatch`);
   const bucket = config.r2_buckets?.find((item) => item.binding === 'RAW_EMAILS');
   if (bucket?.bucket_name !== deployment.resources.r2.bucket) throw new Error(`${app} R2 binding mismatch`);
-  const expectedProducer = app === 'ingest'
-    ? ['INBOUND_QUEUE', deployment.resources.queues.inbound]
-    : ['OUTBOUND_QUEUE', deployment.resources.queues.outbound];
-  const producer = config.queues?.producers?.find((item) => item.binding === expectedProducer[0]);
-  if (producer?.queue !== expectedProducer[1]) throw new Error(`${app} Queue producer mismatch`);
+  const expectedProducers = app === 'ingest'
+    ? [['INBOUND_QUEUE', deployment.resources.queues.inbound]]
+    : app === 'jobs'
+      ? [
+        ['INBOUND_QUEUE', deployment.resources.queues.inbound],
+        ['OUTBOUND_QUEUE', deployment.resources.queues.outbound],
+      ]
+      : [['OUTBOUND_QUEUE', deployment.resources.queues.outbound]];
+  for (const expectedProducer of expectedProducers) {
+    const producer = config.queues?.producers?.find((item) => item.binding === expectedProducer[0]);
+    if (producer?.queue !== expectedProducer[1]) throw new Error(`${app} Queue producer mismatch`);
+  }
   if (app === 'web') {
     if (config.routes?.[0]?.pattern !== deployment.hostname || config.routes[0].custom_domain !== true) {
       throw new Error('web custom domain mismatch');
@@ -168,6 +181,8 @@ function assertGeneratedConfig(app, config, deployment) {
     const expectedConsumers = [
       [deployment.resources.queues.inbound, deployment.resources.queues.inboundDlq],
       [deployment.resources.queues.outbound, deployment.resources.queues.outboundDlq],
+      [deployment.resources.queues.inboundDlq, undefined],
+      [deployment.resources.queues.outboundDlq, undefined],
     ];
     if (config.queues?.consumers?.length !== expectedConsumers.length) {
       throw new Error('jobs Queue consumer count mismatch');

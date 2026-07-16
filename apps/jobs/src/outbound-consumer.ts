@@ -1,4 +1,5 @@
 import { parseOutboundQueueMessage } from '@cf-webmail/contracts';
+import { resolveDeadLettersForMessage } from '@cf-webmail/database';
 import {
   PermanentOutboundError,
   RetryableOutboundError,
@@ -39,6 +40,12 @@ export async function handleOutboundBatch(
     }
     try {
       await processOutboundQueueMessage(parsed.value, dependencies);
+      await resolveDeadLettersForMessage(
+        dependencies.db,
+        'outbound',
+        parsed.value.messageId,
+        dependencies.now(),
+      );
       message.ack();
       result.acknowledged += 1;
     } catch (error) {
@@ -55,8 +62,24 @@ export async function handleOutboundBatch(
         retryDelaySeconds: delaySeconds,
       }));
       if (permanent) {
-        message.ack();
-        result.acknowledged += 1;
+        try {
+          await resolveDeadLettersForMessage(
+            dependencies.db,
+            'outbound',
+            parsed.value.messageId,
+            dependencies.now(),
+          );
+          message.ack();
+          result.acknowledged += 1;
+        } catch (resolutionError) {
+          console.warn(JSON.stringify({
+            event: 'outbound.dead_letter_resolution_failed',
+            messageId: parsed.value.messageId,
+            errorType: outboundErrorType(resolutionError),
+          }));
+          message.retry({ delaySeconds: retryDelay(message.attempts) });
+          result.retried += 1;
+        }
       } else {
         message.retry({ delaySeconds });
         result.retried += 1;

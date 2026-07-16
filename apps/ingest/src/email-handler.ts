@@ -4,7 +4,13 @@ import {
   parseInboundQueueMessage,
   type InboundQueueMessage,
 } from '@cf-webmail/contracts';
-import { resolveActiveMailboxAddress, type MailboxRoute } from '@cf-webmail/database';
+import {
+  markInboundHandoffEnqueued,
+  markInboundHandoffQueueFailed,
+  recordInboundHandoff,
+  resolveActiveMailboxAddress,
+  type MailboxRoute,
+} from '@cf-webmail/database';
 import { buildRawEmailKey, stageRawEmail } from './raw-staging.js';
 
 export const UNKNOWN_RECIPIENT_REASON = 'Recipient mailbox is not configured';
@@ -32,7 +38,7 @@ export type InboundResult =
   | {
     accepted: false;
     code: 'invalid-size' | 'unknown-recipient' | 'routing-failed'
-      | 'invalid-contract' | 'staging-failed' | 'queue-failed';
+      | 'invalid-contract' | 'staging-failed' | 'handoff-failed' | 'queue-failed';
     reason: string;
     rawKey?: string;
   };
@@ -77,11 +83,28 @@ export async function handleInboundEmail(
   }
 
   try {
+    await recordInboundHandoff(dependencies.db, parsed.value, receipt.receivedAt);
+  } catch (error) {
+    // The staged object and its Queue payload metadata remain available to the orphan scanner.
+    logFailure('inbound.handoff_failed', receipt.messageId, error);
+    return reject(message, 'handoff-failed', PROCESSING_FAILURE_REASON, rawKey);
+  }
+
+  try {
     await dependencies.enqueue(parsed.value);
   } catch (error) {
     // Keep the staged object: Queue delivery can be ambiguous after an exception.
+    await recordQueueFailure(dependencies.db, receipt, error);
     logFailure('inbound.queue_failed', receipt.messageId, error);
     return reject(message, 'queue-failed', PROCESSING_FAILURE_REASON, rawKey);
+  }
+
+
+  try {
+    await markInboundHandoffEnqueued(dependencies.db, receipt.messageId, receipt.receivedAt);
+  } catch (error) {
+    // Queue send already succeeded. The staged ledger row can be re-enqueued idempotently later.
+    logFailure('inbound.handoff_enqueue_mark_failed', receipt.messageId, error);
   }
 
   console.log(JSON.stringify({
@@ -91,6 +114,18 @@ export async function handleInboundEmail(
     rawSize: message.rawSize,
   }));
   return { accepted: true, rawKey, queueMessage: parsed.value };
+}
+
+async function recordQueueFailure(
+  db: D1Database,
+  receipt: InboundReceipt,
+  error: unknown,
+): Promise<void> {
+  try {
+    await markInboundHandoffQueueFailed(db, receipt.messageId, error, receipt.receivedAt);
+  } catch (handoffError) {
+    logFailure('inbound.handoff_queue_failure_mark_failed', receipt.messageId, handoffError);
+  }
 }
 
 function createQueueMessage(

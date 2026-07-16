@@ -1,4 +1,8 @@
 import { parseInboundQueueMessage } from '@cf-webmail/contracts';
+import {
+  failInboundHandoffProcessing,
+  resolveDeadLettersForMessage,
+} from '@cf-webmail/database';
 import { PermanentInboundError, errorType } from './inbound-errors.js';
 import {
   processInboundQueueMessage,
@@ -36,11 +40,23 @@ export async function handleInboundBatch(
 
     try {
       await processInboundQueueMessage(parsed.value, dependencies);
+      await resolveDeadLettersForMessage(
+        dependencies.db,
+        'inbound',
+        parsed.value.messageId,
+        dependencies.now(),
+      );
       message.ack();
       result.acknowledged += 1;
     } catch (error) {
       const permanent = error instanceof PermanentInboundError;
       const delaySeconds = permanent ? 0 : retryDelay(message.attempts);
+      await recordHandoffFailure(
+        dependencies,
+        parsed.value.messageId,
+        permanent ? error.code : 'transient',
+        error,
+      );
       console.error(JSON.stringify({
         event: 'inbound.processing_failed',
         messageId: parsed.value.messageId,
@@ -54,6 +70,29 @@ export async function handleInboundBatch(
     }
   }
   return result;
+}
+
+async function recordHandoffFailure(
+  dependencies: InboundProcessorDependencies,
+  messageId: string,
+  code: string,
+  error: unknown,
+): Promise<void> {
+  try {
+    await failInboundHandoffProcessing(
+      dependencies.db,
+      messageId,
+      code,
+      error,
+      dependencies.now(),
+    );
+  } catch (handoffError) {
+    console.warn(JSON.stringify({
+      event: 'inbound.handoff_failure_mark_failed',
+      messageId,
+      errorType: errorType(handoffError),
+    }));
+  }
 }
 
 function retryDelay(attempts: number): number {

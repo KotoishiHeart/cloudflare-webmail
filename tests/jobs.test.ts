@@ -5,7 +5,10 @@ import {
   getQueueResult,
 } from 'cloudflare:test';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import type { InboundQueueMessage } from '@cf-webmail/contracts';
+import {
+  buildInboundQueuePayloadKey,
+  type InboundQueueMessage,
+} from '@cf-webmail/contracts';
 import {
   provisionMailboxWithOwner,
   provisionUserWithIdentity,
@@ -62,6 +65,9 @@ describe('Queue MIME persistence', () => {
     expect(String(row?.raw_sha256)).toMatch(/^[0-9a-f]{64}$/u);
 
     await expect(env.RAW_EMAILS.get(queued.rawKey)).resolves.toBeNull();
+    await expect(env.RAW_EMAILS.get(
+      buildInboundQueuePayloadKey(queued.rawKey),
+    )).resolves.toBeNull();
     const rawObject = await env.RAW_EMAILS.get(String(row?.raw_key));
     expect(rawObject).not.toBeNull();
     await expect(rawObject?.text()).resolves.toBe(raw);
@@ -83,6 +89,16 @@ describe('Queue MIME persistence', () => {
     const attachmentObject = await env.RAW_EMAILS.get(String(attachment?.storage_key));
     expect(attachmentObject).not.toBeNull();
     await expect(attachmentObject?.text()).resolves.toBe('hello attachment');
+    const handoff = await env.DB.prepare(`
+      SELECT status, attempt_count, staging_deleted, stored_message_id
+      FROM inbound_handoffs WHERE message_id = ?
+    `).bind(queued.messageId).first<Record<string, string | number | null>>();
+    expect(handoff).toMatchObject({
+      status: 'stored',
+      attempt_count: 1,
+      staging_deleted: 1,
+      stored_message_id: queued.messageId,
+    });
   });
 
   it('acknowledges an exact Queue redelivery without duplicating rows', async () => {

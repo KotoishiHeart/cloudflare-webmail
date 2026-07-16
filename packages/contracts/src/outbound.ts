@@ -1,5 +1,6 @@
 export const OUTBOUND_QUEUE_SCHEMA_VERSION = 1 as const;
 export const OUTBOUND_QUEUE_NAME = 'cf-webmail-outbound' as const;
+export const OUTBOUND_DEAD_LETTER_QUEUE_NAME = 'cf-webmail-outbound-dlq' as const;
 
 export type OutboundQueueMessageV1 = {
   schemaVersion: typeof OUTBOUND_QUEUE_SCHEMA_VERSION;
@@ -38,7 +39,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function checkId(value: unknown, path: string, issues: string[]): void {
-  if (typeof value !== 'string' || value.length < 1 || value.length > 128) {
-    issues.push(`${path} must contain between 1 and 128 characters`);
+  if (
+    typeof value !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value)
+  ) {
+    issues.push(`${path} must be a UUID`);
   }
 }
