@@ -43,6 +43,7 @@ export function setMessageListBusy(busy) {
 function badges(message) {
   const values = [];
   if (message.isStarred) values.push('★');
+  values.push(...(message.labels || []).slice(0, 2).map((label) => label.name));
   if (message.attachmentCount > 0) values.push('⌕');
   if (message.status === 'quarantined') values.push('!');
   if (message.status === 'queued') values.push('送信待ち');

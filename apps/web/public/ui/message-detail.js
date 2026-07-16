@@ -20,11 +20,12 @@ export function showMessageDetail(detail, body, handlers) {
   setText('#detail-recipients', message.recipients || message.deliveredTo);
   setText('#detail-cc', message.cc);
   document.querySelector('#detail-cc-row').hidden = !message.cc;
-  renderBody(message, body);
+  renderBody(message, body, handlers.showHtmlByDefault);
   const rawLink = document.querySelector('#raw-link');
   rawLink.href = message.rawUrl;
   renderActions(message, handlers);
   renderAttachments(attachments);
+  renderLabels(message, detail.labels || [], handlers);
   document.querySelector('#detail-subject').focus({ preventScroll: true });
 }
 
@@ -47,7 +48,7 @@ export function closeMessageDetail() {
   clearHtmlBody();
 }
 
-function renderBody(message, body) {
+function renderBody(message, body, showHtmlByDefault) {
   const frame = document.querySelector('#detail-html');
   const text = document.querySelector('#detail-body');
   const modes = document.querySelector('#body-modes');
@@ -71,8 +72,40 @@ function renderBody(message, body) {
   };
   showHtml.onclick = selectHtml;
   showText.onclick = selectText;
-  if (body.html !== null) selectHtml();
+  if (body.html !== null && showHtmlByDefault) selectHtml();
   else selectText();
+}
+
+function renderLabels(message, assigned, handlers) {
+  const chips = document.querySelector('#detail-label-chips');
+  const editor = document.querySelector('#detail-label-editor');
+  const select = document.querySelector('#detail-label-select');
+  chips.replaceChildren();
+  for (const label of assigned) {
+    const chip = document.createElement('span');
+    chip.className = 'label-chip';
+    chip.style.borderColor = label.color;
+    chip.textContent = label.name;
+    chips.append(chip);
+  }
+  if (assigned.length === 0) chips.textContent = 'ラベルなし';
+  editor.hidden = message.role === 'viewer';
+  select.replaceChildren();
+  const assignedIds = new Set(assigned.map((label) => label.id));
+  for (const label of handlers.availableLabels) {
+    const option = new Option(label.name, label.id, false, assignedIds.has(label.id));
+    select.add(option);
+  }
+  const save = document.querySelector('#detail-label-save');
+  save.disabled = handlers.availableLabels.length === 0;
+  save.onclick = async () => {
+    save.disabled = true;
+    try {
+      await handlers.onLabels([...select.selectedOptions].map((option) => option.value));
+    } catch {
+      save.disabled = handlers.availableLabels.length === 0;
+    }
+  };
 }
 
 function clearHtmlBody() {

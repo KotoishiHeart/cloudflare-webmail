@@ -11,8 +11,8 @@ export async function getSession() {
   return requestJson('/api/session');
 }
 
-export async function getMessages(mailboxId, folder, cursor = null, filters = {}) {
-  const query = new URLSearchParams({ folder, limit: '30' });
+export async function getMessages(mailboxId, folder, cursor = null, filters = {}, limit = 30) {
+  const query = new URLSearchParams({ folder, limit: String(limit) });
   for (const [name, value] of Object.entries(filters)) {
     if (value !== '' && value !== 'all' && value !== 'any') query.set(name, value);
   }
@@ -21,6 +21,45 @@ export async function getMessages(mailboxId, folder, cursor = null, filters = {}
     query.set('beforeId', cursor.beforeId);
   }
   return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/messages?${query}`);
+}
+
+export async function getPreferences() {
+  return requestJson('/api/preferences');
+}
+
+export async function patchPreferences(patch) {
+  return requestJson('/api/preferences', {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function getLabels(mailboxId) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/labels`);
+}
+
+export async function createLabel(mailboxId, input) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/labels`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteLabel(mailboxId, labelId) {
+  return requestJson(
+    `/api/mailboxes/${encodeURIComponent(mailboxId)}/labels/${encodeURIComponent(labelId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function putMessageLabels(messageId, labelIds) {
+  return requestJson(`/api/messages/${encodeURIComponent(messageId)}/labels`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ labelIds }),
+  });
 }
 
 export async function getMessage(messageId) {

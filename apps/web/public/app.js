@@ -1,10 +1,16 @@
 import {
+  createLabel,
+  deleteLabel,
+  getLabels,
   getMessage,
   getMessageBody,
   getMessages,
+  getPreferences,
   getSession,
+  patchPreferences,
   patchMessage,
   createMessage,
+  putMessageLabels,
 } from './ui/api.js';
 import {
   bindCompose,
@@ -22,13 +28,22 @@ import {
   EMPTY_SEARCH_FILTERS,
   bindSearch,
   hasActiveSearch,
+  renderLabelFilter,
   renderSearch,
 } from './ui/search.js';
+import {
+  applyPreferences,
+  bindSettingsLabels,
+  openSettings,
+  renderManagedLabels,
+} from './ui/settings-labels.js';
 import {
   appendMessagePage,
   replaceMessagePage,
   selectFolder,
   selectMailbox,
+  setLabels,
+  setPreferences,
   setSearchFilters,
   state,
 } from './ui/state.js';
@@ -41,11 +56,17 @@ bindShell({
   onLoadMore: () => loadMessages(true),
   onClose: closeDetail,
   onCompose: () => openCompose(selectedMailbox()),
+  onSettings: () => openSettings(selectedMailbox(), state.preferences, state.labels),
 });
 bindCompose(sendMessage);
 bindSearch({
   onSearch: applySearch,
   onClear: () => applySearch(EMPTY_SEARCH_FILTERS),
+});
+bindSettingsLabels({
+  onPreferences: savePreferences,
+  onCreateLabel: addLabel,
+  onDeleteLabel: removeLabel,
 });
 
 await start();
@@ -53,6 +74,10 @@ await start();
 async function start() {
   try {
     state.session = await getSession();
+    const preferenceData = await getPreferences();
+    setPreferences(preferenceData.preferences);
+    applyPreferences(state.preferences);
+    selectFolder(state.preferences.defaultFolder);
     const firstMailbox = state.session.mailboxes[0];
     selectMailbox(firstMailbox?.id || '');
     renderSession(state.session, state.mailboxId);
@@ -63,6 +88,7 @@ async function start() {
       showStatus('このAccess identityにはメールボックスが割り当てられていません。', true);
       return;
     }
+    await loadLabels();
     await loadMessages(false);
   } catch (error) {
     handleError(error, 'Webメールを開始できませんでした。');
@@ -71,10 +97,17 @@ async function start() {
 
 async function changeMailbox(mailboxId) {
   if (!mailboxId || mailboxId === state.mailboxId) return;
-  selectMailbox(mailboxId);
-  renderSession(state.session, state.mailboxId);
-  closeMessageDetail();
-  await loadMessages(false);
+  try {
+    selectMailbox(mailboxId);
+    setSearchFilters({ ...state.searchFilters, label: '' });
+    renderSession(state.session, state.mailboxId);
+    renderSearch(state.searchFilters);
+    closeMessageDetail();
+    await loadLabels();
+    await loadMessages(false);
+  } catch (error) {
+    handleError(error, 'メールボックスを切り替えられませんでした。');
+  }
 }
 
 async function changeFolder(folder) {
@@ -97,6 +130,7 @@ async function loadMessages(append) {
       state.folder,
       append ? state.nextCursor : null,
       state.searchFilters,
+      state.preferences.pageSize,
     );
     if (revision !== state.revision) return;
     if (append) appendMessagePage(page);
@@ -135,10 +169,81 @@ async function openMessage(messageId) {
       onPatch: (patch) => applyPatch(messageId, patch),
       onReply: () => openReplyCompose(selectedMailbox(), detail, body),
       onForward: () => openForwardCompose(selectedMailbox(), detail, body),
+      onLabels: (labelIds) => saveMessageLabels(messageId, labelIds),
+      availableLabels: state.labels,
+      showHtmlByDefault: state.preferences.showHtmlByDefault,
     });
   } catch (error) {
     handleError(error, 'メッセージを取得できませんでした。');
     closeDetail();
+  }
+}
+
+async function loadLabels() {
+  if (!state.mailboxId) {
+    setLabels([]);
+    renderLabelFilter([]);
+    return;
+  }
+  const data = await getLabels(state.mailboxId);
+  setLabels(data.labels);
+  if (state.searchFilters.label
+    && !state.labels.some((label) => label.id === state.searchFilters.label)) {
+    setSearchFilters({ ...state.searchFilters, label: '' });
+    renderSearch(state.searchFilters);
+  }
+  renderLabelFilter(state.labels);
+}
+
+async function saveMessageLabels(messageId, labelIds) {
+  try {
+    await putMessageLabels(messageId, labelIds);
+    showStatus('ラベルを更新しました。');
+    await loadLabels();
+    await loadMessages(false);
+    if (state.messages.some((message) => message.id === messageId)) await openMessage(messageId);
+    else closeDetail();
+  } catch (error) {
+    handleError(error, 'ラベルを更新できませんでした。');
+    throw error;
+  }
+}
+
+async function savePreferences(preferences) {
+  try {
+    const data = await patchPreferences(preferences);
+    setPreferences(data.preferences);
+    applyPreferences(state.preferences);
+    showStatus('表示設定を保存しました。');
+    await loadMessages(false);
+  } catch (error) {
+    handleError(error, '表示設定を保存できませんでした。');
+    throw error;
+  }
+}
+
+async function addLabel(input) {
+  try {
+    await createLabel(state.mailboxId, input);
+    await loadLabels();
+    renderManagedLabels(state.labels);
+    showStatus('ラベルを作成しました。');
+  } catch (error) {
+    handleError(error, 'ラベルを作成できませんでした。');
+    throw error;
+  }
+}
+
+async function removeLabel(labelId) {
+  try {
+    await deleteLabel(state.mailboxId, labelId);
+    await loadLabels();
+    renderManagedLabels(state.labels);
+    await loadMessages(false);
+    showStatus('ラベルを削除しました。');
+  } catch (error) {
+    handleError(error, 'ラベルを削除できませんでした。');
+    throw error;
   }
 }
 

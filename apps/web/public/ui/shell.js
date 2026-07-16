@@ -41,7 +41,7 @@ export function showStatus(message, error = false) {
   }, error ? 7000 : 3500);
 }
 
-export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose, onCompose }) {
+export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose, onCompose, onSettings }) {
   mailboxSelect.addEventListener('change', () => onMailbox(mailboxSelect.value));
   document.querySelector('#folder-nav').addEventListener('click', (event) => {
     const button = event.target.closest('[data-folder]');
@@ -51,4 +51,5 @@ export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose,
   document.querySelector('#load-more').addEventListener('click', onLoadMore);
   document.querySelector('#detail-close').addEventListener('click', onClose);
   document.querySelector('#compose-button').addEventListener('click', onCompose);
+  document.querySelector('#settings-button').addEventListener('click', onSettings);
 }

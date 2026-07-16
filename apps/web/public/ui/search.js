@@ -16,6 +16,7 @@ export const EMPTY_SEARCH_FILTERS = Object.freeze({
   starred: 'any',
   minKb: '',
   maxKb: '',
+  label: '',
 });
 
 export function bindSearch({ onSearch, onClear }) {
@@ -30,6 +31,14 @@ export function bindSearch({ onSearch, onClear }) {
   });
   form.addEventListener('input', updateActiveCount);
   form.addEventListener('change', updateActiveCount);
+}
+
+export function renderLabelFilter(labels) {
+  const select = form.elements.namedItem('label');
+  const selected = select.value;
+  select.replaceChildren(new Option('指定なし', ''));
+  for (const label of labels) select.add(new Option(label.name, label.id));
+  select.value = labels.some((label) => label.id === selected) ? selected : '';
 }
 
 export function renderSearch(filters) {
@@ -71,5 +80,6 @@ function advancedCount(filters) {
     filters.starred === 'any' ? '' : filters.starred,
     filters.minKb,
     filters.maxKb,
+    filters.label,
   ].filter(Boolean).length;
 }

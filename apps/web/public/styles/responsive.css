@@ -16,6 +16,7 @@
   .sidebar { position: sticky; z-index: 1; top: 68px; display: block; padding: 0.55rem 0.7rem; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
   .sidebar > .eyebrow, .sidebar-note { display: none; }
   .compose-button { width: auto; margin: 0 0.4rem 0 0; padding: 0.58rem 0.8rem; }
+  .sidebar-action { width: auto; margin: 0 0.4rem 0 0; padding: 0.58rem 0.8rem; }
   .folder-nav { display: flex; width: max-content; }
   .folder-nav button { width: auto; padding: 0.58rem 0.75rem; white-space: nowrap; }
   .mail-area { display: block; }
@@ -31,6 +32,8 @@
   .search-grid { grid-template-columns: 1fr; }
   .compose-copy-fields { grid-template-columns: 1fr; }
   .compose-actions { align-items: stretch; flex-direction: column; }
+  .settings-grid, .label-create-form { grid-template-columns: 1fr; }
+  .label-editor { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

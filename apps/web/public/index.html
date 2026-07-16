@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="ja" data-theme="system">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -30,6 +30,7 @@
 
       <aside class="sidebar" aria-label="メールフォルダー">
         <button id="compose-button" class="compose-button" type="button">メールを作成</button>
+        <button id="settings-button" class="sidebar-action" type="button">設定とラベル</button>
         <p class="eyebrow">Folders</p>
         <nav id="folder-nav" class="folder-nav">
           <button class="active" data-folder="inbox"><span>受信箱</span></button>
@@ -92,6 +93,7 @@
                 <label>スター<select name="starred"><option value="any">指定なし</option><option value="starred">あり</option><option value="unstarred">なし</option></select></label>
                 <label>最小KB<input name="minKb" inputmode="numeric" pattern="[0-9]*"></label>
                 <label>最大KB<input name="maxKb" inputmode="numeric" pattern="[0-9]*"></label>
+                <label>ラベル<select id="search-label" name="label"><option value="">指定なし</option></select></label>
               </div>
             </details>
           </form>
@@ -122,6 +124,14 @@
               <div id="detail-cc-row"><dt>CC</dt><dd id="detail-cc"></dd></div>
             </dl>
             <div id="detail-actions" class="detail-actions"></div>
+            <section id="detail-labels" class="message-labels">
+              <h3>ラベル</h3>
+              <div id="detail-label-chips" class="label-chips"></div>
+              <div id="detail-label-editor" class="label-editor">
+                <label>割り当て<select id="detail-label-select" multiple></select></label>
+                <button id="detail-label-save" type="button">ラベルを保存</button>
+              </div>
+            </section>
             <div id="body-modes" class="body-modes" hidden>
               <button id="show-html-body" type="button">HTML表示</button>
               <button id="show-text-body" type="button">テキスト表示</button>
@@ -141,6 +151,35 @@
     </div>
 
     <div id="status" class="status-toast" role="status" aria-live="polite" hidden></div>
+
+    <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+      <div class="settings-heading">
+        <div><p class="eyebrow">Preferences</p><h2 id="settings-title">設定とラベル</h2></div>
+        <button id="settings-close" class="icon-button" type="button">閉じる</button>
+      </div>
+      <form id="preferences-form" class="settings-form">
+        <h3>表示設定</h3>
+        <div class="settings-grid">
+          <label>テーマ<select name="theme"><option value="system">端末設定</option><option value="light">ライト</option><option value="dark">ダーク</option></select></label>
+          <label>1ページ件数<select name="pageSize"><option value="10">10件</option><option value="20">20件</option><option value="30">30件</option><option value="50">50件</option></select></label>
+          <label>初期フォルダー<select name="defaultFolder"><option value="inbox">受信箱</option><option value="outbox">送信トレイ</option><option value="sent">送信済み</option><option value="starred">スター付き</option><option value="archive">アーカイブ</option><option value="trash">ゴミ箱</option><option value="all">すべて</option></select></label>
+        </div>
+        <label class="check-row"><input name="showHtmlByDefault" type="checkbox">安全化HTMLを初期表示</label>
+        <label class="check-row"><input name="compactLayout" type="checkbox">一覧をコンパクト表示</label>
+        <button type="submit">表示設定を保存</button>
+      </form>
+      <section class="label-manager">
+        <h3>メールボックスのラベル</h3>
+        <p id="label-manager-note" class="muted"></p>
+        <form id="label-create-form" class="label-create-form">
+          <label>名前<input name="name" maxlength="80" required></label>
+          <label>色<input name="color" type="color" value="#64748b"></label>
+          <label>説明<input name="description" maxlength="240"></label>
+          <button type="submit">ラベルを作成</button>
+        </form>
+        <div id="label-manager-list" class="label-manager-list"></div>
+      </section>
+    </dialog>
 
     <dialog id="compose-dialog" class="compose-dialog" aria-labelledby="compose-title">
       <form id="compose-form" method="dialog" enctype="multipart/form-data">

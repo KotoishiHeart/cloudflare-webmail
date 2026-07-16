@@ -11,6 +11,14 @@ export const state = {
   activeLoads: 0,
   revision: 0,
   searchFilters: { ...EMPTY_SEARCH_FILTERS },
+  labels: [],
+  preferences: {
+    theme: 'system',
+    pageSize: 30,
+    defaultFolder: 'inbox',
+    showHtmlByDefault: true,
+    compactLayout: false,
+  },
 };
 
 export function setSearchFilters(filters) {
@@ -37,7 +45,16 @@ export function selectMailbox(mailboxId) {
   state.selectedMessageId = '';
   state.messages = [];
   state.nextCursor = null;
+  state.labels = [];
   state.revision += 1;
+}
+
+export function setLabels(labels) {
+  state.labels = labels;
+}
+
+export function setPreferences(preferences) {
+  state.preferences = { ...state.preferences, ...preferences };
 }
 
 export function selectFolder(folder) {
