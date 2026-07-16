@@ -15,7 +15,8 @@ The workflow is:
 3. `preflight`: read remote resource state and run all three Wrangler dry
    builds. It performs no remote mutation.
 4. `deploy`: require explicit confirmation, apply D1 migrations, then deploy
-   Jobs, Ingest, and Web in dependency order.
+   Jobs, Ingest, and Web in dependency order. In upgrade mode it first records
+   the version currently receiving 100% of traffic for every Worker.
 
 ## Create a deployment manifest
 
@@ -87,6 +88,28 @@ npm run deploy -- deploy \
 
 Preflight expires after one hour. Deployment stops on the first failed
 migration or Worker upload and does not attempt an unsafe automatic rollback.
+Before any mutation, it writes `rollback-plan.json` into the stage. A retry
+reuses that file instead of replacing the original recovery point with a
+partially deployed version. Initial deployments record that no previous Worker
+version exists.
+
+To restore the three recorded Worker versions after disabling or restoring the
+appropriate Email Routing rule, run:
+
+```bash
+npm run deploy -- rollback \
+  --stage ops/deploy-production \
+  --reason "failed production smoke checks" \
+  --yes
+```
+
+Rollback is deliberately explicit and restores Web, Ingest, then Jobs. It does
+not revert D1 migrations, D1 data, R2 objects, Queues, Email Routing, Access, or
+DNS. Migrations must therefore remain backward-compatible with the previous
+Worker version. If data recovery is required, restore a verified backup into
+new D1 and R2 resources and deploy a newly reviewed manifest targeting them;
+never overwrite the active stores as an emergency shortcut.
+
 Upgrade backup metadata must name the same D1 and R2 resources and the exact
 generated Web configuration, which pins the Cloudflare account used to read
 them. It deliberately does not enable Email Routing or change inbound MX

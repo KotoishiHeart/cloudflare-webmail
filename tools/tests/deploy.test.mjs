@@ -5,6 +5,12 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { assertBackupTarget } from '../lib/deploy-cli.mjs';
 import { runDeployApply, runDeployPreflight } from '../lib/deploy-cloudflare.mjs';
+import {
+  createRollbackPlan,
+  extractActiveVersion,
+  runRollbackApply,
+  validateRollbackPlan,
+} from '../lib/deploy-rollback.mjs';
 import { validateDeploymentManifest } from '../lib/deploy-manifest.mjs';
 import { createDeployStage, verifyDeployStage } from '../lib/deploy-stage.mjs';
 
@@ -128,12 +134,72 @@ describe('review-first deployment stage', () => {
       /unknown field/u,
     );
   });
+
+  it('captures exact pre-deploy versions and rolls back in exposure order', async () => {
+    const { stage, plan } = await stageFixture('rollback', { ...MANIFEST, mode: 'upgrade' });
+    const captureCalls = [];
+    const rollback = await createRollbackPlan(stage, plan, {}, versionRunner(captureCalls));
+    assert.equal(rollback.available, true);
+    assert.equal(rollback.workers.length, 3);
+    assert.doesNotThrow(() => validateRollbackPlan(plan, rollback));
+    assert.equal(captureCalls.length, 3);
+    assert.ok(captureCalls.every((args) => args.includes('status') && args.includes('--json')));
+
+    const applyCalls = [];
+    const result = runRollbackApply(
+      stage,
+      plan,
+      rollback,
+      { reason: 'failed production smoke checks' },
+      versionRunner(applyCalls),
+    );
+    assert.deepEqual(result.steps, ['rollback:web', 'rollback:ingest', 'rollback:jobs']);
+    assert.equal(result.databaseRolledBack, false);
+    assert.match(applyCalls[0].join(' '), /web\.wrangler\.json/u);
+    assert.match(applyCalls[1].join(' '), /ingest\.wrangler\.json/u);
+    assert.match(applyCalls[2].join(' '), /jobs\.wrangler\.json/u);
+  });
+
+  it('rejects split traffic and records that initial deploys have no code rollback', async () => {
+    assert.throws(
+      () => extractActiveVersion(JSON.stringify({ versions: [
+        { version_id: '11111111-1111-4111-8111-111111111111', percentage: 50 },
+        { version_id: '22222222-2222-4222-8222-222222222222', percentage: 50 },
+      ] })),
+      /exactly one active version|split-traffic/u,
+    );
+    const { stage, plan } = await stageFixture('initial-rollback');
+    const calls = [];
+    const rollback = await createRollbackPlan(stage, plan, {}, versionRunner(calls));
+    assert.equal(rollback.available, false);
+    assert.deepEqual(rollback.workers, []);
+    assert.deepEqual(calls, []);
+  });
 });
 
-async function stageFixture(name) {
+async function stageFixture(name, manifest = MANIFEST) {
   const stage = join(root, name);
-  const plan = await createDeployStage(stage, MANIFEST, { root: process.cwd(), commit: COMMIT });
+  const plan = await createDeployStage(stage, manifest, { root: process.cwd(), commit: COMMIT });
   return { stage, plan };
+}
+
+function versionRunner(calls) {
+  let version = 1;
+  return {
+    spawn: (_command, args) => {
+      calls.push(args);
+      if (args.includes('status')) {
+        const id = `${String(version).padStart(8, '0')}-1111-4111-8111-111111111111`;
+        version += 1;
+        return {
+          status: 0,
+          stdout: JSON.stringify({ versions: [{ version_id: id, percentage: 100 }] }),
+          stderr: '',
+        };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  };
 }
 
 function fakeRunner(calls, tableCount) {

@@ -4,6 +4,11 @@ import { join, resolve } from 'node:path';
 import { parseOptions } from './ops-cli.mjs';
 import { verifyBackup } from './backup-core.mjs';
 import { runDeployApply, runDeployPreflight } from './deploy-cloudflare.mjs';
+import {
+  createRollbackPlan,
+  runRollbackApply,
+  validateRollbackPlan,
+} from './deploy-rollback.mjs';
 import { createDeployStage, verifyDeployStage } from './deploy-stage.mjs';
 
 export async function runDeployCli(argv, io = defaultIo()) {
@@ -23,6 +28,26 @@ export async function runDeployCli(argv, io = defaultIo()) {
   }
 
   const stage = resolve(required(options, 'stage'));
+  if (command === 'rollback') {
+    if (!options.yes) throw new Error('rollback changes deployed Workers; pass --yes after review');
+    const plan = await verifyDeployStage(stage);
+    const rollback = validateRollbackPlan(
+      plan,
+      JSON.parse(await readFile(join(stage, 'rollback-plan.json'), 'utf8')),
+    );
+    const output = join(stage, 'rollback-result.json');
+    await requireOutputAbsent(output);
+    const result = runRollbackApply(
+      stage,
+      plan,
+      rollback,
+      { profile: options.profile, reason: options.reason },
+      io,
+    );
+    await writeJsonAtomic(output, result, false);
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  }
   const repository = repositoryState(io);
   if (repository.dirty) throw new Error('deployment commands require a clean Git worktree');
   const plan = await verifyDeployStage(stage, repository);
@@ -48,12 +73,29 @@ export async function runDeployCli(argv, io = defaultIo()) {
       const backupManifest = await verifyBackup(backup);
       assertBackupTarget(stage, plan, backupManifest);
     }
+    const rollback = await loadOrCreateRollbackPlan(stage, plan, { profile: options.profile }, io);
     const result = runDeployApply(stage, plan, preflight, { profile: options.profile }, io);
+    result.rollbackPlan = 'rollback-plan.json';
+    result.rollbackAvailable = rollback.available;
     await writeJsonAtomic(output, result, false);
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
   throw new Error(`unknown command: ${command}`);
+}
+
+async function loadOrCreateRollbackPlan(stage, plan, options, io) {
+  const output = join(stage, 'rollback-plan.json');
+  try {
+    const existing = JSON.parse(await readFile(output, 'utf8'));
+    return validateRollbackPlan(plan, existing);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  const rollback = await createRollbackPlan(stage, plan, options, io);
+  validateRollbackPlan(plan, rollback);
+  await writeJsonAtomic(output, rollback, false);
+  return rollback;
 }
 
 export function assertBackupTarget(stage, plan, backup) {
@@ -134,6 +176,7 @@ function usage() {
     `  plan --manifest FILE --stage DIR\n` +
     `  verify --stage DIR\n` +
     `  preflight --stage DIR [--profile NAME] [--force]\n` +
-    `  deploy --stage DIR --yes [--backup DIR] [--profile NAME]\n\n` +
+    `  deploy --stage DIR --yes [--backup DIR] [--profile NAME]\n` +
+    `  rollback --stage DIR --reason TEXT --yes [--profile NAME]\n\n` +
     `Upgrade mode requires a verified backup. The tool never creates resources or Email Routing rules.\n`;
 }
