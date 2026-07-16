@@ -52,7 +52,8 @@ export async function readMessageLabelIds(request: Request): Promise<string[]> {
 export async function readPreferencePatch(request: Request): Promise<Partial<UserPreferences>> {
   const input = await readJsonObject(request);
   const allowed = [
-    'theme', 'pageSize', 'defaultFolder', 'showHtmlByDefault', 'compactLayout',
+    'theme', 'pageSize', 'defaultFolder', 'defaultMailboxId',
+    'showHtmlByDefault', 'compactLayout',
   ];
   rejectUnknown(input, allowed);
   const patch: Record<string, unknown> = {};

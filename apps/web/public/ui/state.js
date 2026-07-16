@@ -19,6 +19,7 @@ export const state = {
     theme: 'system',
     pageSize: 30,
     defaultFolder: 'inbox',
+    defaultMailboxId: null,
     showHtmlByDefault: true,
     compactLayout: false,
   },

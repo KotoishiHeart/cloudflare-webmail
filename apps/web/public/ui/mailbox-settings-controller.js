@@ -102,7 +102,7 @@ export function createMailboxSettingsController(dependencies) {
 
   async function openSettingsPanel() {
     const mailbox = dependencies.selectedMailbox();
-    openSettings(mailbox, state.preferences, state.labels);
+    openSettings(mailbox, state.session.mailboxes, state.preferences, state.labels);
     await openMailboxRuleManager(mailbox);
   }
 

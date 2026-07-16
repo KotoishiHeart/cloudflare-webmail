@@ -38,7 +38,7 @@ Status meanings:
 
 | Archived behavior | Rebuild status | Current implementation/evidence |
 | --- | --- | --- |
-| Labels and user display settings | Rebuilt | Labels are mailbox-scoped with composite foreign keys; preferences are keyed by the stable internal user ID. |
+| Labels and user display settings | Rebuilt | Labels are mailbox-scoped with composite foreign keys; preferences, including the authorized default mailbox, are keyed by the stable internal user ID. |
 | Sender/recipient/subject/domain/attachment/size/keyword rules | Rebuilt | Rules support preview, frozen match runs, explicit apply, automatic inbound application, and optimistic undo for star/archive/trash/label actions. |
 | Account, alias, membership, and administrator management | Rebuilt | A separate `/admin.html` PWA uses an explicit `system_administrators` grant. It manages users, identities, mailboxes, addresses, memberships, and administrator grants with last-admin/last-owner protections. |
 | Delivery, rule, lifecycle, and security history | Rebuilt | Structured delivery and audit events are bounded, filterable, and mailbox-linked. Cron removes at most 500 delivery rows older than 90 days and 500 audit rows older than 365 days. |

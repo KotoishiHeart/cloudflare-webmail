@@ -67,8 +67,10 @@ require a matching `Origin`; deleting a label also removes its assignments.
 IDs, all from the message mailbox.
 
 Preference patches accept only `theme`, `pageSize`, `defaultFolder`,
-`showHtmlByDefault`, and `compactLayout`. Unknown or invalid fields reject the
-entire request rather than being silently ignored.
+`defaultMailboxId`, `showHtmlByDefault`, and `compactLayout`. A non-null
+default mailbox must be an active mailbox currently assigned to that user.
+Unknown or invalid fields reject the entire request rather than being silently
+ignored.
 
 Rule mutations require a matching `Origin` and mailbox-owner access. Supported
 conditions are sender, recipient, subject, participant domain, bounded keyword

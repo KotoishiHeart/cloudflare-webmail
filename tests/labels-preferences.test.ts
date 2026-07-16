@@ -190,6 +190,7 @@ describe('mailbox labels and user preferences', () => {
           theme: 'system',
           pageSize: 30,
           defaultFolder: 'inbox',
+          defaultMailboxId: null,
           showHtmlByDefault: true,
           compactLayout: false,
         },
@@ -201,6 +202,7 @@ describe('mailbox labels and user preferences', () => {
         theme: 'dark',
         pageSize: 20,
         defaultFolder: 'starred',
+        defaultMailboxId: OTHER_MAILBOX_ID,
         showHtmlByDefault: false,
         compactLayout: true,
       },
@@ -208,7 +210,10 @@ describe('mailbox labels and user preferences', () => {
     expect(updated.status).toBe(200);
     const again = await api('/api/preferences', OWNER);
     await expect(again.json()).resolves.toMatchObject({
-      data: { preferences: { theme: 'dark', pageSize: 20, defaultFolder: 'starred' } },
+      data: { preferences: {
+        theme: 'dark', pageSize: 20, defaultFolder: 'starred',
+        defaultMailboxId: OTHER_MAILBOX_ID,
+      } },
     });
     const viewerDefaults = await api('/api/preferences', VIEWER);
     await expect(viewerDefaults.json()).resolves.toMatchObject({
@@ -222,6 +227,11 @@ describe('mailbox labels and user preferences', () => {
       body: { pageSize: 200 },
     });
     expect(invalid.status).toBe(400);
+    const unauthorizedMailbox = await api('/api/preferences', VIEWER, {
+      method: 'PATCH',
+      body: { defaultMailboxId: OTHER_MAILBOX_ID },
+    });
+    expect(unauthorizedMailbox.status).toBe(400);
     const crossOrigin = await api('/api/preferences', OWNER, {
       method: 'PATCH',
       origin: 'https://attacker.example',

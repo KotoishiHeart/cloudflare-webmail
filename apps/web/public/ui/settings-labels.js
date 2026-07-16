@@ -17,8 +17,9 @@ export function bindSettingsLabels(callbacks) {
   labelForm.addEventListener('submit', createLabel);
 }
 
-export function openSettings(currentMailbox, preferences, labels) {
+export function openSettings(currentMailbox, mailboxes, preferences, labels) {
   mailbox = currentMailbox;
+  renderDefaultMailboxes(mailboxes);
   setPreferenceValues(preferences);
   renderManagedLabels(labels);
   dialog.showModal();
@@ -82,6 +83,7 @@ async function savePreferences(event) {
       theme: String(data.get('theme')),
       pageSize: Number(data.get('pageSize')),
       defaultFolder: String(data.get('defaultFolder')),
+      defaultMailboxId: String(data.get('defaultMailboxId') || '') || null,
       showHtmlByDefault: data.get('showHtmlByDefault') !== null,
       compactLayout: data.get('compactLayout') !== null,
     });
@@ -125,6 +127,15 @@ function setPreferenceValues(preferences) {
   for (const name of ['theme', 'pageSize', 'defaultFolder']) {
     preferencesForm.elements.namedItem(name).value = String(preferences[name]);
   }
+  preferencesForm.elements.namedItem('defaultMailboxId').value = preferences.defaultMailboxId || '';
   preferencesForm.elements.namedItem('showHtmlByDefault').checked = preferences.showHtmlByDefault;
   preferencesForm.elements.namedItem('compactLayout').checked = preferences.compactLayout;
+}
+
+function renderDefaultMailboxes(mailboxes) {
+  const select = preferencesForm.elements.namedItem('defaultMailboxId');
+  select.replaceChildren(new Option('先頭の利用可能なメールボックス', ''));
+  for (const item of mailboxes) {
+    select.add(new Option(`${item.displayName} — ${item.address}`, item.id));
+  }
 }

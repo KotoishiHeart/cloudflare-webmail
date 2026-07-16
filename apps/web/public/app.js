@@ -102,7 +102,9 @@ async function start() {
     setPreferences(preferenceData.preferences);
     settings.applyPreferences(state.preferences);
     selectFolder(state.preferences.defaultFolder);
-    const firstMailbox = state.session.mailboxes[0];
+    const firstMailbox = state.session.mailboxes.find(
+      (mailbox) => mailbox.id === state.preferences.defaultMailboxId,
+    ) || state.session.mailboxes[0];
     selectMailbox(firstMailbox?.id || '');
     renderSession(state.session, state.mailboxId);
     renderFolder(state.folder);

@@ -8,17 +8,21 @@ test('label constraint repair preserves existing labels and relationships', asyn
     .filter((name) => name.endsWith('.sql'))
     .sort();
   const repairName = '0013_repair_mailbox_label_color_check.sql';
-  assert.equal(migrationNames.at(-1), repairName);
+  const repairIndex = migrationNames.indexOf(repairName);
+  assert.notEqual(repairIndex, -1);
 
   const database = new DatabaseSync(':memory:');
   try {
     database.exec('PRAGMA foreign_keys = ON');
-    for (const name of migrationNames.slice(0, -1)) {
+    for (const name of migrationNames.slice(0, repairIndex)) {
       database.exec(await readFile(`migrations/${name}`, 'utf8'));
     }
     seedRelatedLabelData(database);
 
     database.exec(await readFile(`migrations/${repairName}`, 'utf8'));
+    for (const name of migrationNames.slice(repairIndex + 1)) {
+      database.exec(await readFile(`migrations/${name}`, 'utf8'));
+    }
 
     assert.deepEqual(asPlainRows(database.prepare(`
       SELECT id, color FROM mailbox_labels ORDER BY id
