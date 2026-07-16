@@ -57,4 +57,22 @@ describe('authenticated Static Assets', () => {
     expect(response.status).toBe(405);
     expect(response.headers.get('allow')).toBe('GET, HEAD');
   });
+
+  it('serves the administration and PWA surfaces without public caching', async () => {
+    const admin = await handleWebRequest(
+      new Request('https://webmail.example.com/admin.html'), env, AUTHENTICATED,
+    );
+    expect(admin.status).toBe(200);
+    expect(admin.headers.get('cache-control')).toContain('private');
+    await expect(admin.text()).resolves.toContain('src="/admin.js"');
+
+    const worker = await handleWebRequest(
+      new Request('https://webmail.example.com/service-worker.js'), env, AUTHENTICATED,
+    );
+    expect(worker.status).toBe(200);
+    expect(worker.headers.get('service-worker-allowed')).toBe('/');
+    expect(worker.headers.get('cache-control')).toContain('no-cache');
+    const source = await worker.text();
+    expect(source).toContain("url.pathname.startsWith('/api/')");
+  });
 });

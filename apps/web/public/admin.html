@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja" data-theme="system">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#132a24">
+    <meta name="application-name" content="Cloudflare Webmail Admin">
+    <title>システム管理 — Cloudflare Webmail</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/webmail.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/webmail-192.png">
+    <link rel="stylesheet" href="/styles/base.css">
+    <link rel="stylesheet" href="/styles/admin.css">
+    <script type="module" src="/admin.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#admin-main">管理内容へ移動</a>
+    <header class="admin-topbar">
+      <a class="admin-brand" href="/">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span><strong>Cloudflare Webmail</strong><small>System administration</small></span>
+      </a>
+      <div class="admin-identity">
+        <span id="admin-email">認証を確認中</span>
+        <a href="/">メールへ戻る</a>
+      </div>
+    </header>
+
+    <div class="admin-shell">
+      <nav class="admin-nav" aria-label="管理セクション">
+        <button class="active" type="button" data-admin-section="overview">概要</button>
+        <button type="button" data-admin-section="users">ユーザー</button>
+        <button type="button" data-admin-section="mailboxes">メールボックス</button>
+        <button type="button" data-admin-section="events">監査・配送</button>
+        <button type="button" data-admin-section="retention">保持・完全削除</button>
+      </nav>
+
+      <main id="admin-main" class="admin-main" tabindex="-1">
+        <div id="admin-loading" class="admin-state" role="status">管理情報を読み込んでいます。</div>
+        <div id="admin-denied" class="admin-state danger" role="alert" hidden>
+          <h1>システム管理者権限が必要です</h1>
+          <p>このAccess identityには明示的な管理者grantがありません。</p>
+          <a href="/">Webメールへ戻る</a>
+        </div>
+
+        <section id="admin-overview" class="admin-section" aria-labelledby="overview-title" hidden>
+          <p class="eyebrow">Operations</p>
+          <h1 id="overview-title">運用概要</h1>
+          <p class="admin-lead">通常のメール操作から分離した、全メールボックス横断の運用画面です。</p>
+          <div id="summary-cards" class="summary-grid"></div>
+          <div class="admin-card warning-card">
+            <h2>破壊的操作の原則</h2>
+            <p>完全削除はpreview、外部バックアップ検証、明示承認、Jobs処理、事後確認の順でのみ実行されます。</p>
+          </div>
+        </section>
+
+        <section id="admin-users" class="admin-section" aria-labelledby="users-title" hidden>
+          <p class="eyebrow">Directory</p>
+          <h1 id="users-title">ユーザー</h1>
+          <form id="admin-user-create" class="admin-card admin-form">
+            <h2>ユーザーと最初のAccess identityを作成</h2>
+            <div class="admin-form-grid">
+              <label>メールアドレス<input name="email" type="email" required maxlength="320"></label>
+              <label>表示名<input name="displayName" maxlength="160"></label>
+              <label>Access issuer<input name="issuer" type="url" required placeholder="https://team.cloudflareaccess.com"></label>
+              <label>Access subject<input name="subject" required maxlength="512"></label>
+            </div>
+            <label class="check-row"><input name="isSystemAdmin" type="checkbox">システム管理者として作成</label>
+            <button type="submit">ユーザーを作成</button>
+          </form>
+          <div id="admin-user-list" class="admin-list" aria-live="polite"></div>
+        </section>
+
+        <section id="admin-mailboxes" class="admin-section" aria-labelledby="mailboxes-title" hidden>
+          <p class="eyebrow">Routing directory</p>
+          <h1 id="mailboxes-title">メールボックス</h1>
+          <form id="admin-mailbox-create" class="admin-card admin-form">
+            <h2>メールボックスを作成</h2>
+            <div class="admin-form-grid">
+              <label>主アドレス<input name="address" type="email" required maxlength="320"></label>
+              <label>表示名<input name="displayName" maxlength="160"></label>
+              <label>最初の所有者<select id="mailbox-owner" name="ownerUserId" required></select></label>
+            </div>
+            <button type="submit">メールボックスを作成</button>
+          </form>
+          <div class="admin-split">
+            <div id="admin-mailbox-list" class="admin-list"></div>
+            <div id="admin-mailbox-detail" class="admin-card admin-detail">
+              <p class="muted">メールボックスを選択するとアドレスとメンバーを編集できます。</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="admin-events" class="admin-section" aria-labelledby="events-title" hidden>
+          <p class="eyebrow">Observability</p>
+          <h1 id="events-title">監査・配送イベント</h1>
+          <div class="admin-tabs" role="tablist" aria-label="イベント種別">
+            <button id="audit-tab" role="tab" aria-selected="true" aria-controls="audit-panel">監査</button>
+            <button id="delivery-tab" role="tab" tabindex="-1" aria-selected="false" aria-controls="delivery-panel">配送</button>
+          </div>
+          <div id="audit-panel" role="tabpanel" aria-labelledby="audit-tab">
+            <form id="audit-filter" class="filter-row">
+              <label>分類<select name="category"><option value="">すべて</option><option>admin</option><option>retention</option><option>message</option><option>rule</option><option>label</option></select></label>
+              <label>重要度<select name="severity"><option value="">すべて</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></label>
+              <button type="submit">更新</button>
+            </form>
+            <div id="audit-list" class="event-list" aria-live="polite"></div>
+          </div>
+          <div id="delivery-panel" role="tabpanel" aria-labelledby="delivery-tab" hidden>
+            <form id="delivery-filter" class="filter-row">
+              <label>方向<select name="direction"><option value="">すべて</option><option>inbound</option><option>outbound</option><option>system</option></select></label>
+              <label>状態<select name="status"><option value="">すべて</option><option>failed</option><option>retrying</option><option>rejected</option><option>succeeded</option></select></label>
+              <button type="submit">更新</button>
+            </form>
+            <div id="delivery-list" class="event-list" aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section id="admin-retention" class="admin-section" aria-labelledby="retention-title" hidden>
+          <p class="eyebrow">Lifecycle</p>
+          <h1 id="retention-title">保持・完全削除</h1>
+          <div class="admin-card danger-zone">
+            <h2>対象メールボックス</h2>
+            <label>メールボックス<select id="retention-mailbox"></select></label>
+            <form id="retention-policy" class="admin-form">
+              <div class="admin-form-grid">
+                <label>ゴミ箱保持日数<input name="retentionDays" type="number" min="1" max="3650" required></label>
+                <label class="check-row"><input name="excludeStarred" type="checkbox">スター付きは除外</label>
+                <label class="check-row"><input name="excludeLabeled" type="checkbox">ラベル付きは除外</label>
+                <label class="check-row"><input name="enabled" type="checkbox">このポリシーを有効化</label>
+              </div>
+              <button type="submit">ポリシーを保存</button>
+            </form>
+            <form id="retention-preview" class="filter-row">
+              <label>候補上限<input name="limit" type="number" min="1" max="200" value="100" required></label>
+              <button type="submit">完全削除候補をpreview</button>
+            </form>
+          </div>
+          <div id="retention-run-list" class="admin-list" aria-live="polite"></div>
+          <div id="retention-run-detail" class="admin-card admin-detail" hidden></div>
+        </section>
+      </main>
+    </div>
+    <div id="admin-status" class="status-toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

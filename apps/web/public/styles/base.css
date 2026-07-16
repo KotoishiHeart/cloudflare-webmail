@@ -73,6 +73,17 @@
 }
 
 * { box-sizing: border-box; }
+.skip-link {
+  position: fixed;
+  z-index: 100;
+  top: -5rem;
+  left: 1rem;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  color: var(--on-forest);
+  background: var(--forest);
+}
+.skip-link:focus { top: 1rem; }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -100,7 +111,8 @@ button, select { font: inherit; }
 
 button, a { -webkit-tap-highlight-color: transparent; }
 
-button:focus-visible, a:focus-visible, select:focus-visible {
+button:focus-visible, a:focus-visible, select:focus-visible,
+input:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
   outline: 3px solid rgb(244 129 32 / 35%);
   outline-offset: 2px;
 }

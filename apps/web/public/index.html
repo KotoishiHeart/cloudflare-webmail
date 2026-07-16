@@ -4,7 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#132a24">
+    <meta name="application-name" content="Cloudflare Webmail">
     <title>Cloudflare Webmail</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/webmail.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/webmail-192.png">
     <link rel="stylesheet" href="/styles/base.css">
     <link rel="stylesheet" href="/styles/layout.css">
     <link rel="stylesheet" href="/styles/components.css">
@@ -12,6 +16,7 @@
     <script type="module" src="/app.js"></script>
   </head>
   <body>
+    <a class="skip-link" href="#mail-main">メール一覧へ移動</a>
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="/" aria-label="Cloudflare Webmail ホーム">
@@ -31,6 +36,7 @@
       <aside class="sidebar" aria-label="メールフォルダー">
         <button id="compose-button" class="compose-button" type="button">メールを作成</button>
         <button id="settings-button" class="sidebar-action" type="button">設定とラベル</button>
+        <a id="admin-button" class="sidebar-action" href="/admin.html" hidden>システム管理</a>
         <p class="eyebrow">Folders</p>
         <nav id="folder-nav" class="folder-nav">
           <button class="active" data-folder="inbox"><span>受信箱</span></button>
@@ -47,7 +53,7 @@
         </div>
       </aside>
 
-      <main class="mail-area">
+      <main id="mail-main" class="mail-area" tabindex="-1">
         <section class="list-panel" aria-labelledby="folder-title">
           <div class="panel-heading">
             <div>

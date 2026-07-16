@@ -39,6 +39,17 @@ export async function serveAuthenticatedAsset(
   const response = await assets.fetch(request);
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) headers.set(name, value);
+  const pathname = new URL(request.url).pathname;
+  if (pathname === '/service-worker.js') {
+    headers.set('cache-control', 'private, no-cache');
+    headers.set('service-worker-allowed', '/');
+  } else if (
+    pathname === '/' || pathname.endsWith('.html') || pathname === '/manifest.webmanifest'
+  ) {
+    headers.set('cache-control', 'private, no-cache');
+  } else {
+    headers.set('cache-control', 'private, max-age=3600');
+  }
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

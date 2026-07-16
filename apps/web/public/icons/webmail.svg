@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cloudflare Webmail">
+  <rect width="512" height="512" rx="112" fill="#193c32"/>
+  <path d="M88 151c0-26 21-47 47-47h242c26 0 47 21 47 47v210c0 26-21 47-47 47H135c-26 0-47-21-47-47V151Z" fill="#fff"/>
+  <path d="m112 151 144 116 144-116" fill="none" stroke="#f48120" stroke-linecap="round" stroke-linejoin="round" stroke-width="38"/>
+  <path d="m112 369 105-100m183 100L295 269" fill="none" stroke="#dce5e1" stroke-linecap="round" stroke-width="24"/>
+</svg>

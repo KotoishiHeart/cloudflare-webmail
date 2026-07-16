@@ -75,6 +75,15 @@ describe('system administration API', () => {
     expect((await api(`/api/admin/mailboxes/${mailboxId}/addresses`, {
       method: 'POST', body: { address: 'alias@example.com' },
     })).status).toBe(201);
+    expect((await api(`/api/admin/mailboxes/${mailboxId}/addresses`, {
+      method: 'POST', body: { address: 'new-primary@example.com', kind: 'primary' },
+    })).status).toBe(201);
+    const detail = await api(`/api/admin/mailboxes/${mailboxId}`);
+    const detailPayload = await detail.json() as { data: { addresses: unknown[] } };
+    expect(detailPayload.data.addresses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ address: 'managed@example.com', kind: 'alias' }),
+      expect.objectContaining({ address: 'new-primary@example.com', kind: 'primary' }),
+    ]));
     expect((await api(`/api/admin/mailboxes/${mailboxId}/members/${VIEWER_ID}`, {
       method: 'PUT', body: { role: 'viewer' },
     })).status).toBe(200);
@@ -82,7 +91,7 @@ describe('system administration API', () => {
       method: 'DELETE',
     })).status).toBe(409);
     expect((await api(`/api/admin/mailboxes/${mailboxId}/addresses`, {
-      method: 'DELETE', body: { address: 'managed@example.com' },
+      method: 'DELETE', body: { address: 'new-primary@example.com' },
     })).status).toBe(409);
   });
 

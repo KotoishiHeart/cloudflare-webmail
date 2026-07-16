@@ -26,6 +26,7 @@
 }
 .compose-button:disabled { opacity: 0.45; cursor: not-allowed; }
 .sidebar-action {
+  display: block;
   width: 100%;
   margin: -0.9rem 0 1.4rem;
   border: 1px solid var(--line);
@@ -36,6 +37,8 @@
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 700;
+  text-align: center;
+  text-decoration: none;
 }
 .sidebar-action:hover { background: var(--forest-soft); }
 .folder-nav button {

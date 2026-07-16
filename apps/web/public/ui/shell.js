@@ -7,6 +7,7 @@ let statusTimer;
 
 export function renderSession(session, selectedMailboxId) {
   document.querySelector('#identity-email').textContent = session.user.email;
+  document.querySelector('#admin-button').hidden = !session.user.isSystemAdmin;
   mailboxSelect.replaceChildren();
   for (const mailbox of session.mailboxes) {
     const option = document.createElement('option');
@@ -35,6 +36,8 @@ export function showStatus(message, error = false) {
   window.clearTimeout(statusTimer);
   status.textContent = message;
   status.classList.toggle('error', error);
+  status.setAttribute('role', error ? 'alert' : 'status');
+  status.setAttribute('aria-live', error ? 'assertive' : 'polite');
   status.hidden = false;
   statusTimer = window.setTimeout(() => {
     status.hidden = true;

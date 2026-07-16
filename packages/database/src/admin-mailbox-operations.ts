@@ -46,12 +46,39 @@ export async function addAdminMailboxAddress(
     .bind(mailboxId).first();
   if (exists === null) return false;
   const now = requireTimestamp(input.now);
+  const address = normalizeEmailAddress(input.address, 'address');
+  const assigned = await db.prepare(`
+    SELECT mailbox_id, kind FROM mailbox_addresses WHERE address = ?
+  `).bind(address).first<{ mailbox_id: string; kind: 'primary' | 'alias' }>();
+  if (assigned !== null && assigned.mailbox_id !== mailboxId) {
+    throw new DatabaseInputError('address', 'is already assigned to another mailbox');
+  }
+  if (input.kind === 'primary') {
+    const promote = assigned === null
+      ? db.prepare(`
+        INSERT INTO mailbox_addresses (
+          address, mailbox_id, kind, status, created_at, updated_at
+        ) VALUES (?, ?, 'primary', 'active', ?, ?)
+      `).bind(address, mailboxId, now, now)
+      : db.prepare(`
+        UPDATE mailbox_addresses SET kind = 'primary', status = 'active', updated_at = ?
+        WHERE mailbox_id = ? AND address = ?
+      `).bind(now, mailboxId, address);
+    await db.batch([
+      db.prepare(`
+        UPDATE mailbox_addresses SET kind = 'alias', updated_at = ?
+        WHERE mailbox_id = ? AND kind = 'primary' AND address <> ?
+      `).bind(now, mailboxId, address),
+      promote,
+    ]);
+    return true;
+  }
+  if (assigned?.kind === 'primary') return true;
   await db.prepare(`
     INSERT INTO mailbox_addresses (address, mailbox_id, kind, status, created_at, updated_at)
-    VALUES (?, ?, ?, 'active', ?, ?)
-  `).bind(
-    normalizeEmailAddress(input.address, 'address'), mailboxId, input.kind, now, now,
-  ).run();
+    VALUES (?, ?, 'alias', 'active', ?, ?)
+    ON CONFLICT(address) DO UPDATE SET status = 'active', updated_at = excluded.updated_at
+  `).bind(address, mailboxId, now, now).run();
   return true;
 }
 

@@ -54,6 +54,13 @@ vocabulary. UI preferences are keyed by the stable internal user ID resolved
 from Access identity claims. The isolation rationale is recorded in
 [`docs/adr/0011-mailbox-labels-and-user-preferences.md`](docs/adr/0011-mailbox-labels-and-user-preferences.md).
 
+System administration is a separate `/admin.html` console backed by an
+explicit D1 administrator grant rather than an email allowlist. It manages the
+user and mailbox directory, structured audit/delivery events, and previewed
+retention deletion. The installable PWA caches only static shells and code;
+mail APIs, bodies, raw MIME, and attachments are always network-only. See
+[`docs/adr/0016-separated-admin-pwa.md`](docs/adr/0016-separated-admin-pwa.md).
+
 ## Development
 
 ```bash
