@@ -6,3 +6,4 @@ coverage/
 .dev.vars.*
 worker-configuration.d.ts.tmp
 *.log
+/ops/

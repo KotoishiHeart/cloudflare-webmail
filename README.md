@@ -91,6 +91,12 @@ and expire orphaned staging objects.
 `worker-configuration.d.ts` files are generated from each Worker configuration
 with Wrangler and are checked in CI through `npm run types:check`.
 
+Operational D1 changes use the review-first CLI described in
+[`docs/operations.md`](docs/operations.md). It generates stable provisioning
+SQL from a versioned manifest, requires an explicit local/remote target and
+confirmation for mutations, and provides aggregate status and single-message
+outbound retry commands.
+
 ## Implementation stages
 
 1. Completed: Worker entrypoints, versioned contracts, generated binding types,

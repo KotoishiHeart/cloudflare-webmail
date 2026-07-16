@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "users": [
+    {
+      "id": "019c315c-1f20-7000-8000-000000000001",
+      "email": "owner@example.com",
+      "displayName": "Mailbox owner",
+      "identities": [
+        {
+          "issuer": "https://REPLACE_WITH_TEAM.cloudflareaccess.com",
+          "subject": "REPLACE_WITH_ACCESS_SUBJECT",
+          "email": "owner@example.com"
+        }
+      ]
+    }
+  ],
+  "mailboxes": [
+    {
+      "id": "019c315c-1f20-7000-8000-000000000002",
+      "address": "mail@example.com",
+      "displayName": "Main mailbox",
+      "ownerUserId": "019c315c-1f20-7000-8000-000000000001",
+      "aliases": [],
+      "members": []
+    }
+  ]
+}
