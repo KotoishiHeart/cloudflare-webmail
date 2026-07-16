@@ -30,6 +30,58 @@ export async function updateWebMessageFlags(
   `).bind(...values, now, messageId, mailboxId).run();
 }
 
+export async function bulkUpdateWebMessageFlags(
+  db: D1Database,
+  messageIdInputs: string[],
+  mailboxIdInput: string,
+  patch: WebMessageFlagPatch,
+  nowInput: number,
+): Promise<number> {
+  if (messageIdInputs.length < 1 || messageIdInputs.length > 40) {
+    throw new Error('bulk update requires 1 to 40 messages');
+  }
+  const messageIds = messageIdInputs.map((id) => normalizeId(id, 'messageId'));
+  if (new Set(messageIds).size !== messageIds.length) throw new Error('message IDs must be unique');
+  const mailboxId = normalizeId(mailboxIdInput, 'mailboxId');
+  const now = requireTimestamp(nowInput);
+  const assignments: string[] = [];
+  const values: Array<number | null> = [];
+  addFlag(assignments, values, 'is_read', patch.isRead);
+  addFlag(assignments, values, 'is_starred', patch.isStarred);
+  addFlag(assignments, values, 'is_archived', patch.isArchived);
+  addFlag(assignments, values, 'is_deleted', patch.isDeleted);
+  if (patch.isDeleted !== undefined) {
+    assignments.push('deleted_at = ?');
+    values.push(patch.isDeleted ? now : null);
+  }
+  if (Object.values(patch).filter((value) => value !== undefined).length !== 1) {
+    throw new Error('bulk update must change exactly one message flag');
+  }
+  const placeholders = messageIds.map(() => '?').join(', ');
+  const result = await db.prepare(`
+    UPDATE messages
+    SET ${assignments.join(', ')}, updated_at = ?
+    WHERE mailbox_id = ? AND id IN (${placeholders})
+      AND (
+        SELECT COUNT(*) FROM messages
+        WHERE mailbox_id = ? AND id IN (${placeholders})
+      ) = ?
+    RETURNING id
+  `).bind(
+    ...values,
+    now,
+    mailboxId,
+    ...messageIds,
+    mailboxId,
+    ...messageIds,
+    messageIds.length,
+  ).all<{ id: string }>();
+  if (result.results.length !== messageIds.length) throw new WebMessageSetChangedError();
+  return result.results.length;
+}
+
+export class WebMessageSetChangedError extends Error {}
+
 function addFlag(
   assignments: string[],
   values: Array<number | null>,

@@ -226,6 +226,31 @@ describe('authorized webmail API', () => {
     });
   });
 
+  it('updates a bounded same-mailbox message set atomically', async () => {
+    const viewer = await bulkPatch(VIEWER, [MESSAGE_ID], { isArchived: true });
+    expect(viewer.status).toBe(404);
+    const crossOrigin = await bulkPatch(
+      OWNER,
+      [MESSAGE_ID],
+      { isArchived: true },
+      'https://attacker.example',
+    );
+    expect(crossOrigin.status).toBe(403);
+    const updated = await bulkPatch(OWNER, [MESSAGE_ID], { isArchived: true });
+    expect(updated.status).toBe(200);
+    await expect(updated.json()).resolves.toMatchObject({
+      data: { updated: 1, messageIds: [MESSAGE_ID], patch: { isArchived: true } },
+    });
+
+    const unknownId = '019c315c-1f20-7000-8000-000000000399';
+    const changedSet = await bulkPatch(OWNER, [MESSAGE_ID, unknownId], { isRead: false });
+    expect(changedSet.status).toBe(409);
+    const detail = await webRequest(`/api/messages/${MESSAGE_ID}`, {}, OWNER);
+    await expect(detail.json()).resolves.toMatchObject({ data: { message: { isRead: true } } });
+    const duplicate = await bulkPatch(OWNER, [MESSAGE_ID, MESSAGE_ID], { isRead: false });
+    expect(duplicate.status).toBe(400);
+  });
+
   it('returns not found for identities that are not mailbox members', async () => {
     const outsider = { ...OWNER, subject: 'not-linked' };
     const response = await webRequest(`/api/messages/${MESSAGE_ID}`, {}, outsider);
@@ -282,5 +307,18 @@ function patchFlags(
     method: 'PATCH',
     headers: { 'content-type': 'application/json', origin },
     body: JSON.stringify(patch),
+  }, identity);
+}
+
+function bulkPatch(
+  identity: AccessIdentity,
+  messageIds: string[],
+  patch: Record<string, boolean>,
+  origin = ORIGIN,
+): Promise<Response> {
+  return webRequest(`/api/mailboxes/${MAILBOX_ID}/messages`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json', origin },
+    body: JSON.stringify({ messageIds, patch }),
   }, identity);
 }

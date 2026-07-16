@@ -3,11 +3,7 @@ import type { AccessIdentity } from './access-auth.js';
 import { auditApiResponse } from './api-audit.js';
 import { ApiInputError, UnsupportedMediaTypeError } from './api-input.js';
 import { apiError } from './api-response.js';
-import {
-  getMessageDetail,
-  getMessageList,
-  patchMessage,
-} from './message-api.js';
+import { getMessageDetail, getMessageList, patchMessage, patchMessageList } from './message-api.js';
 import {
   downloadMessageAttachment,
   downloadRawMessage,
@@ -33,11 +29,9 @@ import {
   removeRule,
   undoRuleRun,
 } from './rule-api.js';
-import {
-  createOutboundMessage,
-  OutboundQueueUnavailableError,
-} from './outbound-api.js';
+import { createOutboundMessage, OutboundQueueUnavailableError } from './outbound-api.js';
 import { ComposeMediaTypeError } from './compose-input.js';
+import { BulkMessageMediaTypeError } from './bulk-message-input.js';
 import { routeAdminApi } from './admin-router.js';
 
 export async function routeApi(
@@ -50,7 +44,11 @@ export async function routeApi(
   try {
     response = await routeKnownApi(request, env, identity, now);
   } catch (error) {
-    if (error instanceof UnsupportedMediaTypeError || error instanceof ComposeMediaTypeError) {
+    if (
+      error instanceof UnsupportedMediaTypeError
+      || error instanceof ComposeMediaTypeError
+      || error instanceof BulkMessageMediaTypeError
+    ) {
       response = apiError('unsupported_media_type', 415);
     } else if (error instanceof ApiInputError || error instanceof DatabaseInputError) {
       response = apiError('invalid_request', 400);
@@ -89,7 +87,10 @@ async function routeKnownApi(
     if (request.method === 'POST') {
       return createOutboundMessage(request, env, identity, mailboxList[1] ?? '', now);
     }
-    return apiError('method_not_allowed', 405, 'GET, POST');
+    if (request.method === 'PATCH') {
+      return patchMessageList(request, env.DB, identity, mailboxList[1] ?? '', now);
+    }
+    return apiError('method_not_allowed', 405, 'GET, POST, PATCH');
   }
 
   const mailboxLabels = pathname.match(/^\/api\/mailboxes\/([^/]+)\/labels$/u);

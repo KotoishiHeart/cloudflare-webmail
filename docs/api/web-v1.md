@@ -11,6 +11,7 @@ JWT. A missing or invalid token is rejected before routing. JSON responses use
 | `GET` | `/api/session` | linked identity | User email, system-admin flag, and authorized mailboxes |
 | `GET` | `/api/mailboxes/:id/messages` | read | Cursor-paginated message summaries |
 | `POST` | `/api/mailboxes/:id/messages` | operate | Persist and enqueue a new outbound message |
+| `PATCH` | `/api/mailboxes/:id/messages` | operate | Atomically change one flag on 1–40 messages |
 | `GET` | `/api/messages/:id` | read | Message metadata and attachment links |
 | `GET` | `/api/messages/:id/body` | read | R2 body stream as safe plain text |
 | `GET` | `/api/messages/:id/raw` | read | Original RFC 822 download stream |
@@ -35,6 +36,12 @@ through 50, and the returned `before` plus `beforeId` cursor. `PATCH` accepts a
 bounded `application/json` body containing one or more boolean fields:
 `isRead`, `isStarred`, `isArchived`, and `isDeleted`. It also requires the
 request `Origin` to match the application origin.
+
+The mailbox-scoped `PATCH` form accepts `{ "messageIds": [...], "patch": {
+... } }`, with 1–40 unique message IDs and exactly one boolean flag. Every ID
+must still belong to that mailbox or the atomic update fails with
+`message_set_changed`; no subset is changed. The bound is below D1's 100 bind
+parameter limit because the statement verifies and updates the same ID set.
 
 `POST` also requires a matching `Origin`, `Content-Type: application/json`, and
 a UUID `Idempotency-Key`. Its body contains `to`, optional `cc` and `bcc`

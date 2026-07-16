@@ -1,5 +1,6 @@
 import {
   authorizeMailboxAccess,
+  bulkUpdateWebMessageFlags,
   getAuthorizedWebMessage,
   isWebMailboxFolder,
   listWebMessageAttachments,
@@ -8,12 +9,14 @@ import {
   listWebMessages,
   mailboxRoleGrants,
   updateWebMessageFlags,
+  WebMessageSetChangedError,
   type WebMessageDetail,
 } from '@cf-webmail/database';
 import type { AccessIdentity } from './access-auth.js';
 import { readFlagPatch, requestIsSameOrigin } from './api-input.js';
 import { messageListQueryFromUrl } from './message-list-input.js';
 import { apiData, apiError } from './api-response.js';
+import { readBulkMessagePatch } from './bulk-message-input.js';
 
 export async function getMessageList(
   request: Request,
@@ -91,6 +94,32 @@ export async function patchMessage(
   const updated = await getAuthorizedWebMessage(db, identity, messageId);
   if (updated === null) throw new Error('updated message became unavailable');
   return apiData({ message: publicMessage(updated) });
+}
+
+export async function patchMessageList(
+  request: Request,
+  db: D1Database,
+  identity: AccessIdentity,
+  mailboxId: string,
+  now: number,
+): Promise<Response> {
+  if (!requestIsSameOrigin(request)) return apiError('cross_origin_request_denied', 403);
+  const access = await authorizeMailboxAccess(db, identity, mailboxId, 'operate');
+  if (!access.allowed) return apiError('mailbox_not_found', 404);
+  const input = await readBulkMessagePatch(request);
+  try {
+    const updated = await bulkUpdateWebMessageFlags(
+      db,
+      input.messageIds,
+      access.mailboxId,
+      input.patch,
+      now,
+    );
+    return apiData({ updated, messageIds: input.messageIds, patch: input.patch });
+  } catch (error) {
+    if (error instanceof WebMessageSetChangedError) return apiError('message_set_changed', 409);
+    throw error;
+  }
 }
 
 function publicMessage(message: WebMessageDetail) {
