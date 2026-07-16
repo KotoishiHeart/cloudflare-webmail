@@ -25,6 +25,10 @@ import {
 } from './ui/message-detail.js';
 import { renderMessageList, setMessageListBusy } from './ui/message-list.js';
 import {
+  bindRuleController,
+  openMailboxRuleManager,
+} from './ui/rule-controller.js';
+import {
   EMPTY_SEARCH_FILTERS,
   bindSearch,
   hasActiveSearch,
@@ -56,7 +60,7 @@ bindShell({
   onLoadMore: () => loadMessages(true),
   onClose: closeDetail,
   onCompose: () => openCompose(selectedMailbox()),
-  onSettings: () => openSettings(selectedMailbox(), state.preferences, state.labels),
+  onSettings: openSettingsPanel,
 });
 bindCompose(sendMessage);
 bindSearch({
@@ -67,6 +71,12 @@ bindSettingsLabels({
   onPreferences: savePreferences,
   onCreateLabel: addLabel,
   onDeleteLabel: removeLabel,
+});
+bindRuleController({
+  getMailbox: selectedMailbox,
+  onMessagesChanged: refreshAfterRuleMutation,
+  onStatus: showStatus,
+  onError: handleError,
 });
 
 await start();
@@ -244,6 +254,24 @@ async function removeLabel(labelId) {
   } catch (error) {
     handleError(error, 'ラベルを削除できませんでした。');
     throw error;
+  }
+}
+
+async function openSettingsPanel() {
+  const mailbox = selectedMailbox();
+  openSettings(mailbox, state.preferences, state.labels);
+  await openMailboxRuleManager(mailbox);
+}
+
+async function refreshAfterRuleMutation() {
+  await loadLabels();
+  renderManagedLabels(state.labels);
+  await loadMessages(false);
+  if (state.selectedMessageId
+    && state.messages.some((message) => message.id === state.selectedMessageId)) {
+    await openMessage(state.selectedMessageId);
+  } else if (state.selectedMessageId) {
+    closeDetail();
   }
 }
 

@@ -12,6 +12,8 @@ export const state = {
   revision: 0,
   searchFilters: { ...EMPTY_SEARCH_FILTERS },
   labels: [],
+  rules: [],
+  ruleRuns: [],
   preferences: {
     theme: 'system',
     pageSize: 30,
@@ -46,6 +48,8 @@ export function selectMailbox(mailboxId) {
   state.messages = [];
   state.nextCursor = null;
   state.labels = [];
+  state.rules = [];
+  state.ruleRuns = [];
   state.revision += 1;
 }
 
@@ -55,6 +59,11 @@ export function setLabels(labels) {
 
 export function setPreferences(preferences) {
   state.preferences = { ...state.preferences, ...preferences };
+}
+
+export function setRules(rules, runs) {
+  state.rules = rules;
+  state.ruleRuns = runs;
 }
 
 export function selectFolder(folder) {

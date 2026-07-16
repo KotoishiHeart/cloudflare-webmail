@@ -34,6 +34,9 @@
   .compose-actions { align-items: stretch; flex-direction: column; }
   .settings-grid, .label-create-form { grid-template-columns: 1fr; }
   .label-editor { align-items: stretch; flex-direction: column; }
+  .rule-row, .rule-run-row { grid-template-columns: 1fr; }
+  .rule-row-actions { justify-content: start; }
+  .rule-preview-heading { align-items: stretch; flex-direction: column; }
 }
 
 @media (prefers-reduced-motion: reduce) {

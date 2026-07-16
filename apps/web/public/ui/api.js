@@ -62,6 +62,64 @@ export async function putMessageLabels(messageId, labelIds) {
   });
 }
 
+export async function getRules(mailboxId) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/rules`);
+}
+
+export async function createRule(mailboxId, input) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/rules`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function patchRule(mailboxId, ruleId, patch) {
+  return requestJson(
+    `/api/mailboxes/${encodeURIComponent(mailboxId)}/rules/${encodeURIComponent(ruleId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    },
+  );
+}
+
+export async function deleteRule(mailboxId, ruleId) {
+  return requestJson(
+    `/api/mailboxes/${encodeURIComponent(mailboxId)}/rules/${encodeURIComponent(ruleId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function previewRule(mailboxId, ruleId) {
+  return ruleRunRequest(mailboxId, `rules/${encodeURIComponent(ruleId)}/preview`);
+}
+
+export async function getRuleRuns(mailboxId) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/rule-runs`);
+}
+
+export async function getRuleRun(mailboxId, runId) {
+  return requestJson(
+    `/api/mailboxes/${encodeURIComponent(mailboxId)}/rule-runs/${encodeURIComponent(runId)}`,
+  );
+}
+
+export async function applyRuleRun(mailboxId, runId) {
+  return ruleRunRequest(mailboxId, `rule-runs/${encodeURIComponent(runId)}/apply`);
+}
+
+export async function undoRuleRun(mailboxId, runId) {
+  return ruleRunRequest(mailboxId, `rule-runs/${encodeURIComponent(runId)}/undo`);
+}
+
+function ruleRunRequest(mailboxId, suffix) {
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/${suffix}`, {
+    method: 'POST',
+  });
+}
+
 export async function getMessage(messageId) {
   return requestJson(`/api/messages/${encodeURIComponent(messageId)}`);
 }

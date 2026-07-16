@@ -179,6 +179,50 @@
         </form>
         <div id="label-manager-list" class="label-manager-list"></div>
       </section>
+      <section id="rule-manager" class="rule-manager" hidden>
+        <h3>自動整理ルール</h3>
+        <p class="muted">既存メールはプレビューで対象を固定し、確認後にだけ適用できます。</p>
+        <form id="rule-create-form" class="rule-create-form">
+          <div class="settings-grid">
+            <label>ルール名<input name="name" maxlength="120" required placeholder="請求書を整理"></label>
+            <label>優先度<input name="priority" type="number" min="1" max="9999" value="100" required></label>
+            <label>方向<select name="direction"><option value="any">問わない</option><option value="inbound">受信</option><option value="outbound">送信</option></select></label>
+            <label>Fromに含む<input name="fromContains" maxlength="320" placeholder="sender@example.com"></label>
+            <label>To/Ccに含む<input name="toContains" maxlength="320" placeholder="alias@example.com"></label>
+            <label>件名に含む<input name="subjectContains" maxlength="998" placeholder="請求書"></label>
+            <label>参加者ドメイン<input name="participantDomain" maxlength="253" placeholder="example.com"></label>
+            <label>キーワード<input name="keyword" maxlength="200" placeholder="本文・件名・添付名"></label>
+            <label>添付<select name="attachment"><option value="any">問わない</option><option value="with">あり</option><option value="without">なし</option></select></label>
+            <label>最小KB<input name="minimumKb" type="number" min="0"></label>
+            <label>最大KB<input name="maximumKb" type="number" min="0"></label>
+          </div>
+          <fieldset class="rule-actions">
+            <legend>アクション</legend>
+            <label><input name="star" type="checkbox">スター</label>
+            <label><input name="archive" type="checkbox">アーカイブ</label>
+            <label><input name="trash" type="checkbox">ゴミ箱</label>
+            <label class="rule-label-select">ラベル<select id="rule-label-ids" name="labelIds" multiple></select></label>
+          </fieldset>
+          <div class="rule-options">
+            <label><input name="enabled" type="checkbox" checked>有効</label>
+            <label><input name="applyIncoming" type="checkbox" checked>新規受信へ適用</label>
+            <label><input name="applyExisting" type="checkbox">既存メールへ適用可能</label>
+            <label><input name="stopProcessing" type="checkbox">一致後に後続ルールを停止</label>
+          </div>
+          <button type="submit">ルールを作成</button>
+        </form>
+        <div id="rule-preview" class="rule-preview" hidden>
+          <div class="rule-preview-heading">
+            <strong id="rule-preview-title"></strong>
+            <button id="rule-preview-apply" type="button">このプレビューを適用</button>
+          </div>
+          <div id="rule-preview-matches" class="rule-preview-matches"></div>
+        </div>
+        <h4>ルール一覧</h4>
+        <div id="rule-manager-list" class="rule-manager-list"></div>
+        <h4>実行履歴</h4>
+        <div id="rule-run-list" class="rule-run-list"></div>
+      </section>
     </dialog>
 
     <dialog id="compose-dialog" class="compose-dialog" aria-labelledby="compose-title">
