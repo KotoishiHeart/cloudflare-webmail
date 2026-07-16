@@ -166,7 +166,7 @@ export async function deleteMailboxLabel(
     labelId,
     mailboxId,
   ).run();
-  return Number(result.meta.changes ?? 0) === 1;
+  return Number(result.meta.changes ?? 0) > 0;
 }
 
 export function toMailboxLabel(row: MailboxLabelRow): MailboxLabel {
