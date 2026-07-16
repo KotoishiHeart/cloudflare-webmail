@@ -72,6 +72,12 @@ user or an existing address to another mailbox. Such ownership changes require
 an explicit, separately reviewed migration. A conflicting unique email or ID
 therefore stops the plan instead of silently merging accounts.
 
+For an archived deployment, `migrate:legacy provision-template` can generate
+this manifest from the reviewed account mapping. Its companion review report
+keeps directional account policy, external aliases, domains, and legacy
+membership suggestions outside automatic authorization. Follow
+[`legacy-migration.md`](legacy-migration.md) before planning or applying it.
+
 ## Status and delivery recovery
 
 The status command returns aggregate counts and no message content or email

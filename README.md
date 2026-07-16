@@ -199,3 +199,6 @@ real email delivery has been verified.
 13. Completed: archived default-mailbox preferences plus provenance-verified
     conversion of legacy labels, assignments, mailbox-scoped rules, and user
     display settings.
+14. Completed: archived account-directory provisioning drafts, explicit
+    external routing and membership review, and target mailbox/address/owner
+    prerequisites for every converted migration stage.

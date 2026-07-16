@@ -17,6 +17,8 @@ Before the window, record all of the following in the change ticket:
 - Exact Git commit and deployment `planId`.
 - Archived D1 and R2 resource names; new D1, R2, Queue, and Worker names.
 - Account-to-mailbox mapping digest and every explicit exclusion.
+- Generated provisioning-review digest and the disposition of every account
+  policy, domain, external alias, and legacy membership suggestion.
 - Access application/policy, production and canary hostnames, and canary mail
   address.
 - Current production Email Routing rule and its archived Worker target.
@@ -31,6 +33,10 @@ system for the whole cutover and observation period.
 Deploy the rebuild on its canary hostname with the review-first process in
 [`deployment.md`](deployment.md). Provision every mapped user, Access identity,
 mailbox, address, membership, and system administrator before migration.
+Generate the initial directory from the archived mapping, then resolve its
+separate policy review as described in
+[`legacy-migration.md`](legacy-migration.md); do not grant access from an
+archived email address alone.
 
 Apply a recent archived snapshot using [`legacy-migration.md`](legacy-migration.md),
 then run:

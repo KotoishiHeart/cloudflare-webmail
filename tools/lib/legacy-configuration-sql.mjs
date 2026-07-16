@@ -5,6 +5,7 @@ import {
   ownerSql,
   q,
   sql,
+  targetPrerequisiteGuard,
   targetLabelId,
   targetRuleId,
   values,
@@ -20,6 +21,9 @@ export function buildLegacyConfigurationPlan(
   const labelIds = new Map();
   const ruleIds = new Map();
   const counts = { labels: 0, labelSources: 0, messageLabels: 0, rules: 0, preferences: 0 };
+  for (const mapping of mappings) {
+    statements.push(targetPrerequisiteGuard(mapping));
+  }
   for (const mapping of mappings) {
     for (const label of configuration.labels) {
       const id = targetLabelId(mapping.mailboxId, label.key);

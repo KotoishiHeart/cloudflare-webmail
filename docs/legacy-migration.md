@@ -43,6 +43,46 @@ npm run migrate:legacy -- validate-mapping \
   --mapping ops/legacy-mapping.json
 ```
 
+## Generate the rebuilt directory
+
+Generate a valid current provisioning manifest instead of transcribing the
+archived account catalog by hand. The owner UUID must remain stable, and the
+issuer and subject must be copied from the intended Cloudflare Access identity,
+not inferred from an email claim.
+
+```bash
+npm run migrate:legacy -- provision-template \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --owner-user-id 019c6f3c-6260-7000-8000-000000000001 \
+  --owner-email owner@example.com \
+  --owner-display-name "Migration owner" \
+  --access-issuer https://team.cloudflareaccess.com \
+  --access-subject ACCESS_IDENTITY_SUBJECT \
+  --system-admin \
+  --output ops/provision.legacy.json \
+  --report ops/provision.legacy-review.json
+
+npm run ops -- plan \
+  --manifest ops/provision.legacy.json \
+  --output ops/provision.legacy.sql
+```
+
+The manifest initially assigns one explicitly identified owner to every mapped
+mailbox. Edit and revalidate it if ownership differs. Active local alias or
+representative rows with exactly one mapped local destination are included as
+mailbox aliases. The separate review file preserves account receive/send/kind
+flags, domains, external or multi-target aliases, and archived membership
+suggestions. Resolve every review item before applying the SQL: forwarding,
+quarantine, log-only, DNS, and domain routing are external Cloudflare policy,
+and a membership may be granted only after its exact Access issuer/subject has
+been provisioned. Never treat an archived access email as an authorization key.
+
+The generated SQL must be applied before the converted mail stage. Every stage
+now starts with a prerequisite guard for the mapped mailbox ID, mapped primary
+address, and at least one owner; a missing or conflicting directory entry stops
+the D1 chunk before configuration or message rows are inserted.
+
 ## Snapshot archived raw MIME
 
 The old D1 SQL contains R2 references but no object bodies. Copy only the raw

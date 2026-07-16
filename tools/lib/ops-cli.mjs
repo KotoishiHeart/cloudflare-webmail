@@ -113,7 +113,7 @@ export function parseOptions(args) {
     const token = args[index];
     if (!token?.startsWith('--')) throw new Error(`unexpected argument: ${token}`);
     const key = token.slice(2);
-    if (['yes', 'local', 'remote', 'force', 'help', 'empty-target'].includes(key)) {
+    if (['yes', 'local', 'remote', 'force', 'help', 'empty-target', 'system-admin'].includes(key)) {
       options[key] = true;
       continue;
     }

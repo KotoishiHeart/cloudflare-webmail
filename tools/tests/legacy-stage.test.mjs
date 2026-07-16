@@ -93,6 +93,15 @@ describe('archived current-format stage', () => {
           ) VALUES (?, 'owner-1', 'owner', 1, 1)
         `).run(item.mailboxId);
       }
+      const prerequisiteSql = await readFile(join(stage, manifest.sqlFiles[1].file), 'utf8');
+      assert.throws(() => target.exec(prerequisiteSql), /malformed JSON/u);
+      for (const item of mapping.mappings) {
+        target.prepare(`
+          INSERT INTO mailbox_addresses (
+            address, mailbox_id, kind, status, created_at, updated_at
+          ) VALUES (?, ?, 'primary', 'active', 1, 1)
+        `).run(item.address, item.mailboxId);
+      }
       for (const sqlFile of manifest.sqlFiles) {
         target.exec(await readFile(join(stage, sqlFile.file), 'utf8'));
       }

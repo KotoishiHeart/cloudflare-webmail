@@ -3,7 +3,14 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createLegacyInventory, createLegacyMappingTemplate, loadAndValidateLegacyMapping } from '../lib/legacy-inventory.mjs';
+import {
+  createLegacyInventory,
+  createLegacyMappingTemplate,
+  legacyMappingSha256,
+  loadAndValidateLegacyMapping,
+} from '../lib/legacy-inventory.mjs';
+import { runLegacyMigrationCli } from '../lib/legacy-cli.mjs';
+import { createLegacyProvisioningDraft } from '../lib/legacy-provisioning.mjs';
 import { importLegacySafeSql } from '../lib/legacy-sqlite.mjs';
 
 let root;
@@ -61,6 +68,57 @@ describe('archived SQL isolation', () => {
     await writeFile(mappingPath, `${JSON.stringify(template)}\n`);
     const mapping = await loadAndValidateLegacyMapping(mappingPath, inventory);
     assert.equal(mapping.mappings.length, 2);
+
+    const provisioning = createLegacyProvisioningDraft({
+      database,
+      mapping,
+      mappingSha256: legacyMappingSha256(mapping),
+      owner: {
+        userId: '019c6f3c-6260-7000-8000-000000000001',
+        email: 'owner@example.com',
+        displayName: 'Migration owner',
+        issuer: 'https://team.cloudflareaccess.com',
+        subject: 'owner-subject',
+        systemAdmin: true,
+      },
+      now: 3456,
+    });
+    assert.equal(provisioning.manifest.users.length, 1);
+    assert.equal(provisioning.manifest.mailboxes.length, 2);
+    assert.deepEqual(provisioning.manifest.mailboxes[0].aliases, ['info@example.com']);
+    assert.deepEqual(provisioning.review.generated, { mailboxes: 2, aliases: 1 });
+    assert.equal(provisioning.review.createdAt, 3456);
+    assert.equal(provisioning.review.sourceDatabaseSha256, inventory.source.databaseSha256);
+    assert.equal(provisioning.review.mappingSha256, legacyMappingSha256(mapping));
+    assert.equal(provisioning.review.externalAliases[0].source, 'forward@example.com');
+    assert.match(provisioning.review.externalAliases[0].reason, /forward/u);
+    assert.equal(provisioning.review.domains[0].domain, 'example.com');
+    assert.deepEqual(provisioning.review.membershipSuggestions[0], {
+      sourceAddress: 'first@example.com',
+      mailboxId: mapping.mappings[0].mailboxId,
+      accessEmail: 'operator@example.com',
+      legacyRole: 'user',
+      canSend: true,
+      active: true,
+      suggestedRole: 'operator',
+    });
+
+    const provisionPath = join(root, 'provision.json');
+    const reviewPath = join(root, 'provision-review.json');
+    const output = [];
+    assert.equal(await runLegacyMigrationCli([
+      'provision-template', '--database', database, '--mapping', mappingPath,
+      '--owner-user-id', '019c6f3c-6260-7000-8000-000000000001',
+      '--owner-email', 'owner@example.com',
+      '--access-issuer', 'https://team.cloudflareaccess.com',
+      '--access-subject', 'owner-subject', '--system-admin',
+      '--output', provisionPath, '--report', reviewPath,
+    ], { stdout: (value) => output.push(value) }), 0);
+    const writtenManifest = JSON.parse(await readFile(provisionPath, 'utf8'));
+    const writtenReview = JSON.parse(await readFile(reviewPath, 'utf8'));
+    assert.equal(writtenManifest.users[0].systemAdmin, true);
+    assert.equal(writtenReview.generated.mailboxes, 2);
+    assert.match(output.join(''), /"externalAliases": 1/u);
   });
 
   it('rejects non-backup SQL without leaving a database behind', async () => {
@@ -95,6 +153,16 @@ PRAGMA foreign_keys=OFF;
 DELETE FROM "mail_accounts";
 INSERT INTO "mail_accounts" ("id", "email", "display_name", "is_active") VALUES (1, 'first@example.com', 'First;\nMailbox', 1);
 INSERT INTO "mail_accounts" ("id", "email", "display_name", "is_active") VALUES (2, 'second@example.com', 'Second', 1);
+-- table: mail_domains
+DELETE FROM "mail_domains";
+INSERT INTO "mail_domains" ("id", "domain", "display_name", "webmail_url", "is_active", "created_at", "routing_status", "dns_status", "inbound_policy", "notes") VALUES (1, 'example.com', 'Example', 'https://mail.example.com', 1, 900, 'ready', 'ready', 'reject', 'review DNS');
+-- table: mail_aliases
+DELETE FROM "mail_aliases";
+INSERT INTO "mail_aliases" ("id", "source", "destination", "is_active", "alias_kind", "notes", "created_at") VALUES (1, 'info@example.com', 'first@example.com', 1, 'alias', 'local alias', 901);
+INSERT INTO "mail_aliases" ("id", "source", "destination", "is_active", "alias_kind", "notes", "created_at") VALUES (2, 'forward@example.com', 'outside@example.net', 1, 'forward', 'external forwarding', 902);
+-- table: mail_account_users
+DELETE FROM "mail_account_users";
+INSERT INTO "mail_account_users" ("id", "account_email", "access_email", "role", "can_send", "is_active", "created_at") VALUES (1, 'first@example.com', 'operator@example.com', 'user', 1, 1, 903);
 -- table: messages
 DELETE FROM "messages";
 INSERT INTO "messages" ("id", "direction", "message_id", "raw_sha256", "subject", "sender", "recipients", "cc", "date_header", "received_at", "text_preview", "raw_key", "body_text_key", "body_html_key", "size", "has_attachments", "archived", "compressed", "created_at", "is_read", "starred", "deleted", "deleted_at", "account_email", "bcc", "in_reply_to", "references_header", "source_message_id", "compose_mode", "send_status", "provider") VALUES ('old-1', 'in', '<one@example.net>', '${'a'.repeat(64)}', 'One', 'sender@example.net', 'first@example.com', '', 'date', 1000, 'body', 'raw/one.eml.gz', 'body/one.txt.gz', 'body/one.html.gz', 100, 1, 1, 1, 1001, 1, 1, 0, NULL, 'first@example.com', '', '', '', '', '', '', '');

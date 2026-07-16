@@ -1,12 +1,18 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseOptions } from './ops-cli.mjs';
-import { createLegacyInventory, createLegacyMappingTemplate, loadAndValidateLegacyMapping } from './legacy-inventory.mjs';
+import {
+  createLegacyInventory,
+  createLegacyMappingTemplate,
+  legacyMappingSha256,
+  loadAndValidateLegacyMapping,
+} from './legacy-inventory.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
 import { prepareLegacyMigrationStage } from './legacy-stage.mjs';
 import { verifyMigrationStage } from './migration-stage.mjs';
 import { applyLegacyStageBulk } from './legacy-bulk-apply.mjs';
 import { auditLegacyStageBulk } from './legacy-bulk-audit.mjs';
+import { createLegacyProvisioningDraft } from './legacy-provisioning.mjs';
 
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
@@ -41,6 +47,38 @@ export async function runLegacyMigrationCli(argv, io = {
       ok: true,
       mappedAccounts: mapping.mappings.length,
       excludedAccounts: mapping.exclusions.length,
+    }, null, 2)}\n`);
+    return 0;
+  }
+  if (command === 'provision-template') {
+    const database = required(options, 'database');
+    const inventory = createLegacyInventory(database);
+    const mapping = await loadAndValidateLegacyMapping(required(options, 'mapping'), inventory);
+    const output = required(options, 'output');
+    const report = required(options, 'report');
+    await Promise.all([requireMissing(output), requireMissing(report)]);
+    const result = createLegacyProvisioningDraft({
+      database,
+      mapping,
+      mappingSha256: legacyMappingSha256(mapping),
+      owner: {
+        userId: required(options, 'owner-user-id'),
+        email: required(options, 'owner-email'),
+        displayName: typeof options['owner-display-name'] === 'string'
+          ? options['owner-display-name'] : undefined,
+        issuer: required(options, 'access-issuer'),
+        subject: required(options, 'access-subject'),
+        systemAdmin: Boolean(options['system-admin']),
+      },
+    });
+    await writeExclusive(output, result.manifest);
+    await writeExclusive(report, result.review);
+    io.stdout(`${JSON.stringify({
+      ok: true,
+      mailboxes: result.manifest.mailboxes.length,
+      aliases: result.review.generated.aliases,
+      externalAliases: result.review.externalAliases.length,
+      membershipSuggestions: result.review.membershipSuggestions.length,
     }, null, 2)}\n`);
     return 0;
   }
@@ -164,6 +202,10 @@ function usage() {
     `  inventory --database legacy.sqlite --output inventory.json \\\n` +
     `    [--mapping-template mapping.json]\n` +
     `  validate-mapping --database legacy.sqlite --mapping mapping.json\n` +
+    `  provision-template --database legacy.sqlite --mapping mapping.json \\\n` +
+    `    --owner-user-id UUID --owner-email EMAIL --access-issuer URL \\\n` +
+    `    --access-subject SUBJECT [--system-admin] --output provision.json \\\n` +
+    `    --report provisioning-review.json\n` +
     `  fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
     `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
     `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +

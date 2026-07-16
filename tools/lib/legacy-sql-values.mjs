@@ -17,6 +17,20 @@ export function ownerSql(mailboxId) {
     WHERE mailbox_id = ${q(mailboxId)} AND role = 'owner' ORDER BY user_id LIMIT 1`;
 }
 
+export function targetPrerequisiteGuard(mapping) {
+  return guard(`NOT EXISTS (
+    SELECT 1 FROM mailboxes AS m
+    JOIN mailbox_addresses AS a ON a.mailbox_id = m.id
+    WHERE m.id = ${q(mapping.mailboxId)}
+      AND a.address = ${q(mapping.address)} COLLATE NOCASE
+      AND a.kind = 'primary'
+      AND EXISTS (
+        SELECT 1 FROM mailbox_memberships AS mm
+        WHERE mm.mailbox_id = m.id AND mm.role = 'owner'
+      )
+  )`);
+}
+
 export function guard(conflictExpression) {
   return sql(`SELECT CASE WHEN ${conflictExpression.trim()}
     THEN json_extract('CF_WEBMAIL_MIGRATION_CONFLICT', '$') ELSE 1 END`);

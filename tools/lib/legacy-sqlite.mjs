@@ -35,6 +35,19 @@ const REQUIRED_COLUMNS = {
     'last_run_at', 'created_at', 'updated_at',
   ],
   app_settings: ['key', 'value', 'updated_at'],
+  mail_aliases: [
+    'id', 'source', 'destination', 'is_active', 'alias_kind', 'notes',
+    'created_at', 'updated_at',
+  ],
+  mail_domains: [
+    'id', 'domain', 'display_name', 'webmail_url', 'is_active', 'created_at',
+    'updated_at', 'routing_status', 'dns_status', 'inbound_policy', 'notes',
+    'last_checked_at',
+  ],
+  mail_account_users: [
+    'id', 'account_email', 'access_email', 'role', 'can_send', 'is_active',
+    'created_at', 'updated_at',
+  ],
 };
 
 export async function importLegacySafeSql(options) {

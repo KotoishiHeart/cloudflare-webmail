@@ -64,6 +64,10 @@ deployment. Require:
 
 - zero unexplained source inventory or relational-integrity failures;
 - every nonempty archived account mapped or explicitly excluded with reason;
+- a generated provisioning review with every account policy, domain, external
+  alias, and membership suggestion explicitly resolved;
+- every mapped mailbox ID and primary address provisioned with at least one
+  verified Access-backed owner before any migration chunk is applied;
 - a fully verified archived raw snapshot and complete conversion stage;
 - successful download-based R2 comparison;
 - matching per-account D1 message, direction, flag, attachment, and object
