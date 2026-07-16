@@ -1,0 +1,9 @@
+{
+  "name": "@cf-webmail/jobs",
+  "version": "3.0.0-dev.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cf-webmail/contracts": "3.0.0-dev.1"
+  }
+}
