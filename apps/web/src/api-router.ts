@@ -14,6 +14,14 @@ import {
 } from './message-object-api.js';
 import { getSession } from './session-api.js';
 import {
+  createLabel,
+  getLabels,
+  patchLabel,
+  putMessageLabels,
+  removeLabel,
+} from './label-api.js';
+import { preferencesResponse } from './preferences-api.js';
+import {
   createOutboundMessage,
   OutboundQueueUnavailableError,
 } from './outbound-api.js';
@@ -48,6 +56,9 @@ async function routeKnownApi(
   now: number,
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  if (pathname === '/api/preferences') {
+    return preferencesResponse(request, env.DB, identity, now);
+  }
   if (pathname === '/api/session') {
     return request.method === 'GET'
       ? getSession(env.DB, identity)
@@ -63,6 +74,46 @@ async function routeKnownApi(
       return createOutboundMessage(request, env, identity, mailboxList[1] ?? '', now);
     }
     return apiError('method_not_allowed', 405, 'GET, POST');
+  }
+
+  const mailboxLabels = pathname.match(/^\/api\/mailboxes\/([^/]+)\/labels$/u);
+  if (mailboxLabels !== null) {
+    if (request.method === 'GET') return getLabels(env.DB, identity, mailboxLabels[1] ?? '');
+    if (request.method === 'POST') {
+      return createLabel(request, env.DB, identity, mailboxLabels[1] ?? '', now);
+    }
+    return apiError('method_not_allowed', 405, 'GET, POST');
+  }
+
+  const mailboxLabel = pathname.match(/^\/api\/mailboxes\/([^/]+)\/labels\/([^/]+)$/u);
+  if (mailboxLabel !== null) {
+    if (request.method === 'PATCH') {
+      return patchLabel(
+        request,
+        env.DB,
+        identity,
+        mailboxLabel[1] ?? '',
+        mailboxLabel[2] ?? '',
+        now,
+      );
+    }
+    if (request.method === 'DELETE') {
+      return removeLabel(
+        request,
+        env.DB,
+        identity,
+        mailboxLabel[1] ?? '',
+        mailboxLabel[2] ?? '',
+      );
+    }
+    return apiError('method_not_allowed', 405, 'PATCH, DELETE');
+  }
+
+  const messageLabels = pathname.match(/^\/api\/messages\/([^/]+)\/labels$/u);
+  if (messageLabels !== null) {
+    return request.method === 'PUT'
+      ? putMessageLabels(request, env.DB, identity, messageLabels[1] ?? '', now)
+      : apiError('method_not_allowed', 405, 'PUT');
   }
 
   const attachment = pathname.match(/^\/api\/messages\/([^/]+)\/attachments\/(\d+)$/u);

@@ -3,6 +3,8 @@ import {
   getAuthorizedWebMessage,
   isWebMailboxFolder,
   listWebMessageAttachments,
+  listMessageLabels,
+  listLabelsForMessages,
   listWebMessages,
   mailboxRoleGrants,
   updateWebMessageFlags,
@@ -30,7 +32,20 @@ export async function getMessageList(
     mailboxId,
     messageListQueryFromUrl(url, folderInput, now),
   );
-  return apiData({ mailboxId, folder: folderInput, ...page });
+  const labels = await listLabelsForMessages(
+    db,
+    mailboxId,
+    page.messages.map((message) => message.id),
+  );
+  return apiData({
+    mailboxId,
+    folder: folderInput,
+    ...page,
+    messages: page.messages.map((message) => ({
+      ...message,
+      labels: labels[message.id] ?? [],
+    })),
+  });
 }
 
 export async function getMessageDetail(
@@ -41,6 +56,7 @@ export async function getMessageDetail(
   const message = await getAuthorizedWebMessage(db, identity, messageId);
   if (message === null) return apiError('message_not_found', 404);
   const attachments = await listWebMessageAttachments(db, messageId);
+  const labels = await listMessageLabels(db, message.mailboxId, messageId);
   return apiData({
     message: publicMessage(message),
     attachments: attachments.map((attachment) => ({
@@ -53,6 +69,7 @@ export async function getMessageDetail(
       sha256: attachment.sha256,
       downloadUrl: `/api/messages/${messageId}/attachments/${attachment.ordinal}`,
     })),
+    labels,
   });
 }
 

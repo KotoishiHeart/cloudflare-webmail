@@ -90,6 +90,7 @@ export type WebMessageSearchFilters = {
   minimumBytes: number | null;
   maximumBytes: number | null;
   quickFilter: WebMessageQuickFilter;
+  labelId: string;
   todayStart: number;
   sevenDaysAgo: number;
 };

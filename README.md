@@ -48,6 +48,12 @@ Assets. HTML mail is parser-sanitized by the Worker, stripped of remote
 requests and active content, and displayed only in a restricted sandbox iframe;
 it is never inserted into the application DOM.
 
+Shared labels are scoped to one mailbox and protected by composite D1 foreign
+keys; readers can see them, operators can label messages, and owners manage the
+vocabulary. UI preferences are keyed by the stable internal user ID resolved
+from Access identity claims. The isolation rationale is recorded in
+[`docs/adr/0011-mailbox-labels-and-user-preferences.md`](docs/adr/0011-mailbox-labels-and-user-preferences.md).
+
 ## Development
 
 ```bash

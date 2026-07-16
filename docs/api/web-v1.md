@@ -16,6 +16,11 @@ JWT. A missing or invalid token is rejected before routing. JSON responses use
 | `GET` | `/api/messages/:id/raw` | read | Original RFC 822 download stream |
 | `GET` | `/api/messages/:id/attachments/:ordinal` | read | Forced binary download stream |
 | `PATCH` | `/api/messages/:id` | operate | Update read, starred, archived, or deleted flags |
+| `GET` | `/api/mailboxes/:id/labels` | read | List mailbox labels and message counts |
+| `POST` | `/api/mailboxes/:id/labels` | manage | Create a mailbox label |
+| `PATCH, DELETE` | `/api/mailboxes/:id/labels/:labelId` | manage | Update or remove a mailbox label |
+| `PUT` | `/api/messages/:id/labels` | operate | Replace manual label assignments |
+| `GET, PATCH` | `/api/preferences` | linked identity | Read or update validated user preferences |
 
 The list route accepts
 `folder=inbox|outbox|sent|starred|archive|trash|all`, a limit from 1
@@ -40,6 +45,16 @@ fields. The entire request is bounded to 22 MiB before multipart parsing.
 Uploads allow at most eight files, 10 MiB per file, and 20 MiB combined;
 executable and script extensions or MIME types are rejected. Calls without
 files continue to use the JSON representation.
+
+The message list accepts an optional `label` UUID and returns the labels for
+each message. Label names are unique only within one mailbox. Label mutations
+require a matching `Origin`; deleting a label also removes its assignments.
+`PUT /api/messages/:id/labels` accepts `{ "labelIds": [...] }` with at most 20
+IDs, all from the message mailbox.
+
+Preference patches accept only `theme`, `pageSize`, `defaultFolder`,
+`showHtmlByDefault`, and `compactLayout`. Unknown or invalid fields reject the
+entire request rather than being silently ignored.
 
 Unauthorized message IDs return the same not-found response as nonexistent
 IDs. Responses never expose R2 storage keys.

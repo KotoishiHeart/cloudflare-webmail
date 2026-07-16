@@ -1,5 +1,6 @@
 import {
   WEB_MESSAGE_QUICK_FILTERS,
+  normalizeId,
   type WebMessageListQuery,
 } from '@cf-webmail/database';
 import { ApiInputError, cursorFromUrl, limitFromUrl } from './api-input.js';
@@ -21,6 +22,8 @@ export function messageListQueryFromUrl(
   const quickFilter = enumParam(url, 'filter', WEB_MESSAGE_QUICK_FILTERS, 'all');
   const minimumBytes = kilobytesParam(url, 'minKb');
   const maximumBytes = kilobytesParam(url, 'maxKb');
+  const labelInput = boundedParam(url, 'label', 128);
+  const labelId = labelInput === '' ? '' : normalizeId(labelInput, 'label');
   if (minimumBytes !== null && maximumBytes !== null && minimumBytes > maximumBytes) {
     throw new ApiInputError('minKb must not exceed maxKb');
   }
@@ -42,6 +45,7 @@ export function messageListQueryFromUrl(
       minimumBytes,
       maximumBytes,
       quickFilter,
+      labelId,
       todayStart: startOfTodayJst(now),
       sevenDaysAgo: now - 7 * 24 * 60 * 60 * 1000,
     },

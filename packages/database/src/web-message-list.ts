@@ -114,6 +114,13 @@ function appendSearchConditions(
     conditions.push('m.raw_size <= ?');
     params.push(filters.maximumBytes);
   }
+  if (filters.labelId !== '') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM message_labels AS ml
+      WHERE ml.message_id = m.id AND ml.mailbox_id = m.mailbox_id AND ml.label_id = ?
+    )`);
+    params.push(filters.labelId);
+  }
   appendQuickFilter(conditions, params, filters);
 }
 
