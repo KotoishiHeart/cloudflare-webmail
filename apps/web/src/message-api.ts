@@ -106,6 +106,10 @@ function publicMessage(message: WebMessageDetail) {
     bodyUrl: message.bodyTextKey !== null || message.bodyHtmlKey !== null
       ? `/api/messages/${message.id}/body`
       : null,
+    bodyTextUrl: message.bodyTextKey === null ? null : `/api/messages/${message.id}/body`,
+    bodyHtmlUrl: message.bodyHtmlKey === null
+      ? null
+      : `/api/messages/${message.id}/body?format=html`,
     rawUrl: `/api/messages/${message.id}/raw`,
   };
 }

@@ -124,7 +124,7 @@ async function openMessage(messageId) {
   showDetailLoading();
   try {
     const detail = await getMessage(messageId);
-    const body = await getMessageBody(detail.message.bodyUrl);
+    const body = await getMessageBody(detail.message);
     if (state.selectedMessageId !== messageId) return;
     showMessageDetail(detail, body, (patch) => applyPatch(messageId, patch));
   } catch (error) {

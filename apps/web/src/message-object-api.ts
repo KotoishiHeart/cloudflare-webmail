@@ -4,19 +4,34 @@ import {
 } from '@cf-webmail/database';
 import type { AccessIdentity } from './access-auth.js';
 import { apiError, objectHeaders } from './api-response.js';
+import { sanitizeEmailHtml } from './html-sanitizer.js';
+
+const MAX_HTML_DISPLAY_BYTES = 2 * 1024 * 1024;
 
 export async function getMessageBody(
   bucket: R2Bucket,
   db: D1Database,
   identity: AccessIdentity,
   messageId: string,
+  format: 'text' | 'html' = 'text',
 ): Promise<Response> {
   const message = await getAuthorizedWebMessage(db, identity, messageId);
   if (message === null) return apiError('message_not_found', 404);
-  const key = message.bodyTextKey ?? message.bodyHtmlKey;
+  const key = format === 'html'
+    ? message.bodyHtmlKey
+    : (message.bodyTextKey ?? message.bodyHtmlKey);
   if (key === null) return apiError('message_body_not_available', 404);
   const object = await bucket.get(key);
   if (object === null) return apiError('message_body_missing', 404);
+  if (format === 'html') {
+    if (object.size > MAX_HTML_DISPLAY_BYTES) return apiError('message_html_too_large', 413);
+    const sanitized = await sanitizeEmailHtml(await object.text());
+    const headers = objectHeaders('text/html; charset=utf-8');
+    headers.set('content-security-policy', "default-src 'none'; frame-ancestors 'none'; sandbox");
+    headers.set('referrer-policy', 'no-referrer');
+    headers.set('x-webmail-body-source', 'sanitized-html');
+    return new Response(sanitized, { headers });
+  }
   const headers = objectHeaders('text/plain; charset=utf-8');
   headers.set('x-webmail-body-source', message.bodyTextKey === null ? 'html-source' : 'text');
   return new Response(object.body, { headers });

@@ -59,6 +59,13 @@ describe('authorized webmail API', () => {
     const raw = await env.RAW_EMAILS.put(`${PREFIX}/raw.eml`, 'raw web message');
     if (raw === null) throw new Error('expected raw R2 object metadata');
     await env.RAW_EMAILS.put(`${PREFIX}/body.txt`, 'hello from the web API');
+    await env.RAW_EMAILS.put(`${PREFIX}/body.html`, [
+      '<html><head><style>body{background:url(https://tracker.example/style)}</style></head>',
+      '<body onload="alert(1)"><p style="color:red">Safe HTML body</p>',
+      '<script>alert(2)</script><img src="https://tracker.example/pixel">',
+      '<a href="jav&#x61;script:alert(3)" onclick="alert(4)">bad link</a>',
+      '<a href="https://safe.example/path">safe link</a></body></html>',
+    ].join(''));
     await env.RAW_EMAILS.put(`${PREFIX}/attachments/000`, 'notes file');
     await persistInboundMessage(env.DB, {
       id: MESSAGE_ID,
@@ -83,7 +90,7 @@ describe('authorized webmail API', () => {
       rawEtag: raw.etag,
       rawSize: 15,
       bodyTextKey: `${PREFIX}/body.txt`,
-      bodyHtmlKey: null,
+      bodyHtmlKey: `${PREFIX}/body.html`,
       attachments: [{
         ordinal: 0,
         filename: 'notes 日本語.txt',
@@ -122,6 +129,7 @@ describe('authorized webmail API', () => {
     expect(detail.status).toBe(200);
     const detailText = await detail.text();
     expect(detailText).toContain(`/api/messages/${MESSAGE_ID}/body`);
+    expect(detailText).toContain(`/api/messages/${MESSAGE_ID}/body?format=html`);
     expect(detailText).toContain('notes 日本語.txt');
     expect(detailText).not.toContain(PREFIX);
   });
@@ -175,6 +183,34 @@ describe('authorized webmail API', () => {
     expect(attachment.headers.get('content-type')).toBe('application/octet-stream');
     expect(attachment.headers.get('content-disposition')).toContain("filename*=UTF-8''");
     expect(new TextDecoder().decode(await attachment.arrayBuffer())).toBe('notes file');
+  });
+
+  it('sanitizes HTML and blocks remote content before sandbox display', async () => {
+    const response = await webRequest(
+      `/api/messages/${MESSAGE_ID}/body?format=html`,
+      {},
+      VIEWER,
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/html');
+    expect(response.headers.get('x-webmail-body-source')).toBe('sanitized-html');
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+    const html = await response.text();
+    expect(html).toContain('Safe HTML body');
+    expect(html).toContain('https://safe.example/path');
+    expect(html).toContain('target="_blank"');
+    expect(html).not.toContain('tracker.example');
+    expect(html).not.toContain('javascript:');
+    expect(html).not.toContain('onclick');
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('alert(2)');
+
+    const invalid = await webRequest(
+      `/api/messages/${MESSAGE_ID}/body?format=xml`,
+      {},
+      OWNER,
+    );
+    expect(invalid.status).toBe(400);
   });
 
   it('allows operators to change flags but rejects viewers and cross-origin requests', async () => {

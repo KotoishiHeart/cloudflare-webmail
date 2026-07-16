@@ -40,8 +40,9 @@ attachments yet.
 The web Worker independently verifies the Cloudflare Access application JWT,
 maps its issuer and subject to D1 memberships, exposes a bounded JSON and
 streaming API, and serves the browser application through Workers Static
-Assets. HTML mail is shown as source text in this stage instead of being
-inserted into the page DOM.
+Assets. HTML mail is parser-sanitized by the Worker, stripped of remote
+requests and active content, and displayed only in a restricted sandbox iframe;
+it is never inserted into the application DOM.
 
 ## Development
 

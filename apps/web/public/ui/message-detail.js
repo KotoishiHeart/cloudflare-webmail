@@ -20,7 +20,7 @@ export function showMessageDetail(detail, body, onPatch) {
   setText('#detail-recipients', message.recipients || message.deliveredTo);
   setText('#detail-cc', message.cc);
   document.querySelector('#detail-cc-row').hidden = !message.cc;
-  setText('#detail-body', body.text);
+  renderBody(message, body);
   const rawLink = document.querySelector('#raw-link');
   rawLink.href = message.rawUrl;
   renderActions(message, onPatch);
@@ -35,6 +35,7 @@ export function showDetailLoading() {
   setText('#detail-state', '読み込み中');
   setText('#detail-subject', 'メッセージを読み込んでいます…');
   setText('#detail-body', '');
+  clearHtmlBody();
   actions.replaceChildren();
   attachmentSection.hidden = true;
 }
@@ -43,6 +44,43 @@ export function closeMessageDetail() {
   panel.classList.remove('open');
   content.hidden = true;
   placeholder.hidden = false;
+  clearHtmlBody();
+}
+
+function renderBody(message, body) {
+  const frame = document.querySelector('#detail-html');
+  const text = document.querySelector('#detail-body');
+  const modes = document.querySelector('#body-modes');
+  const showHtml = document.querySelector('#show-html-body');
+  const showText = document.querySelector('#show-text-body');
+  text.textContent = body.text || (body.html ? '' : '本文は保存されていません。');
+  frame.title = `HTMLメール本文: ${message.subject || '件名なし'}`;
+  frame.srcdoc = body.html || '';
+  modes.hidden = body.html === null || body.text === '';
+  const selectHtml = () => {
+    frame.hidden = body.html === null;
+    text.hidden = body.html !== null;
+    showHtml.disabled = body.html !== null;
+    showText.disabled = false;
+  };
+  const selectText = () => {
+    frame.hidden = true;
+    text.hidden = false;
+    showHtml.disabled = false;
+    showText.disabled = true;
+  };
+  showHtml.onclick = selectHtml;
+  showText.onclick = selectText;
+  if (body.html !== null) selectHtml();
+  else selectText();
+}
+
+function clearHtmlBody() {
+  const frame = document.querySelector('#detail-html');
+  frame.srcdoc = '';
+  frame.hidden = true;
+  document.querySelector('#detail-body').hidden = false;
+  document.querySelector('#body-modes').hidden = true;
 }
 
 function renderActions(message, onPatch) {
@@ -93,7 +131,7 @@ function statusLabel(message, bodySource) {
   if (message.status === 'sending') return '送信処理中';
   if (message.status === 'sent') return '送信済み';
   if (message.status === 'failed') return `送信失敗${message.processingError ? ` (${message.processingError})` : ''}`;
-  if (bodySource === 'html-source') return 'HTMLソースを安全なテキストで表示';
+  if (bodySource === 'sanitized-html') return 'HTML本文を安全なsandboxで表示';
   return message.isRead ? '既読' : '未読';
 }
 

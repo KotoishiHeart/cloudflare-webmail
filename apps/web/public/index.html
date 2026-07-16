@@ -122,6 +122,13 @@
               <div id="detail-cc-row"><dt>CC</dt><dd id="detail-cc"></dd></div>
             </dl>
             <div id="detail-actions" class="detail-actions"></div>
+            <div id="body-modes" class="body-modes" hidden>
+              <button id="show-html-body" type="button">HTML表示</button>
+              <button id="show-text-body" type="button">テキスト表示</button>
+            </div>
+            <iframe id="detail-html" class="mailframe" title="HTMLメール本文"
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              referrerpolicy="no-referrer" hidden></iframe>
             <pre id="detail-body" class="message-body"></pre>
             <section id="attachment-section" class="attachments" hidden>
               <h3>添付ファイル</h3>

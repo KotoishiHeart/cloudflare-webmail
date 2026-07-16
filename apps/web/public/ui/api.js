@@ -27,12 +27,33 @@ export async function getMessage(messageId) {
   return requestJson(`/api/messages/${encodeURIComponent(messageId)}`);
 }
 
-export async function getMessageBody(bodyUrl) {
-  if (!bodyUrl) return { text: '本文は保存されていません。', source: 'missing' };
-  const response = await fetch(bodyUrl, { headers: { accept: 'text/plain' } });
+export async function getMessageBody(message) {
+  const [textResult, htmlResult] = await Promise.allSettled([
+    fetchBody(message.bodyTextUrl, 'text/plain'),
+    fetchBody(message.bodyHtmlUrl, 'text/html'),
+  ]);
+  const text = textResult.status === 'fulfilled' ? textResult.value : null;
+  const html = htmlResult.status === 'fulfilled' ? htmlResult.value : null;
+  if (text === null && html === null) {
+    const failure = textResult.status === 'rejected'
+      ? textResult.reason
+      : htmlResult.status === 'rejected' ? htmlResult.reason : null;
+    if (failure) throw failure;
+    return { text: '本文は保存されていません。', html: null, source: 'missing' };
+  }
+  return {
+    text: text?.content ?? '',
+    html: html?.content ?? null,
+    source: html?.source ?? text?.source ?? 'missing',
+  };
+}
+
+async function fetchBody(url, accept) {
+  if (!url) return null;
+  const response = await fetch(url, { headers: { accept } });
   if (!response.ok) throw await responseError(response);
   return {
-    text: await response.text(),
+    content: await response.text(),
     source: response.headers.get('x-webmail-body-source') || 'text',
   };
 }

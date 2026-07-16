@@ -5,6 +5,7 @@ const SECURITY_HEADERS = {
     "connect-src 'self'",
     "font-src 'self'",
     "form-action 'self'",
+    "frame-src 'self'",
     "frame-ancestors 'none'",
     "img-src 'self' data:",
     "object-src 'none'",

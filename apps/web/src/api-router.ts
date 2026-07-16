@@ -85,9 +85,20 @@ async function routeKnownApi(
   const object = pathname.match(/^\/api\/messages\/([^/]+)\/(body|raw)$/u);
   if (object !== null) {
     if (request.method !== 'GET') return apiError('method_not_allowed', 405, 'GET');
-    return object[2] === 'body'
-      ? getMessageBody(env.RAW_EMAILS, env.DB, identity, object[1] ?? '')
-      : downloadRawMessage(env.RAW_EMAILS, env.DB, identity, object[1] ?? '');
+    if (object[2] === 'body') {
+      const requestedFormat = new URL(request.url).searchParams.get('format');
+      if (requestedFormat !== null && requestedFormat !== 'text' && requestedFormat !== 'html') {
+        return apiError('invalid_request', 400);
+      }
+      return getMessageBody(
+        env.RAW_EMAILS,
+        env.DB,
+        identity,
+        object[1] ?? '',
+        requestedFormat === 'html' ? 'html' : 'text',
+      );
+    }
+    return downloadRawMessage(env.RAW_EMAILS, env.DB, identity, object[1] ?? '');
   }
 
   const message = pathname.match(/^\/api\/messages\/([^/]+)$/u);

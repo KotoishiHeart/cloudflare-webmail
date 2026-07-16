@@ -127,6 +127,10 @@
 .detail-actions button { border: 1px solid var(--line); border-radius: 999px; padding: 0.45rem 0.75rem; background: white; cursor: pointer; font-size: 0.72rem; }
 .detail-actions button.danger { color: var(--danger); }
 .message-body { min-height: 12rem; margin: 1.6rem 0; border: 0; padding: 0; color: #263b34; background: transparent; font: 0.88rem/1.8 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.body-modes { display: flex; gap: 0.4rem; margin-top: 1.2rem; }
+.body-modes button { border: 1px solid var(--line); border-radius: 999px; padding: 0.4rem 0.7rem; background: white; cursor: pointer; font-size: 0.7rem; }
+.body-modes button:disabled { color: white; background: var(--forest); cursor: default; }
+.mailframe { width: 100%; min-height: 24rem; margin: 1rem 0; border: 1px solid var(--line); border-radius: 12px; background: white; }
 
 .attachments { margin-top: 2rem; }
 .attachments h3 { font-size: 0.8rem; }
