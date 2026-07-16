@@ -13,7 +13,14 @@ import type { AccessIdentity } from './access-auth.js';
 import { ApiInputError, requestIsSameOrigin } from './api-input.js';
 import { apiData, apiError } from './api-response.js';
 import { readComposeInput } from './compose-input.js';
-import { buildOutboundArchive, MAX_OUTBOUND_ARCHIVE_BYTES } from './outbound-archive.js';
+import {
+  buildOutboundArchive,
+  emailServiceContentBytes,
+  MAX_EMAIL_SERVICE_CONTENT_BYTES,
+  MAX_OUTBOUND_ARCHIVE_BYTES,
+  MAX_OUTBOUND_ARCHIVE_SOURCE_BYTES,
+  prepareArchiveForStorage,
+} from './outbound-archive.js';
 
 type OutboundApiEnv = Pick<Env, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>;
 
@@ -54,21 +61,48 @@ export async function createOutboundMessage(
     thread,
     now,
   );
-  if (archive.raw.byteLength > MAX_OUTBOUND_ARCHIVE_BYTES) {
-    throw new ApiInputError('composed message exceeds the 5 MiB Email Service limit');
+  if (archive.raw.byteLength > MAX_OUTBOUND_ARCHIVE_SOURCE_BYTES) {
+    throw new ApiInputError('composed MIME archive exceeds the source size limit');
+  }
+  if (emailServiceContentBytes(input, archive.html) > MAX_EMAIL_SERVICE_CONTENT_BYTES) {
+    throw new ApiInputError('composed message exceeds the Email Service content limit');
+  }
+  const storedArchive = await prepareArchiveForStorage(archive, input.attachments.length > 0);
+  if (storedArchive.body.byteLength > MAX_OUTBOUND_ARCHIVE_BYTES) {
+    throw new ApiInputError('stored MIME archive exceeds the 25 MiB limit');
   }
   const prefix = `mailboxes/${context.mailboxId}/messages/${messageId}`;
-  const rawKey = `${prefix}/raw.eml`;
+  const rawKey = `${prefix}/raw.eml${storedArchive.encoding === 'gzip' ? '.gz' : ''}`;
   const bodyTextKey = `${prefix}/body.txt`;
   const bodyHtmlKey = `${prefix}/body.html`;
-  const objectKeys = [rawKey, bodyTextKey, bodyHtmlKey];
+  const attachmentRecords = input.attachments.map((attachment, ordinal) => ({
+    ordinal,
+    filename: attachment.filename,
+    contentType: attachment.contentType,
+    size: attachment.size,
+    sha256: attachment.sha256,
+    storageKey: `${prefix}/attachments/${ordinal.toString().padStart(3, '0')}`,
+    createdAt: now,
+  }));
+  const objectKeys = [
+    rawKey,
+    bodyTextKey,
+    bodyHtmlKey,
+    ...attachmentRecords.map((attachment) => attachment.storageKey),
+  ];
   const rawSha256 = await sha256Hex(archive.raw);
 
   let persisted = false;
   try {
-    const rawObject = await env.RAW_EMAILS.put(rawKey, archive.raw, {
+    const rawObject = await env.RAW_EMAILS.put(rawKey, storedArchive.body, {
       httpMetadata: { contentType: 'message/rfc822' },
-      customMetadata: outboundMetadata(messageId, context.mailboxId, 'raw', rawSha256),
+      customMetadata: outboundMetadata(
+        messageId,
+        context.mailboxId,
+        'raw',
+        rawSha256,
+        storedArchive.encoding,
+      ),
     });
     await env.RAW_EMAILS.put(bodyTextKey, input.text, {
       httpMetadata: { contentType: 'text/plain; charset=utf-8' },
@@ -78,6 +112,20 @@ export async function createOutboundMessage(
       httpMetadata: { contentType: 'text/html; charset=utf-8' },
       customMetadata: outboundMetadata(messageId, context.mailboxId, 'body-html'),
     });
+    for (const [ordinal, attachment] of input.attachments.entries()) {
+      const record = attachmentRecords[ordinal];
+      if (record === undefined) throw new Error('attachment record is missing');
+      const object = await env.RAW_EMAILS.put(record.storageKey, attachment.bytes, {
+        httpMetadata: { contentType: attachment.contentType },
+        customMetadata: outboundMetadata(
+          messageId,
+          context.mailboxId,
+          'attachment',
+          attachment.sha256,
+        ),
+      });
+      if (object.size !== attachment.size) throw new Error('R2 attachment size mismatch');
+    }
     const result = await persistOutboundMessage(env.DB, {
       id: messageId,
       mailboxId: context.mailboxId,
@@ -91,11 +139,12 @@ export async function createOutboundMessage(
       rawKey,
       rawSha256,
       rawEtag: rawObject.etag,
-      rawSize: archive.raw.byteLength,
+      rawSize: rawObject.size,
       bodyTextKey,
       bodyHtmlKey,
       archiveMessageId: archive.archiveMessageId,
       ...thread,
+      attachments: attachmentRecords,
       createdAt: now,
     });
     persisted = result.created;
@@ -144,6 +193,7 @@ function outboundMetadata(
   mailboxId: string,
   kind: string,
   sha256?: string,
+  encoding?: string,
 ): Record<string, string> {
   return {
     schemaVersion: '1',
@@ -152,11 +202,14 @@ function outboundMetadata(
     mailboxId,
     kind,
     ...(sha256 === undefined ? {} : { sha256 }),
+    ...(encoding === undefined || encoding === '' ? {} : { encoding }),
   };
 }
 
 async function sha256Hex(value: Uint8Array): Promise<string> {
-  const source = value.slice().buffer;
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', source));
+  const digest = new Uint8Array(await crypto.subtle.digest(
+    'SHA-256',
+    value as Uint8Array<ArrayBuffer>,
+  ));
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }

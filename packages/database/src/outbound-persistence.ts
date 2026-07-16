@@ -16,6 +16,10 @@ import {
   requireTimestamp,
 } from './validation.js';
 import { requireSha256 } from './message-queries.js';
+import {
+  prepareOutboundAttachmentInserts,
+  validateOutboundAttachments,
+} from './outbound-attachments.js';
 
 type ComposeContextRow = {
   user_id: string;
@@ -102,6 +106,7 @@ export async function persistOutboundMessage(
   for (const recipient of record.recipients) {
     statements.push(prepareRecipientInsert(db, record.id, recipient));
   }
+  statements.push(...prepareOutboundAttachmentInserts(db, record.id, record.attachments));
   statements.push(prepareCompositionInsert(db, record));
   statements.push(prepareDeliveryInsert(db, record));
 
@@ -151,7 +156,7 @@ function prepareOutboundMessageInsert(
       ?, ?, ?, ?, ?,
       ?, ?, ?, ?, '', ?, ?,
       ?, ?, ?, ?, ?,
-      ?, ?, 0,
+      ?, ?, ?,
       1, ?, ?
     )
   `).bind(
@@ -175,6 +180,7 @@ function prepareOutboundMessageInsert(
     record.rawSize,
     record.bodyTextKey,
     record.bodyHtmlKey,
+    record.attachments.length,
     record.createdAt,
     record.createdAt,
   );
@@ -252,8 +258,8 @@ function validateOutboundRecord(record: OutboundMessageRecord): void {
   if (record.inReplyTo.length > 998 || record.referencesHeader.length > 2048) {
     throw new DatabaseInputError('threadHeaders', 'exceed the Email Service header limit');
   }
-  if (record.rawSize < 0 || record.rawSize > 5 * 1024 * 1024) {
-    throw new DatabaseInputError('rawSize', 'must not exceed 5 MiB');
+  if (record.rawSize < 0 || record.rawSize > 25 * 1024 * 1024) {
+    throw new DatabaseInputError('rawSize', 'must not exceed 25 MiB');
   }
   if (record.recipients.length < 1 || record.recipients.length > 50) {
     throw new DatabaseInputError('recipients', 'must contain between 1 and 50 addresses');
@@ -261,6 +267,7 @@ function validateOutboundRecord(record: OutboundMessageRecord): void {
   for (const recipient of record.recipients) {
     normalizeEmailAddress(recipient.address, `${recipient.kind}[${recipient.ordinal}]`);
   }
+  validateOutboundAttachments(record.attachments);
 }
 
 function recipientsOfKind(

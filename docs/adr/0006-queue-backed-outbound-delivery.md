@@ -42,5 +42,5 @@ retry an ambiguous compose request with the same idempotency key.
   and documented because the provider API has no caller idempotency key.
 - BCC recipients are normalized in the delivery table and omitted from the
   archived MIME headers and regular message summary.
-- The first outbound slice supports text composition only. Attachments require
-  a separate bounded upload flow and are not accepted silently.
+- Attachments use a separate bounded multipart upload and R2 integrity flow;
+  provider-specific base64 JSON is never placed on the Queue.

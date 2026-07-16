@@ -67,7 +67,17 @@ export async function patchMessage(messageId, patch) {
 }
 
 export async function createMessage(mailboxId, input) {
-  const { requestId, ...message } = input;
+  const { requestId, attachments = [], ...message } = input;
+  if (attachments.length > 0) {
+    const form = new FormData();
+    form.set('payload', JSON.stringify(message));
+    for (const attachment of attachments) form.append('attachments', attachment);
+    return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/messages`, {
+      method: 'POST',
+      headers: { 'idempotency-key': requestId },
+      body: form,
+    });
+  }
   return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/messages`, {
     method: 'POST',
     headers: {

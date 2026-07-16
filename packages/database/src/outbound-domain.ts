@@ -18,6 +18,16 @@ export type OutboundRecipient = {
   address: string;
 };
 
+export type OutboundAttachmentRecord = {
+  ordinal: number;
+  filename: string;
+  contentType: string;
+  size: number;
+  sha256: string;
+  storageKey: string;
+  createdAt: number;
+};
+
 export type OutboundMessageRecord = {
   id: string;
   mailboxId: string;
@@ -39,6 +49,7 @@ export type OutboundMessageRecord = {
   sourceMessageId: string | null;
   inReplyTo: string;
   referencesHeader: string;
+  attachments: OutboundAttachmentRecord[];
   createdAt: number;
 };
 
@@ -69,6 +80,7 @@ export type OutboundDeliveryMessage = StoredOutboundRequest & {
   bodyHtmlKey: string;
   inReplyTo: string;
   referencesHeader: string;
+  attachments: Omit<OutboundAttachmentRecord, 'createdAt'>[];
   to: string[];
   cc: string[];
   bcc: string[];

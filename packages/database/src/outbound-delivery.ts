@@ -4,6 +4,7 @@ import type {
   RecoverableOutboundMessage,
 } from './outbound-domain.js';
 import { normalizeId, requireTimestamp } from './validation.js';
+import { listOutboundDeliveryAttachments } from './outbound-attachments.js';
 
 type DeliveryRow = {
   message_id: string;
@@ -61,6 +62,7 @@ export async function getOutboundDeliveryMessage(
     WHERE message_id = ?
     ORDER BY CASE kind WHEN 'to' THEN 0 WHEN 'cc' THEN 1 ELSE 2 END, ordinal
   `).bind(messageId).all<RecipientRow>();
+  const attachments = await listOutboundDeliveryAttachments(db, messageId);
   const grouped = { to: [] as string[], cc: [] as string[], bcc: [] as string[] };
   for (const recipient of recipients.results) {
     if (recipient.kind !== 'to' && recipient.kind !== 'cc' && recipient.kind !== 'bcc') {
@@ -82,6 +84,7 @@ export async function getOutboundDeliveryMessage(
     bodyHtmlKey: row.body_html_key,
     inReplyTo: row.in_reply_to,
     referencesHeader: row.references_header,
+    attachments,
     ...grouped,
     attemptCount: row.attempt_count,
     nextAttemptAt: row.next_attempt_at,

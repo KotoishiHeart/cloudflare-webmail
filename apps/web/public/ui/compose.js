@@ -5,6 +5,11 @@ let requestId = '';
 let submitHandler;
 let composeMode = 'new';
 let sourceMessageId = '';
+const MAX_ATTACHMENTS = 8;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const attachmentInput = document.querySelector('#compose-attachments');
+const composeHint = document.querySelector('#compose-hint');
 
 export function bindCompose(onSubmit) {
   submitHandler = onSubmit;
@@ -14,6 +19,7 @@ export function bindCompose(onSubmit) {
     closeCompose();
   });
   form.addEventListener('submit', submitCompose);
+  attachmentInput.addEventListener('change', renderAttachmentHint);
 }
 
 export function openCompose(mailbox, draft = {}) {
@@ -29,6 +35,7 @@ export function openCompose(mailbox, draft = {}) {
   setValue('#compose-bcc', draft.bcc);
   setValue('#compose-subject', draft.subject);
   setValue('#compose-text', draft.text);
+  renderAttachmentHint();
   dialog.showModal();
   document.querySelector('#compose-to').focus();
 }
@@ -78,6 +85,8 @@ export function closeCompose() {
 async function submitCompose(event) {
   event.preventDefault();
   if (!submitHandler || !requestId) return;
+  const attachments = selectedAttachments();
+  if (attachments === null) return;
   submit.disabled = true;
   try {
     await submitHandler({
@@ -89,6 +98,7 @@ async function submitCompose(event) {
       text: document.querySelector('#compose-text').value,
       composeMode,
       sourceMessageId: sourceMessageId || null,
+      attachments,
     });
     closeCompose();
   } catch {
@@ -96,6 +106,36 @@ async function submitCompose(event) {
   } finally {
     submit.disabled = false;
   }
+}
+
+function selectedAttachments() {
+  const files = [...attachmentInput.files];
+  const total = files.reduce((bytes, file) => bytes + file.size, 0);
+  let error = '';
+  if (files.length > MAX_ATTACHMENTS) error = `添付は最大${MAX_ATTACHMENTS}個です。`;
+  else if (files.some((file) => file.size > MAX_ATTACHMENT_BYTES)) {
+    error = '1ファイルの上限は10 MiBです。';
+  } else if (total > MAX_TOTAL_ATTACHMENT_BYTES) error = '添付の合計上限は20 MiBです。';
+  attachmentInput.setCustomValidity(error);
+  if (error) {
+    attachmentInput.reportValidity();
+    return null;
+  }
+  return files;
+}
+
+function renderAttachmentHint() {
+  const files = [...attachmentInput.files];
+  const total = files.reduce((bytes, file) => bytes + file.size, 0);
+  composeHint.textContent = files.length === 0
+    ? '最大8個・1ファイル10 MiB・合計20 MiB'
+    : `${files.length}個選択・${formatBytes(total)} / 20 MiB`;
+  selectedAttachments();
+}
+
+function formatBytes(value) {
+  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KiB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
 }
 
 function setValue(selector, value) {

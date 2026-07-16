@@ -3,6 +3,10 @@ import {
   type OutboundComposeMode,
 } from '@cf-webmail/database';
 import { ApiInputError, isRecord, readBoundedJson } from './api-input.js';
+import {
+  readMultipartComposeInput,
+  type ComposeAttachment,
+} from './compose-attachments.js';
 
 const MAX_COMPOSE_JSON_BYTES = 1024 * 1024;
 const MAX_TEXT_BYTES = 512 * 1024;
@@ -15,12 +19,21 @@ export type ComposeInput = {
   text: string;
   composeMode: OutboundComposeMode;
   sourceMessageId: string | null;
+  attachments: ComposeAttachment[];
 };
 
 export async function readComposeInput(request: Request): Promise<ComposeInput> {
   const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (contentType === 'multipart/form-data') {
+    const form = await readMultipartComposeInput(request);
+    return parseComposeInput(form.payload, form.attachments);
+  }
   if (contentType !== 'application/json') throw new ComposeMediaTypeError();
   const input = await readBoundedJson(request, MAX_COMPOSE_JSON_BYTES);
+  return parseComposeInput(input, []);
+}
+
+function parseComposeInput(input: unknown, attachments: ComposeAttachment[]): ComposeInput {
   if (!isRecord(input)) throw new ApiInputError('compose request must be an object');
   const allowed = ['to', 'cc', 'bcc', 'subject', 'text', 'composeMode', 'sourceMessageId'];
   if (Object.keys(input).some((key) => !allowed.includes(key))) {
@@ -54,6 +67,7 @@ export async function readComposeInput(request: Request): Promise<ComposeInput> 
     text: input.text,
     composeMode,
     sourceMessageId,
+    attachments,
   };
 }
 

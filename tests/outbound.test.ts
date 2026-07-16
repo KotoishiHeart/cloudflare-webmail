@@ -240,6 +240,135 @@ describe('outbound delivery', () => {
     });
   });
 
+  it('archives, indexes, and sends bounded binary attachments from R2', async () => {
+    const files = [
+      new File(['attachment payload'], 'report 日本語.txt', { type: 'text/plain' }),
+      new File([new Uint8Array([0, 1, 2, 253, 254, 255])], 'pixels.bin', {
+        type: 'application/octet-stream',
+      }),
+    ];
+    const created = await composeMultipart(
+      '019c315c-1f20-7000-8000-000000000525',
+      'Message with attachments',
+      files,
+    );
+    expect(created.status).toBe(202);
+    const payload = await created.json<{ data: { messageId: string } }>();
+    const message = await env.DB.prepare(`
+      SELECT attachment_count, raw_key, raw_size
+      FROM messages WHERE id = ?
+    `).bind(payload.data.messageId).first<{
+      attachment_count: number;
+      raw_key: string;
+      raw_size: number;
+    }>();
+    expect(message?.attachment_count).toBe(2);
+    expect(message?.raw_key).toMatch(/raw\.eml\.gz$/u);
+    expect(message?.raw_size).toBeGreaterThan(0);
+
+    const attachmentRows = await env.DB.prepare(`
+      SELECT ordinal, filename, content_type, size, sha256, storage_key
+      FROM attachments WHERE message_id = ? ORDER BY ordinal
+    `).bind(payload.data.messageId).all<Record<string, string | number>>();
+    expect(attachmentRows.results).toHaveLength(2);
+    expect(attachmentRows.results[0]).toMatchObject({
+      ordinal: 0,
+      filename: 'report 日本語.txt',
+      content_type: 'text/plain',
+      size: 18,
+    });
+    const search = await handleWebRequest(new Request(
+      `${ORIGIN}/api/mailboxes/${MAILBOX_ID}/messages?folder=outbox&q=report`,
+    ), env, {
+      authenticate: async () => ({ ok: true, identity: IDENTITY }),
+      now: () => NOW + 1_000,
+    });
+    await expect(search.json()).resolves.toMatchObject({
+      data: { messages: [{ id: payload.data.messageId }] },
+    });
+    const stored = await env.RAW_EMAILS.get(String(attachmentRows.results[1]?.storage_key));
+    expect(Array.from(new Uint8Array(await stored!.arrayBuffer()))).toEqual([0, 1, 2, 253, 254, 255]);
+
+    const rawDownload = await handleWebRequest(new Request(
+      `${ORIGIN}/api/messages/${payload.data.messageId}/raw`,
+    ), env, {
+      authenticate: async () => ({ ok: true, identity: IDENTITY }),
+      now: () => NOW + 1_000,
+    });
+    const rawText = new TextDecoder().decode(await rawDownload.arrayBuffer());
+    expect(rawText).toContain("filename*=UTF-8''report%20%E6%97%A5%E6%9C%AC%E8%AA%9E.txt");
+    expect(rawText).toContain('YXR0YWNobWVudCBwYXlsb2Fk');
+
+    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+      messageId: '<provider-attachments@example.com>',
+    }));
+    const queued = queueItem(payload.data.messageId);
+    await handleOutboundBatch([queued.item], {
+      db: env.DB,
+      rawEmails: env.RAW_EMAILS,
+      email: { send } as SendEmail,
+      now: () => NOW + 100_000,
+    });
+    const sentAttachments = send.mock.calls[0]?.[0].attachments;
+    expect(sentAttachments).toHaveLength(2);
+    expect(sentAttachments?.[0]).toMatchObject({
+      disposition: 'attachment',
+      filename: 'report 日本語.txt',
+      type: 'text/plain',
+    });
+    expect(new TextDecoder().decode(sentAttachments?.[0]?.content as ArrayBuffer))
+      .toBe('attachment payload');
+    expect(Array.from(new Uint8Array(sentAttachments?.[1]?.content as ArrayBuffer)))
+      .toEqual([0, 1, 2, 253, 254, 255]);
+  });
+
+  it('rejects prohibited attachment types and excessive file counts', async () => {
+    const prohibited = await composeMultipart(
+      '019c315c-1f20-7000-8000-000000000526',
+      'Prohibited attachment',
+      [new File(['echo unsafe'], 'run.cmd', { type: 'text/plain' })],
+    );
+    expect(prohibited.status).toBe(400);
+    const excessive = await composeMultipart(
+      '019c315c-1f20-7000-8000-000000000527',
+      'Too many attachments',
+      Array.from({ length: 9 }, (_, index) => new File([], `empty-${index}.txt`)),
+    );
+    expect(excessive.status).toBe(400);
+  });
+
+  it('fails permanently before sending when an R2 attachment loses integrity', async () => {
+    const created = await composeMultipart(
+      '019c315c-1f20-7000-8000-000000000528',
+      'Corrupted attachment',
+      [new File(['original'], 'integrity.txt', { type: 'text/plain' })],
+    );
+    const payload = await created.json<{ data: { messageId: string } }>();
+    const attachment = await env.DB.prepare(`
+      SELECT storage_key FROM attachments WHERE message_id = ? AND ordinal = 0
+    `).bind(payload.data.messageId).first<{ storage_key: string }>();
+    await env.RAW_EMAILS.put(attachment!.storage_key, 'tampered');
+    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+      messageId: '<must-not-send@example.com>',
+    }));
+    const queued = queueItem(payload.data.messageId);
+    await handleOutboundBatch([queued.item], {
+      db: env.DB,
+      rawEmails: env.RAW_EMAILS,
+      email: { send } as SendEmail,
+      now: () => NOW + 110_000,
+    });
+    expect(send).not.toHaveBeenCalled();
+    expect(queued.ack).toHaveBeenCalledOnce();
+    const delivery = await env.DB.prepare(`
+      SELECT status, last_error_code FROM outbound_deliveries WHERE message_id = ?
+    `).bind(payload.data.messageId).first<Record<string, string>>();
+    expect(delivery).toEqual({
+      status: 'failed',
+      last_error_code: 'attachment_integrity_failed',
+    });
+  });
+
   it('rejects forged or contradictory source-message relationships', async () => {
     const missing = await compose(
       '019c315c-1f20-7000-8000-000000000523',
@@ -379,4 +508,30 @@ function queueItem(messageId: string, attempts = 1) {
       retry,
     },
   };
+}
+
+function composeMultipart(
+  idempotencyKey: string,
+  subject: string,
+  attachments: File[],
+): Promise<Response> {
+  const form = new FormData();
+  form.set('payload', JSON.stringify({
+    to: ['recipient@example.net'],
+    cc: [],
+    bcc: [],
+    subject,
+    text: '添付ファイル付き本文です。',
+    composeMode: 'new',
+    sourceMessageId: null,
+  }));
+  for (const attachment of attachments) form.append('attachments', attachment);
+  return handleWebRequest(new Request(`${ORIGIN}/api/mailboxes/${MAILBOX_ID}/messages`, {
+    method: 'POST',
+    headers: { origin: ORIGIN, 'idempotency-key': idempotencyKey },
+    body: form,
+  }), env, {
+    authenticate: async () => ({ ok: true, identity: IDENTITY }),
+    now: () => NOW + 1_000,
+  });
 }

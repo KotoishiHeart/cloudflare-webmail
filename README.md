@@ -33,12 +33,13 @@ exports continue to work; the rationale is recorded in
 Outbound compose requests are first persisted as D1/R2 outbox records and then
 sent by the jobs Worker through the Cloudflare Email Service binding. The
 outbound Queue is processed one message at a time, with D1 leases, delayed
-retry, a persisted dead-letter workflow, and scheduled recovery scans. The current compose
-surface sends text plus generated safe HTML and intentionally does not accept
-attachments yet. Reply and forward actions record normalized source
+retry, a persisted dead-letter workflow, and scheduled recovery scans. The compose
+surface sends text plus generated safe HTML and bounded attachments backed by
+R2 SHA-256 verification. Reply and forward actions record normalized source
 provenance; reply thread headers are derived from the authorized source on the
 server rather than trusted from the browser. See
-[`docs/adr/0009-server-derived-outbound-threading.md`](docs/adr/0009-server-derived-outbound-threading.md).
+[`docs/adr/0009-server-derived-outbound-threading.md`](docs/adr/0009-server-derived-outbound-threading.md)
+and [`docs/adr/0010-r2-backed-outbound-attachments.md`](docs/adr/0010-r2-backed-outbound-attachments.md).
 
 The web Worker independently verifies the Cloudflare Access application JWT,
 maps its issuer and subject to D1 memberships, exposes a bounded JSON and

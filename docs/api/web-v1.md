@@ -32,7 +32,14 @@ address arrays, plus `subject` and a nonempty `text` body. `composeMode` is
 stored source and cannot be supplied by the client. A combined maximum of 50
 unique recipients and 512 KiB of UTF-8 text is accepted. The result is
 `202` for a newly queued message and `200` for the existing record when the
-same idempotency key is retried. This API does not yet accept attachments.
+same idempotency key is retried.
+
+When files are present, `POST` instead accepts `multipart/form-data` containing
+one JSON `payload` field with the fields above and repeated `attachments` file
+fields. The entire request is bounded to 22 MiB before multipart parsing.
+Uploads allow at most eight files, 10 MiB per file, and 20 MiB combined;
+executable and script extensions or MIME types are rejected. Calls without
+files continue to use the JSON representation.
 
 Unauthorized message IDs return the same not-found response as nonexistent
 IDs. Responses never expose R2 storage keys.

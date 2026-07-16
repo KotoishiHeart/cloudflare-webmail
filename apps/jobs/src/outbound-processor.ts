@@ -7,6 +7,7 @@ import {
   getOutboundDeliveryMessage,
 } from '@cf-webmail/database';
 import { PermanentOutboundError, RetryableOutboundError } from './outbound-errors.js';
+import { loadOutboundAttachments } from './outbound-attachment-loader.js';
 
 const PERMANENT_EMAIL_CODES = new Set([
   'E_VALIDATION_ERROR',
@@ -75,9 +76,10 @@ export async function processOutboundQueueMessage(
   }
 
   try {
-    const [text, html] = await Promise.all([
+    const [text, html, attachments] = await Promise.all([
       getBody(dependencies.rawEmails, current.bodyTextKey, 'text'),
       getBody(dependencies.rawEmails, current.bodyHtmlKey, 'html'),
+      loadOutboundAttachments(dependencies.rawEmails, current.attachments),
     ]);
     const destinations = destinationFields(current.to, current.cc, current.bcc);
     const response = await dependencies.email.send({
@@ -87,6 +89,7 @@ export async function processOutboundQueueMessage(
       text,
       html,
       headers: deliveryHeaders(current),
+      ...(attachments.length === 0 ? {} : { attachments }),
     });
     const completed = await completeOutboundDelivery(
       dependencies.db,

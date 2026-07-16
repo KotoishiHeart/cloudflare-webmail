@@ -143,7 +143,7 @@
     <div id="status" class="status-toast" role="status" aria-live="polite" hidden></div>
 
     <dialog id="compose-dialog" class="compose-dialog" aria-labelledby="compose-title">
-      <form id="compose-form" method="dialog">
+      <form id="compose-form" method="dialog" enctype="multipart/form-data">
         <div class="compose-heading">
           <div>
             <p class="eyebrow">New message</p>
@@ -159,8 +159,9 @@
         </div>
         <label>件名 <input id="compose-subject" name="subject" type="text" maxlength="998"></label>
         <label>本文 <textarea id="compose-text" name="text" rows="14" required></textarea></label>
+        <label>添付ファイル <input id="compose-attachments" name="attachments" type="file" multiple></label>
         <div class="compose-actions">
-          <span id="compose-hint">添付ファイルは次の段階で対応します。</span>
+          <span id="compose-hint">最大8個・1ファイル10 MiB・合計20 MiB</span>
           <button id="compose-submit" type="submit">送信トレイに追加</button>
         </div>
       </form>

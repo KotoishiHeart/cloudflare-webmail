@@ -49,7 +49,10 @@ export async function downloadRawMessage(
   if (object === null) return apiError('raw_message_missing', 404);
   const headers = objectHeaders('message/rfc822');
   headers.set('content-disposition', attachmentDisposition(`${message.id}.eml`));
-  return new Response(object.body, { headers });
+  const body = object.customMetadata?.encoding === 'gzip'
+    ? object.body.pipeThrough(new DecompressionStream('gzip'))
+    : object.body;
+  return new Response(body, { headers });
 }
 
 export async function downloadMessageAttachment(
