@@ -17,6 +17,9 @@ The workflow is:
 4. `deploy`: require explicit confirmation, apply D1 migrations, then deploy
    Jobs, Ingest, and Web in dependency order. In upgrade mode it first records
    the version currently receiving 100% of traffic for every Worker.
+5. `postflight`: prove that every Worker moved to a new version, the current D1
+   schema is complete, the Web health endpoint is reachable, and durable work
+   has drained before allowing traffic cutover.
 
 ## Create a deployment manifest
 
@@ -85,6 +88,27 @@ npm run deploy -- deploy \
   --backup ops/backups/pre-deploy \
   --yes
 ```
+
+## Post-deploy gate
+
+Create a Cloudflare Access service token accepted by the Web application's
+policy, export it only in the operator environment, and run postflight. The
+secret is sent as an HTTP header and is never written into the stage report.
+
+```bash
+export CF_ACCESS_CLIENT_ID='...access service token id...'
+export CF_ACCESS_CLIENT_SECRET='...access service token secret...'
+npm run deploy -- postflight --stage ops/deploy-production
+```
+
+Postflight checks the three active Worker versions, all 30 application tables,
+and `GET /healthz`. It also reports unresolved inbound handoffs, outbound
+deliveries, dead letters, storage issues, and active or failed retention runs.
+When any durable work remains it still writes `postflight.json`, sets
+`cutoverReady` to `false`, and exits with status 2. Inspect and resolve each
+recorded blocker, then rerun with `--force`. A successful postflight does not
+replace the manual canary send/receive and Access authorization checks listed
+in the report.
 
 Preflight expires after one hour. Deployment stops on the first failed
 migration or Worker upload and does not attempt an unsafe automatic rollback.

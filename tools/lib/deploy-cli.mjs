@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { parseOptions } from './ops-cli.mjs';
 import { verifyBackup } from './backup-core.mjs';
 import { runDeployApply, runDeployPreflight } from './deploy-cloudflare.mjs';
+import { runDeployPostflight } from './deploy-postflight.mjs';
 import {
   createRollbackPlan,
   runRollbackApply,
@@ -47,6 +48,24 @@ export async function runDeployCli(argv, io = defaultIo()) {
     await writeJsonAtomic(output, result, false);
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
+  }
+  if (command === 'postflight') {
+    const plan = await verifyDeployStage(stage);
+    const deployResult = JSON.parse(await readFile(join(stage, 'deploy-result.json'), 'utf8'));
+    const rollback = JSON.parse(await readFile(join(stage, 'rollback-plan.json'), 'utf8'));
+    const output = join(stage, 'postflight.json');
+    if (!options.force) await requireOutputAbsent(output);
+    const report = await runDeployPostflight(
+      stage,
+      plan,
+      deployResult,
+      rollback,
+      { profile: options.profile },
+      { spawn: io.spawn, fetch: io.fetch ?? globalThis.fetch },
+    );
+    await writeJsonAtomic(output, report, Boolean(options.force));
+    io.stdout(`${JSON.stringify(report, null, 2)}\n`);
+    return report.cutoverReady ? 0 : 2;
   }
   const repository = repositoryState(io);
   if (repository.dirty) throw new Error('deployment commands require a clean Git worktree');
@@ -177,6 +196,7 @@ function usage() {
     `  verify --stage DIR\n` +
     `  preflight --stage DIR [--profile NAME] [--force]\n` +
     `  deploy --stage DIR --yes [--backup DIR] [--profile NAME]\n` +
+    `  postflight --stage DIR [--profile NAME] [--force]\n` +
     `  rollback --stage DIR --reason TEXT --yes [--profile NAME]\n\n` +
     `Upgrade mode requires a verified backup. The tool never creates resources or Email Routing rules.\n`;
 }
