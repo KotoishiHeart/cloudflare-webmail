@@ -15,6 +15,7 @@ export function validateProvisionManifest(input) {
     .map((mailbox, index) => validateMailbox(mailbox, index, userIds));
   unique(mailboxes.map((mailbox) => mailbox.id), 'mailbox ID');
   unique(mailboxes.flatMap((mailbox) => [mailbox.address, ...mailbox.aliases]), 'mailbox address');
+  validateDefaultMailboxes(users, mailboxes);
   return { version: 1, users, mailboxes };
 }
 
@@ -27,6 +28,11 @@ function validateUser(input, index) {
     email,
     displayName: optionalText(input.displayName, `${path}.displayName`, 160),
     systemAdmin: optionalBoolean(input.systemAdmin, `${path}.systemAdmin`, false),
+    defaultMailboxId: input.defaultMailboxId === undefined
+      ? undefined
+      : input.defaultMailboxId === null
+        ? null
+        : uuid(input.defaultMailboxId, `${path}.defaultMailboxId`),
     identities: array(input.identities, `${path}.identities`, 20, 1)
       .map((identity, identityIndex) => validateIdentity(
         identity,
@@ -34,6 +40,18 @@ function validateUser(input, index) {
         email,
       )),
   };
+}
+
+function validateDefaultMailboxes(users, mailboxes) {
+  const byId = new Map(mailboxes.map((mailbox) => [mailbox.id, mailbox]));
+  for (const user of users) {
+    if (user.defaultMailboxId === undefined || user.defaultMailboxId === null) continue;
+    const mailbox = byId.get(user.defaultMailboxId);
+    if (mailbox === undefined) fail('user defaultMailboxId does not reference a manifest mailbox');
+    const authorized = mailbox.ownerUserId === user.id
+      || mailbox.members.some((member) => member.userId === user.id);
+    if (!authorized) fail('user defaultMailboxId requires a manifest mailbox membership');
+  }
 }
 
 function validateIdentity(input, path, fallbackEmail) {

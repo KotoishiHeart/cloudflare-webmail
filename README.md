@@ -208,3 +208,6 @@ real email delivery has been verified.
 16. Completed: production-scale archived R2 acquisition using a frozen raw-key
     list, one read-only rclone transfer, per-object D1 hash verification, and
     resumable cleanup without source mutation.
+17. Completed: authorized provisioning of the archived global default From as
+    a current per-user default mailbox, with membership validation and
+    hash-bound readiness evidence.

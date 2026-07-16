@@ -89,6 +89,11 @@ export function verifyLegacyProvisioning(options) {
   for (const user of systemAdministrators) {
     requireTeamIdentity(user, teamIssuer, 'system administrator');
   }
+  const defaultMailboxPreferences = verifyDefaultFrom(
+    expected.review.defaultFrom,
+    options.manifest.users,
+    teamIssuer,
+  );
   const memberships = verifyMemberships(
     expected.review.membershipSuggestions,
     usersByEmail,
@@ -106,6 +111,7 @@ export function verifyLegacyProvisioning(options) {
       users: options.manifest.users.length,
       mailboxes: options.mapping.mappings.length,
       aliases,
+      defaultMailboxPreferences,
       resolvedMemberships: memberships.resolved,
       ignoredInactiveMemberships: memberships.ignored,
       routingDomains: routingDomains.size,
@@ -122,13 +128,26 @@ function verifyReview(actual, expected) {
     || actual.createdAt < 1
   ) throw new Error('legacy provisioning review is invalid');
   for (const key of [
-    'sourceDatabaseSha256', 'mappingSha256', 'generated', 'accountPolicies',
+    'sourceDatabaseSha256', 'mappingSha256', 'generated', 'defaultFrom', 'accountPolicies',
     'externalAliases', 'domains', 'membershipSuggestions', 'manualChecks',
   ]) {
     if (JSON.stringify(actual[key]) !== JSON.stringify(expected[key])) {
       throw new Error(`legacy provisioning review mismatch: ${key}`);
     }
   }
+}
+
+function verifyDefaultFrom(defaultFrom, users, issuer) {
+  if (!defaultFrom.configured) return 0;
+  if (defaultFrom.mailboxId === null) {
+    throw new Error('archived default From does not resolve to a mapped mailbox');
+  }
+  const matching = users.filter((user) => user.defaultMailboxId === defaultFrom.mailboxId);
+  if (matching.length < 1) {
+    throw new Error('provision manifest does not preserve the archived default From mailbox');
+  }
+  for (const user of matching) requireTeamIdentity(user, issuer, 'default mailbox user');
+  return matching.length;
 }
 
 function verifyStandardAccounts(policies) {

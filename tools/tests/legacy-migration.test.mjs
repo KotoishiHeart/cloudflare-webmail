@@ -85,8 +85,17 @@ describe('archived SQL isolation', () => {
     });
     assert.equal(provisioning.manifest.users.length, 1);
     assert.equal(provisioning.manifest.mailboxes.length, 2);
+    assert.equal(
+      provisioning.manifest.users[0].defaultMailboxId,
+      mapping.mappings[0].mailboxId,
+    );
     assert.deepEqual(provisioning.manifest.mailboxes[0].aliases, ['info@example.com']);
     assert.deepEqual(provisioning.review.generated, { mailboxes: 2, aliases: 1 });
+    assert.deepEqual(provisioning.review.defaultFrom, {
+      configured: true,
+      sourceAddress: 'first@example.com',
+      mailboxId: mapping.mappings[0].mailboxId,
+    });
     assert.equal(provisioning.review.createdAt, 3456);
     assert.equal(provisioning.review.sourceDatabaseSha256, inventory.source.databaseSha256);
     assert.equal(provisioning.review.mappingSha256, legacyMappingSha256(mapping));
@@ -190,6 +199,7 @@ describe('archived SQL isolation', () => {
       users: 2,
       mailboxes: 2,
       aliases: 1,
+      defaultMailboxPreferences: 1,
       resolvedMemberships: 1,
       ignoredInactiveMemberships: 0,
       routingDomains: 1,
@@ -242,6 +252,9 @@ ${externalAlias}
 -- table: mail_account_users
 DELETE FROM "mail_account_users";
 INSERT INTO "mail_account_users" ("id", "account_email", "access_email", "role", "can_send", "is_active", "created_at") VALUES (1, 'first@example.com', 'operator@example.com', 'user', 1, 1, 903);
+-- table: app_settings
+DELETE FROM "app_settings";
+INSERT INTO "app_settings" ("key", "value", "updated_at") VALUES ('default_from', 'first@example.com', 904);
 -- table: messages
 DELETE FROM "messages";
 INSERT INTO "messages" ("id", "direction", "message_id", "raw_sha256", "subject", "sender", "recipients", "cc", "date_header", "received_at", "text_preview", "raw_key", "body_text_key", "body_html_key", "size", "has_attachments", "archived", "compressed", "created_at", "is_read", "starred", "deleted", "deleted_at", "account_email", "bcc", "in_reply_to", "references_header", "source_message_id", "compose_mode", "send_status", "provider") VALUES ('old-1', 'in', '<one@example.net>', '${'a'.repeat(64)}', 'One', 'sender@example.net', 'first@example.com', '', 'date', 1000, 'body', 'raw/one.eml.gz', 'body/one.txt.gz', 'body/one.html.gz', 100, 1, 1, 1, 1001, 1, 1, 0, NULL, 'first@example.com', '', '', '', '', '', '', '');

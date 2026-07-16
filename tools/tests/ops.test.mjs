@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdir, readFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
 import { validateProvisionManifest } from '../lib/ops-manifest.mjs';
 import { runOpsCli } from '../lib/ops-cli.mjs';
 import {
@@ -12,7 +14,7 @@ const USER_ID = '019c315c-1f20-7000-8000-000000000601';
 const MAILBOX_ID = '019c315c-1f20-7000-8000-000000000602';
 
 describe('operations manifest', () => {
-  it('normalizes a valid manifest and renders repeatable conflict-safe SQL', () => {
+  it('normalizes a valid manifest and renders repeatable conflict-safe SQL', async () => {
     const manifest = validateProvisionManifest({
       version: 1,
       users: [{
@@ -20,6 +22,7 @@ describe('operations manifest', () => {
         email: 'Owner@Example.COM',
         displayName: "O'Brien",
         systemAdmin: true,
+        defaultMailboxId: MAILBOX_ID,
         identities: [{
           issuer: 'https://team.cloudflareaccess.com/',
           subject: 'subject-1',
@@ -41,7 +44,27 @@ describe('operations manifest', () => {
     assert.match(sql, /'primary'/u);
     assert.match(sql, /CF_WEBMAIL_OWNERSHIP_CONFLICT/u);
     assert.match(sql, /INSERT INTO system_administrators/u);
+    assert.match(sql, /INSERT INTO user_preferences/u);
+    assert.match(sql, new RegExp(`default_mailbox_id[\\s\\S]+${MAILBOX_ID}`, 'u'));
     assert.doesNotMatch(sql, /BEGIN TRANSACTION/u);
+    const clearSql = renderProvisionSql({
+      ...manifest,
+      users: manifest.users.map((user) => ({ ...user, defaultMailboxId: null })),
+    }, 1234);
+    assert.match(clearSql, /'inbox', NULL,/u);
+    const database = new DatabaseSync(':memory:');
+    try {
+      database.exec('PRAGMA foreign_keys = ON;');
+      for (const name of (await readdir('migrations')).filter((item) => item.endsWith('.sql')).sort()) {
+        database.exec(await readFile(`migrations/${name}`, 'utf8'));
+      }
+      database.exec(sql);
+      assert.deepEqual({ ...database.prepare(`
+        SELECT user_id, default_mailbox_id FROM user_preferences
+      `).get() }, { user_id: USER_ID, default_mailbox_id: MAILBOX_ID });
+    } finally {
+      database.close();
+    }
   });
 
   it('rejects duplicate addresses and dangling owners', () => {
@@ -54,6 +77,20 @@ describe('operations manifest', () => {
         ownerUserId: USER_ID,
       }],
     }), /does not reference/u);
+    assert.throws(() => validateProvisionManifest({
+      version: 1,
+      users: [{
+        id: USER_ID,
+        email: 'owner@example.com',
+        defaultMailboxId: '019c315c-1f20-7000-8000-000000000699',
+        identities: [{ issuer: 'https://team.cloudflareaccess.com', subject: 'subject' }],
+      }],
+      mailboxes: [{
+        id: MAILBOX_ID,
+        address: 'mail@example.com',
+        ownerUserId: USER_ID,
+      }],
+    }), /defaultMailboxId does not reference/u);
   });
 });
 

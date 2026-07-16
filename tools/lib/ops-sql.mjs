@@ -56,6 +56,11 @@ export function renderProvisionSql(manifest, now = Date.now()) {
       statements.push(membershipSql(mailbox.id, member.userId, member.role, now));
     }
   }
+  for (const user of manifest.users) {
+    if (user.defaultMailboxId !== undefined) {
+      statements.push(preferenceSql(user.id, user.defaultMailboxId, now));
+    }
+  }
   return `${[...header, ...guards, ...statements].join('\n\n')}\n`;
 }
 
@@ -117,6 +122,21 @@ function membershipSql(mailboxId, userId, role, now) {
   `);
 }
 
+function preferenceSql(userId, defaultMailboxId, now) {
+  return sql(`
+    INSERT INTO user_preferences (
+      user_id, theme, page_size, default_folder, default_mailbox_id,
+      show_html_by_default, compact_layout, created_at, updated_at
+    ) VALUES (
+      ${q(userId)}, 'system', 30, 'inbox', ${nullable(defaultMailboxId)},
+      1, 0, ${now}, ${now}
+    )
+    ON CONFLICT(user_id) DO UPDATE SET
+      default_mailbox_id = excluded.default_mailbox_id,
+      updated_at = excluded.updated_at
+  `);
+}
+
 function renderOwnershipGuards(manifest) {
   const guards = [];
   for (const user of manifest.users) {
@@ -168,7 +188,7 @@ function q(value) {
 }
 
 function nullable(value) {
-  return value === undefined ? 'NULL' : q(value);
+  return value === undefined || value === null ? 'NULL' : q(value);
 }
 
 function sql(value) {

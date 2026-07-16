@@ -67,7 +67,9 @@ npm run migrate:legacy -- provision-template \
 The manifest initially assigns one explicitly identified owner to every mapped
 mailbox. Edit and revalidate it if ownership differs. Active local alias or
 representative rows with exactly one mapped local destination are included as
-mailbox aliases. The separate review file preserves account receive/send/kind
+mailbox aliases. If the archived global `default_from` resolves to a mapped
+account, it becomes the generated owner's authorized `defaultMailboxId`. The
+separate review file preserves that resolution, account receive/send/kind
 flags, domains, external or multi-target aliases, and archived membership
 suggestions. Resolve every review item before applying the SQL: forwarding,
 quarantine, log-only, DNS, and domain routing are external Cloudflare policy,
@@ -95,7 +97,8 @@ npm run migrate:legacy -- verify-provisioning \
 `ready: true` proves that every mapped UUID/address and generated local alias
 is present, every mapped owner and system administrator has an identity for the
 deployment's exact Access issuer, every active archived membership suggestion
-has the reviewed role, both Email Routing and Email Sending cover every mapped
+has the reviewed role, the archived default From is assigned to an authorized
+user, both Email Routing and Email Sending cover every mapped
 domain, and the source/mapping/review files still agree. It also records SHA-256
 digests for the exact provisioning, review, and deployment artifacts.
 

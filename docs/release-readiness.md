@@ -68,7 +68,7 @@ deployment. Require:
   alias, and membership suggestion explicitly resolved;
 - `legacy-provisioning-verification.json` reports `ready: true` and binds the
   source, mapping, exact provisioning manifest, Access issuer, mail domains,
-  review, and deployment manifest by digest;
+  archived default From, review, and deployment manifest by digest;
 - every mapped mailbox ID and primary address provisioned with at least one
   verified Access-backed owner before any migration chunk is applied;
 - the frozen bulk source-key list matches the mapped archive and read-only

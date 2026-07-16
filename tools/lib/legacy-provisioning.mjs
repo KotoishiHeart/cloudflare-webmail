@@ -15,6 +15,7 @@ export function createLegacyProvisioningDraft(options) {
     const mailboxAliases = new Map(
       options.mapping.mappings.map((mapping) => [mapping.mailboxId, []]),
     );
+    const defaultFrom = legacyDefaultFrom(database, mailboxByAddress);
     const externalAliases = [];
     for (const alias of aliasRows(database)) {
       const decision = classifyAlias(alias, mailboxByAddress);
@@ -31,6 +32,7 @@ export function createLegacyProvisioningDraft(options) {
         email: options.owner.email,
         displayName: options.owner.displayName,
         systemAdmin: options.owner.systemAdmin,
+        defaultMailboxId: defaultFrom.mailboxId ?? undefined,
         identities: [{
           issuer: options.owner.issuer,
           subject: options.owner.subject,
@@ -59,6 +61,7 @@ export function createLegacyProvisioningDraft(options) {
         mailboxes: manifest.mailboxes.length,
         aliases: manifest.mailboxes.reduce((count, mailbox) => count + mailbox.aliases.length, 0),
       },
+      defaultFrom,
       accountPolicies: options.mapping.mappings.map((mapping) => {
         const account = accountByAddress.get(mapping.sourceAddress);
         return {
@@ -76,6 +79,7 @@ export function createLegacyProvisioningDraft(options) {
       membershipSuggestions: membershipRows(database, mailboxByAddress),
       manualChecks: [
         'Confirm the generated owner and every mailbox ownership assignment.',
+        'Confirm the archived default From mailbox assigned to the generated owner.',
         'Recreate external/forward/quarantine/log-only aliases in Email Routing policy.',
         'Map each membership suggestion to a provisioned Access issuer and subject before granting it.',
         'Confirm send-only, receive-only, disabled, and quarantine account behavior outside the primary-address model.',
@@ -85,6 +89,20 @@ export function createLegacyProvisioningDraft(options) {
   } finally {
     database.close();
   }
+}
+
+function legacyDefaultFrom(database, mailboxByAddress) {
+  if (!table(database, 'app_settings')) {
+    return { configured: false, sourceAddress: null, mailboxId: null };
+  }
+  const row = database.prepare("SELECT value FROM app_settings WHERE key = 'default_from'").get();
+  const sourceAddress = String(row?.value ?? '').trim().toLowerCase();
+  if (sourceAddress === '') return { configured: false, sourceAddress: null, mailboxId: null };
+  return {
+    configured: true,
+    sourceAddress: email(sourceAddress, 'legacy default From'),
+    mailboxId: mailboxByAddress.get(sourceAddress)?.mailboxId ?? null,
+  };
 }
 
 function accountRows(database) {
