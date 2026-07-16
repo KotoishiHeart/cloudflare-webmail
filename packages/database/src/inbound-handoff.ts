@@ -6,6 +6,13 @@ export type RecoverableInboundHandoff = {
   payload: unknown;
 };
 
+export type InboundHandoffState = {
+  messageId: string;
+  status: string;
+  rawKey: string;
+  stagingDeleted: boolean;
+};
+
 export async function recordInboundHandoff(
   db: D1Database,
   message: InboundQueueMessage,
@@ -142,6 +149,53 @@ export async function listRecoverableInboundHandoffs(
     messageId: row.message_id,
     payload: JSON.parse(row.queue_payload) as unknown,
   }));
+}
+
+export async function findInboundHandoff(
+  db: D1Database,
+  messageIdInput: string,
+): Promise<InboundHandoffState | null> {
+  const row = await db.prepare(`
+    SELECT message_id, status, raw_key, staging_deleted
+    FROM inbound_handoffs WHERE message_id = ?
+  `).bind(normalizeId(messageIdInput, 'messageId')).first<{
+    message_id: string;
+    status: string;
+    raw_key: string;
+    staging_deleted: number;
+  }>();
+  return row === null ? null : {
+    messageId: row.message_id,
+    status: row.status,
+    rawKey: row.raw_key,
+    stagingDeleted: row.staging_deleted === 1,
+  };
+}
+
+export async function listInboundStagingCleanupPending(
+  db: D1Database,
+  limit = 50,
+): Promise<Array<{ messageId: string; rawKey: string }>> {
+  const boundedLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  const rows = await db.prepare(`
+    SELECT message_id, raw_key FROM inbound_handoffs
+    WHERE status = 'stored' AND staging_deleted = 0
+    ORDER BY updated_at
+    LIMIT ?
+  `).bind(boundedLimit).all<{ message_id: string; raw_key: string }>();
+  return rows.results.map((row) => ({ messageId: row.message_id, rawKey: row.raw_key }));
+}
+
+export async function markInboundStagingDeleted(
+  db: D1Database,
+  messageIdInput: string,
+  nowInput: number,
+): Promise<void> {
+  const now = requireTimestamp(nowInput);
+  await db.prepare(`
+    UPDATE inbound_handoffs SET staging_deleted = 1, updated_at = ?
+    WHERE message_id = ? AND status = 'stored'
+  `).bind(now, normalizeId(messageIdInput, 'messageId')).run();
 }
 
 async function updateStatus(

@@ -82,6 +82,15 @@ describe('operations mutations', () => {
     assert.match(calls[0].args[calls[0].args.indexOf('--command') + 1], /attempt_count = 0/u);
   });
 
+  it('lists storage issues through a read-only D1 query', async () => {
+    const calls = [];
+    const status = await runOpsCli(['storage-issues', '--local'], fakeIo(calls));
+    assert.equal(status, 0);
+    const sql = calls[0].args[calls[0].args.indexOf('--command') + 1];
+    assert.match(sql, /FROM storage_issues/u);
+    assert.match(sql, /status = 'open'/u);
+  });
+
   it('renders only a failed-message retry guarded by message ID', () => {
     const sql = renderRetryOutboundSql(MAILBOX_ID, 1234);
     assert.match(sql, /status = 'failed'/u);

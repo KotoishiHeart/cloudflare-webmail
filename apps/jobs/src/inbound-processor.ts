@@ -9,6 +9,7 @@ import {
   findInboundMessageById,
   activeMailboxOwnsPrimaryAddress,
   persistInboundMessage,
+  resolveStorageIssuesForKeys,
 } from '@cf-webmail/database';
 import { PermanentInboundError, errorType } from './inbound-errors.js';
 import { parseAndHashRawEmail } from './mime-parser.js';
@@ -100,6 +101,7 @@ export async function processInboundQueueMessage(
     stagingDeleted,
     dependencies.now(),
   );
+  await resolveStagingIssues(dependencies, queueMessage, stagingDeleted);
   console.log(JSON.stringify({
     event: result.created ? 'inbound.persisted' : 'inbound.duplicate',
     messageId: result.message.id,
@@ -126,7 +128,20 @@ async function completeDuplicate(
     stagingDeleted,
     dependencies.now(),
   );
+  await resolveStagingIssues(dependencies, queueMessage, stagingDeleted);
   return duplicateResult(storedMessageId, stagingDeleted);
+}
+
+async function resolveStagingIssues(
+  dependencies: InboundProcessorDependencies,
+  queueMessage: InboundQueueMessage,
+  stagingDeleted: boolean,
+): Promise<void> {
+  if (!stagingDeleted) return;
+  await resolveStorageIssuesForKeys(dependencies.db, [
+    queueMessage.rawKey,
+    buildInboundQueuePayloadKey(queueMessage.rawKey),
+  ], dependencies.now());
 }
 
 async function deleteStaging(

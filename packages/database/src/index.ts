@@ -10,6 +10,7 @@ export * from './outbound-domain.js';
 export * from './outbound-persistence.js';
 export * from './provisioning.js';
 export { resolveActiveMailboxAddress } from './routing.js';
+export * from './storage-reconciliation.js';
 export * from './validation.js';
 export * from './web-message-detail.js';
 export * from './web-message-domain.js';

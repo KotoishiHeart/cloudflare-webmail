@@ -26,6 +26,16 @@ const STATUS_SQL = `
   UNION ALL SELECT 'dead_letter_retry_requested', COUNT(*) FROM queue_dead_letters
     WHERE status = 'retry_requested'
   UNION ALL SELECT 'dead_letter_requeued', COUNT(*) FROM queue_dead_letters WHERE status = 'requeued'
+  UNION ALL SELECT 'storage_issues_open', COUNT(*) FROM storage_issues WHERE status = 'open'
+`;
+
+const STORAGE_ISSUES_SQL = `
+  SELECT issue_type, object_key, mailbox_id, message_id, details,
+    occurrences, first_seen_at, last_seen_at
+  FROM storage_issues
+  WHERE status = 'open'
+  ORDER BY last_seen_at DESC, issue_type, object_key
+  LIMIT 100
 `;
 
 export async function runOpsCli(argv, io = defaultIo()) {
@@ -67,6 +77,13 @@ export async function runOpsCli(argv, io = defaultIo()) {
     return runWrangler([
       'd1', 'execute', options.database ?? 'cf-webmail', targetFlag(options),
       '--command', STATUS_SQL, '--config', options.config ?? 'apps/web/wrangler.jsonc',
+    ], io);
+  }
+  if (command === 'storage-issues') {
+    await requireTarget(options);
+    return runWrangler([
+      'd1', 'execute', options.database ?? 'cf-webmail', targetFlag(options),
+      '--command', STORAGE_ISSUES_SQL, '--config', options.config ?? 'apps/web/wrangler.jsonc',
     ], io);
   }
   if (command === 'retry-outbound') {
@@ -161,6 +178,7 @@ function usage() {
     `  apply --plan FILE (--local|--remote) --yes\n` +
     `  migrate (--local|--remote) --yes\n` +
     `  status (--local|--remote)\n` +
+    `  storage-issues (--local|--remote)\n` +
     `  retry-outbound --message-id UUID (--local|--remote) --yes\n\n` +
     `  retry-dead-letter --dead-letter-id SHA256 (--local|--remote) --yes\n\n` +
     `Optional: --database NAME --config FILE\n`;

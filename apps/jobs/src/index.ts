@@ -10,6 +10,8 @@ import { handleInboundBatch } from './inbound-consumer.js';
 import { recoverInboundHandoffs } from './inbound-recovery.js';
 import { handleOutboundBatch } from './outbound-consumer.js';
 import { recoverOutboundDeliveries } from './outbound-recovery.js';
+import { reconcileInboundStaging } from './staging-reconciliation.js';
+import { auditCanonicalStorage } from './storage-audit.js';
 
 type JobsEnv = {
   DB: D1Database;
@@ -57,14 +59,18 @@ export default {
       throw new Error('INBOUND_QUEUE and OUTBOUND_QUEUE bindings are required');
     }
     const now = Date.now();
-    const [inbound, deadLetters, outbound] = await Promise.allSettled([
+    const [inbound, deadLetters, outbound, staging, storage] = await Promise.allSettled([
       recoverInboundHandoffs(env.DB, env.INBOUND_QUEUE, now),
       recoverRequestedDeadLetters(env.DB, env.INBOUND_QUEUE, env.OUTBOUND_QUEUE, now),
       recoverOutboundDeliveries(env.DB, env.OUTBOUND_QUEUE, now),
+      reconcileInboundStaging(env.DB, env.RAW_EMAILS, env.INBOUND_QUEUE, now),
+      auditCanonicalStorage(env.DB, env.RAW_EMAILS, now),
     ]);
     logRecovery('inbound_handoff', inbound);
     logRecovery('dead_letter', deadLetters);
     logRecovery('outbound', outbound);
+    logRecovery('staging', staging);
+    logRecovery('storage_audit', storage);
   },
 } satisfies ExportedHandler<JobsEnv>;
 

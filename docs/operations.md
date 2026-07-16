@@ -77,6 +77,23 @@ npm run ops -- status --remote \
   --config ops/deploy-production/configs/web.wrangler.json
 ```
 
+The five-minute jobs cron incrementally compares D1 object references with R2,
+scans the canonical `mailboxes/` prefix for unreferenced objects, and scans the
+`staging/raw/` prefix for interrupted handoffs. It records findings without
+deleting canonical or incomplete staging data. List the latest 100 open
+findings with:
+
+```bash
+npm run ops -- storage-issues --remote \
+  --config ops/deploy-production/configs/web.wrangler.json
+```
+
+Missing canonical objects must be restored from a verified backup. Treat
+unreferenced canonical objects as review candidates only; a later retention or
+hard-delete operation must perform deletion explicitly. Valid raw/contract
+staging pairs without a D1 handoff are re-enqueued automatically, while invalid
+or incomplete pairs remain in R2 with an open issue.
+
 After fixing a terminal sender-domain, recipient, or content error, explicitly
 reset one failed message. This does not send synchronously; the scheduled jobs
 recovery republishes it to the outbound Queue:
