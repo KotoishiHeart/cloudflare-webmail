@@ -14,10 +14,17 @@ import {
 } from './ui/message-detail.js';
 import { renderMessageList, setMessageListBusy } from './ui/message-list.js';
 import {
+  EMPTY_SEARCH_FILTERS,
+  bindSearch,
+  hasActiveSearch,
+  renderSearch,
+} from './ui/search.js';
+import {
   appendMessagePage,
   replaceMessagePage,
   selectFolder,
   selectMailbox,
+  setSearchFilters,
   state,
 } from './ui/state.js';
 import { bindShell, renderFolder, renderSession, showStatus } from './ui/shell.js';
@@ -31,6 +38,10 @@ bindShell({
   onCompose: () => openCompose(selectedMailbox()),
 });
 bindCompose(sendMessage);
+bindSearch({
+  onSearch: applySearch,
+  onClear: () => applySearch(EMPTY_SEARCH_FILTERS),
+});
 
 await start();
 
@@ -41,6 +52,7 @@ async function start() {
     selectMailbox(firstMailbox?.id || '');
     renderSession(state.session, state.mailboxId);
     renderFolder(state.folder);
+    renderSearch(state.searchFilters);
     if (!firstMailbox) {
       renderMessageList(state, openMessage);
       showStatus('このAccess identityにはメールボックスが割り当てられていません。', true);
@@ -69,7 +81,9 @@ async function changeFolder(folder) {
 }
 
 async function loadMessages(append) {
-  if (state.busy || !state.mailboxId) return;
+  if (!state.mailboxId) return;
+  const revision = state.revision;
+  state.activeLoads += 1;
   state.busy = true;
   setMessageListBusy(true);
   try {
@@ -77,15 +91,30 @@ async function loadMessages(append) {
       state.mailboxId,
       state.folder,
       append ? state.nextCursor : null,
+      state.searchFilters,
     );
+    if (revision !== state.revision) return;
     if (append) appendMessagePage(page);
     else replaceMessagePage(page);
     renderMessageList(state, openMessage);
   } catch (error) {
-    handleError(error, 'メール一覧を取得できませんでした。');
+    if (revision === state.revision) {
+      handleError(error, 'メール一覧を取得できませんでした。');
+    }
   } finally {
-    state.busy = false;
-    setMessageListBusy(false);
+    state.activeLoads -= 1;
+    state.busy = state.activeLoads > 0;
+    setMessageListBusy(state.busy);
+  }
+}
+
+async function applySearch(filters) {
+  setSearchFilters(filters);
+  closeMessageDetail();
+  renderSearch(state.searchFilters);
+  await loadMessages(false);
+  if (state.messages.length === 0 && hasActiveSearch(state.searchFilters)) {
+    showStatus('検索条件に一致するメールはありません。');
   }
 }
 

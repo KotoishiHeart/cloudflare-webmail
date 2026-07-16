@@ -1,3 +1,5 @@
+import { EMPTY_SEARCH_FILTERS } from './search.js';
+
 export const state = {
   session: null,
   mailboxId: '',
@@ -6,7 +8,18 @@ export const state = {
   nextCursor: null,
   selectedMessageId: '',
   busy: false,
+  activeLoads: 0,
+  revision: 0,
+  searchFilters: { ...EMPTY_SEARCH_FILTERS },
 };
+
+export function setSearchFilters(filters) {
+  state.searchFilters = { ...EMPTY_SEARCH_FILTERS, ...filters };
+  state.selectedMessageId = '';
+  state.messages = [];
+  state.nextCursor = null;
+  state.revision += 1;
+}
 
 export function replaceMessagePage(page) {
   state.messages = page.messages;
@@ -24,6 +37,7 @@ export function selectMailbox(mailboxId) {
   state.selectedMessageId = '';
   state.messages = [];
   state.nextCursor = null;
+  state.revision += 1;
 }
 
 export function selectFolder(folder) {
@@ -31,4 +45,5 @@ export function selectFolder(folder) {
   state.selectedMessageId = '';
   state.messages = [];
   state.nextCursor = null;
+  state.revision += 1;
 }

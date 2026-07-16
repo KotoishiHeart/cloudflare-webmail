@@ -9,12 +9,8 @@ import {
   type WebMessageDetail,
 } from '@cf-webmail/database';
 import type { AccessIdentity } from './access-auth.js';
-import {
-  cursorFromUrl,
-  limitFromUrl,
-  readFlagPatch,
-  requestIsSameOrigin,
-} from './api-input.js';
+import { readFlagPatch, requestIsSameOrigin } from './api-input.js';
+import { messageListQueryFromUrl } from './message-list-input.js';
 import { apiData, apiError } from './api-response.js';
 
 export async function getMessageList(
@@ -22,6 +18,7 @@ export async function getMessageList(
   db: D1Database,
   identity: AccessIdentity,
   mailboxId: string,
+  now: number,
 ): Promise<Response> {
   const access = await authorizeMailboxAccess(db, identity, mailboxId, 'read');
   if (!access.allowed) return apiError('mailbox_not_found', 404);
@@ -31,9 +28,7 @@ export async function getMessageList(
   const page = await listWebMessages(
     db,
     mailboxId,
-    folderInput,
-    limitFromUrl(url),
-    cursorFromUrl(url),
+    messageListQueryFromUrl(url, folderInput, now),
   );
   return apiData({ mailboxId, folder: folderInput, ...page });
 }

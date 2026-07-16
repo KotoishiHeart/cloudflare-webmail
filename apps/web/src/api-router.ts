@@ -57,7 +57,7 @@ async function routeKnownApi(
   const mailboxList = pathname.match(/^\/api\/mailboxes\/([^/]+)\/messages$/u);
   if (mailboxList !== null) {
     if (request.method === 'GET') {
-      return getMessageList(request, env.DB, identity, mailboxList[1] ?? '');
+      return getMessageList(request, env.DB, identity, mailboxList[1] ?? '', now);
     }
     if (request.method === 'POST') {
       return createOutboundMessage(request, env, identity, mailboxList[1] ?? '', now);

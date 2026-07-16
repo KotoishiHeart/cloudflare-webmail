@@ -1,4 +1,5 @@
 import { shortDate, senderLabel } from './format.js';
+import { hasActiveSearch } from './search.js';
 
 const list = document.querySelector('#message-list');
 const template = document.querySelector('#message-template');
@@ -8,6 +9,12 @@ const loadMore = document.querySelector('#load-more');
 export function renderMessageList(state, onSelect) {
   list.replaceChildren();
   empty.hidden = state.messages.length !== 0;
+  document.querySelector('#empty-title').textContent = hasActiveSearch(state.searchFilters)
+    ? '条件に一致するメールはありません'
+    : 'ここにはまだメールがありません';
+  document.querySelector('#empty-description').textContent = hasActiveSearch(state.searchFilters)
+    ? '検索語や詳細条件を変更して、もう一度お試しください。'
+    : '新しいメッセージが届くと、この一覧に表示されます。';
   loadMore.hidden = state.nextCursor === null;
   for (const message of state.messages) {
     const row = template.content.firstElementChild.cloneNode(true);

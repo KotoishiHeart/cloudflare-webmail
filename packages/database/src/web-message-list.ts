@@ -3,18 +3,20 @@ import {
   WEB_MAILBOX_FOLDERS,
   type WebMailboxFolder,
   type WebMessageCursor,
+  type WebMessageListQuery,
   type WebMessagePage,
+  type WebMessageSearchFilters,
 } from './web-message-domain.js';
 import { toWebMessageSummary, type WebMessageRow } from './web-message-rows.js';
 
 const FOLDER_WHERE: Record<WebMailboxFolder, string> = {
-  inbox: "direction = 'inbound' AND is_archived = 0 AND is_deleted = 0",
-  outbox: "direction = 'outbound' AND status IN ('draft', 'queued', 'sending', 'failed') AND is_deleted = 0",
-  sent: "direction = 'outbound' AND status = 'sent' AND is_deleted = 0",
-  starred: 'is_starred = 1 AND is_deleted = 0',
-  archive: 'is_archived = 1 AND is_deleted = 0',
-  trash: 'is_deleted = 1',
-  all: 'is_deleted = 0',
+  inbox: "m.direction = 'inbound' AND m.is_archived = 0 AND m.is_deleted = 0",
+  outbox: "m.direction = 'outbound' AND m.status IN ('draft', 'queued', 'sending', 'failed') AND m.is_deleted = 0",
+  sent: "m.direction = 'outbound' AND m.status = 'sent' AND m.is_deleted = 0",
+  starred: 'm.is_starred = 1 AND m.is_deleted = 0',
+  archive: 'm.is_archived = 1 AND m.is_deleted = 0',
+  trash: 'm.is_deleted = 1',
+  all: 'm.is_deleted = 0',
 };
 
 export function isWebMailboxFolder(value: string): value is WebMailboxFolder {
@@ -24,37 +26,127 @@ export function isWebMailboxFolder(value: string): value is WebMailboxFolder {
 export async function listWebMessages(
   db: D1Database,
   mailboxIdInput: string,
-  folder: WebMailboxFolder,
-  limitInput: number,
-  cursor: WebMessageCursor | null,
+  query: WebMessageListQuery,
 ): Promise<WebMessagePage> {
   const mailboxId = normalizeId(mailboxIdInput, 'mailboxId');
-  const limit = normalizeLimit(limitInput);
-  validateCursor(cursor);
-  const cursorSql = cursor === null
-    ? ''
-    : 'AND (received_at < ? OR (received_at = ? AND id < ?))';
-  const cursorParams = cursor === null
-    ? []
-    : [cursor.before, cursor.before, cursor.beforeId];
+  const limit = normalizeLimit(query.limit);
+  validateCursor(query.cursor);
+  const conditions = [FOLDER_WHERE[query.folder]];
+  const params: Array<string | number> = [mailboxId];
+  appendSearchConditions(conditions, params, query.filters);
+  if (query.cursor !== null) {
+    conditions.push('(m.received_at < ? OR (m.received_at = ? AND m.id < ?))');
+    params.push(query.cursor.before, query.cursor.before, query.cursor.beforeId);
+  }
   const result = await db.prepare(`
-    SELECT id, mailbox_id, direction, status, subject, sender, recipients,
-      received_at, text_preview, raw_size, attachment_count,
-      is_read, is_starred, is_archived, is_deleted
-    FROM messages
-    WHERE mailbox_id = ? AND ${FOLDER_WHERE[folder]} ${cursorSql}
-    ORDER BY received_at DESC, id DESC
+    SELECT m.id, m.mailbox_id, m.direction, m.status, m.subject, m.sender, m.recipients,
+      m.received_at, m.text_preview, m.raw_size, m.attachment_count,
+      m.is_read, m.is_starred, m.is_archived, m.is_deleted
+    FROM messages AS m
+    WHERE m.mailbox_id = ? AND ${conditions.join(' AND ')}
+    ORDER BY m.received_at DESC, m.id DESC
     LIMIT ?
-  `).bind(mailboxId, ...cursorParams, limit + 1).all<WebMessageRow>();
+  `).bind(...params, limit + 1).all<WebMessageRow>();
   const pageRows = result.results.slice(0, limit);
-  const messages = pageRows.map(toWebMessageSummary);
   const last = pageRows.at(-1);
   return {
-    messages,
+    messages: pageRows.map(toWebMessageSummary),
     nextCursor: result.results.length > limit && last !== undefined
       ? { before: last.received_at, beforeId: last.id }
       : null,
   };
+}
+
+function appendSearchConditions(
+  conditions: string[],
+  params: Array<string | number>,
+  filters: WebMessageSearchFilters,
+): void {
+  for (const token of searchTokens(filters.query)) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM message_search_documents AS sd
+      WHERE sd.message_id = m.id AND sd.mailbox_id = m.mailbox_id
+        AND sd.search_text LIKE ? ESCAPE '^'
+    )`);
+    params.push(likePattern(token));
+  }
+  if (filters.from !== '') {
+    conditions.push("m.sender LIKE ? ESCAPE '^'");
+    params.push(likePattern(filters.from));
+  }
+  if (filters.to !== '') {
+    conditions.push(`(
+      m.recipients LIKE ? ESCAPE '^' OR m.cc LIKE ? ESCAPE '^'
+      OR EXISTS (
+        SELECT 1 FROM outbound_recipients AS recipient
+        WHERE recipient.message_id = m.id AND recipient.address LIKE ? ESCAPE '^'
+      )
+    )`);
+    const pattern = likePattern(filters.to);
+    params.push(pattern, pattern, pattern);
+  }
+  if (filters.domain !== '') {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM message_search_documents AS sd
+      WHERE sd.message_id = m.id AND sd.search_text LIKE ? ESCAPE '^'
+    )`);
+    params.push(likePattern(`@${filters.domain}`));
+  }
+  if (filters.dateFrom !== null) {
+    conditions.push('m.received_at >= ?');
+    params.push(filters.dateFrom);
+  }
+  if (filters.dateToExclusive !== null) {
+    conditions.push('m.received_at < ?');
+    params.push(filters.dateToExclusive);
+  }
+  if (filters.attachment === 'with') conditions.push('m.attachment_count > 0');
+  if (filters.attachment === 'without') conditions.push('m.attachment_count = 0');
+  if (filters.read === 'read') conditions.push('m.is_read = 1');
+  if (filters.read === 'unread') conditions.push('m.is_read = 0');
+  if (filters.starred === 'starred') conditions.push('m.is_starred = 1');
+  if (filters.starred === 'unstarred') conditions.push('m.is_starred = 0');
+  if (filters.minimumBytes !== null) {
+    conditions.push('m.raw_size >= ?');
+    params.push(filters.minimumBytes);
+  }
+  if (filters.maximumBytes !== null) {
+    conditions.push('m.raw_size <= ?');
+    params.push(filters.maximumBytes);
+  }
+  appendQuickFilter(conditions, params, filters);
+}
+
+function appendQuickFilter(
+  conditions: string[],
+  params: Array<string | number>,
+  filters: WebMessageSearchFilters,
+): void {
+  if (filters.quickFilter === 'unread') conditions.push('m.is_read = 0');
+  if (filters.quickFilter === 'read') conditions.push('m.is_read = 1');
+  if (filters.quickFilter === 'starred') conditions.push('m.is_starred = 1');
+  if (filters.quickFilter === 'attachments') conditions.push('m.attachment_count > 0');
+  if (filters.quickFilter === 'large') conditions.push('m.raw_size >= 1048576');
+  if (filters.quickFilter === 'html') conditions.push('m.body_html_key IS NOT NULL');
+  if (filters.quickFilter === 'bodyless') {
+    conditions.push("(m.body_text_key IS NULL OR m.text_preview = '')");
+  }
+  if (filters.quickFilter === 'today') {
+    conditions.push('m.received_at >= ?');
+    params.push(filters.todayStart);
+  }
+  if (filters.quickFilter === 'last7d') {
+    conditions.push('m.received_at >= ?');
+    params.push(filters.sevenDaysAgo);
+  }
+}
+
+function searchTokens(value: string): string[] {
+  return [...new Set(value.trim().toLowerCase().split(/\s+/u).filter(Boolean))].slice(0, 8);
+}
+
+function likePattern(value: string): string {
+  return `%${value.trim().toLowerCase().replace(/[\^%_]/gu, (match) => `^${match}`)}%`;
 }
 
 function normalizeLimit(value: number): number {

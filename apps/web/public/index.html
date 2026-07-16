@@ -55,10 +55,50 @@
             </div>
             <button id="refresh-button" class="icon-button" type="button">更新</button>
           </div>
+          <form id="search-form" class="mail-search" role="search">
+            <div class="search-primary">
+              <label class="search-query">
+                <span class="sr-only">メールを検索</span>
+                <input id="search-query" name="q" type="search" maxlength="200" placeholder="件名・本文・差出人・添付名">
+              </label>
+              <button type="submit">検索</button>
+              <button id="search-clear" class="secondary" type="button">解除</button>
+            </div>
+            <label class="quick-filter">
+              <span>クイック条件</span>
+              <select id="search-filter" name="filter">
+                <option value="all">すべて</option>
+                <option value="unread">未読</option>
+                <option value="read">既読</option>
+                <option value="starred">スター付き</option>
+                <option value="attachments">添付あり</option>
+                <option value="large">1MB以上</option>
+                <option value="html">HTML本文</option>
+                <option value="bodyless">本文欠落疑い</option>
+                <option value="today">今日</option>
+                <option value="last7d">7日以内</option>
+              </select>
+            </label>
+            <details id="search-details" class="search-details">
+              <summary>詳細条件 <span id="search-active-count"></span></summary>
+              <div class="search-grid">
+                <label>Fromに含む<input name="from" maxlength="320" placeholder="sender@example.com"></label>
+                <label>To/Cc/Bccに含む<input name="to" maxlength="320" placeholder="recipient@example.com"></label>
+                <label>参加者ドメイン<input name="domain" maxlength="255" placeholder="example.com"></label>
+                <label>開始日<input name="dateFrom" type="date"></label>
+                <label>終了日<input name="dateTo" type="date"></label>
+                <label>添付<select name="attachment"><option value="any">指定なし</option><option value="with">あり</option><option value="without">なし</option></select></label>
+                <label>既読<select name="read"><option value="any">指定なし</option><option value="unread">未読</option><option value="read">既読</option></select></label>
+                <label>スター<select name="starred"><option value="any">指定なし</option><option value="starred">あり</option><option value="unstarred">なし</option></select></label>
+                <label>最小KB<input name="minKb" inputmode="numeric" pattern="[0-9]*"></label>
+                <label>最大KB<input name="maxKb" inputmode="numeric" pattern="[0-9]*"></label>
+              </div>
+            </details>
+          </form>
           <div id="empty-state" class="empty-state" hidden>
             <span class="empty-mark" aria-hidden="true">✦</span>
-            <h2>ここにはまだメールがありません</h2>
-            <p>新しいメッセージが届くと、この一覧に表示されます。</p>
+            <h2 id="empty-title">ここにはまだメールがありません</h2>
+            <p id="empty-description">新しいメッセージが届くと、この一覧に表示されます。</p>
           </div>
           <div id="message-list" class="message-list" aria-live="polite"></div>
           <button id="load-more" class="load-more" type="button" hidden>さらに読み込む</button>

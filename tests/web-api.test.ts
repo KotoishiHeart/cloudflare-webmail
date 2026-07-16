@@ -126,6 +126,38 @@ describe('authorized webmail API', () => {
     expect(detailText).not.toContain(PREFIX);
   });
 
+  it('searches body and attachment text with advanced mailbox filters', async () => {
+    for (const query of [
+      'q=hello',
+      'q=notes',
+      'from=sender%40example.net',
+      'to=web-inbox%40example.com',
+      'domain=example.net',
+      'attachment=with',
+      'filter=attachments',
+      'dateFrom=2026-07-16&dateTo=2026-07-16',
+    ]) {
+      const response = await webRequest(
+        `/api/mailboxes/${MAILBOX_ID}/messages?folder=inbox&${query}`,
+        {},
+        OWNER,
+      );
+      expect(response.status, query).toBe(200);
+      await expect(response.json(), query).resolves.toMatchObject({
+        data: { messages: [{ id: MESSAGE_ID }] },
+      });
+    }
+
+    for (const query of ['q=not-present', 'attachment=without', 'minKb=1']) {
+      const response = await webRequest(
+        `/api/mailboxes/${MAILBOX_ID}/messages?folder=inbox&${query}`,
+        {},
+        OWNER,
+      );
+      await expect(response.json(), query).resolves.toMatchObject({ data: { messages: [] } });
+    }
+  });
+
   it('streams body, raw MIME, and attachment objects after authorization', async () => {
     const body = await webRequest(`/api/messages/${MESSAGE_ID}/body`, {}, VIEWER);
     expect(body.headers.get('content-type')).toBe('text/plain; charset=utf-8');
@@ -171,6 +203,14 @@ describe('authorized webmail API', () => {
       OWNER,
     );
     expect(list.status).toBe(400);
+    for (const query of ['dateFrom=2026-02-30', 'minKb=20&maxKb=10', 'filter=unknown']) {
+      const filtered = await webRequest(
+        `/api/mailboxes/${MAILBOX_ID}/messages?${query}`,
+        {},
+        OWNER,
+      );
+      expect(filtered.status, query).toBe(400);
+    }
     const attachment = await webRequest(
       `/api/messages/${MESSAGE_ID}/attachments/100`,
       {},

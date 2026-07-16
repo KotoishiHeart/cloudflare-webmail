@@ -11,8 +11,11 @@ export async function getSession() {
   return requestJson('/api/session');
 }
 
-export async function getMessages(mailboxId, folder, cursor = null) {
+export async function getMessages(mailboxId, folder, cursor = null, filters = {}) {
   const query = new URLSearchParams({ folder, limit: '30' });
+  for (const [name, value] of Object.entries(filters)) {
+    if (value !== '' && value !== 'all' && value !== 'any') query.set(name, value);
+  }
   if (cursor) {
     query.set('before', String(cursor.before));
     query.set('beforeId', cursor.beforeId);

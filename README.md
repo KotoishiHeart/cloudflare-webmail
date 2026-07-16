@@ -23,6 +23,13 @@ validates staged objects, parses MIME, stores canonical message objects in R2,
 and records searchable message metadata in D1. Queue redelivery is idempotent by
 message ID and raw-message SHA-256.
 
+Mailbox search covers the bounded body preview, subject, participants, outbound
+BCC, and attachment names. Advanced filters cover participant fields and
+domain, JST date range, attachment/read/star state, size, and the archived quick
+filters. The derived search table remains a normal D1 table so portable D1
+exports continue to work; the rationale is recorded in
+[`docs/adr/0007-portable-mail-search.md`](docs/adr/0007-portable-mail-search.md).
+
 Outbound compose requests are first persisted as D1/R2 outbox records and then
 sent by the jobs Worker through the Cloudflare Email Service binding. The
 outbound Queue is processed one message at a time, with D1 leases, delayed

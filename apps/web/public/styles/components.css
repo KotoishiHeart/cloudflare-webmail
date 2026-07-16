@@ -43,6 +43,45 @@
 .sidebar-note strong { margin-top: 0.25rem; color: var(--forest); }
 
 .message-list { display: grid; gap: 0.62rem; }
+.mail-search {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 0.8rem;
+  background: rgb(255 255 255 / 72%);
+}
+.search-primary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.45rem; }
+.search-primary input,
+.mail-search select,
+.search-grid input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 0.58rem 0.65rem;
+  color: var(--ink);
+  background: white;
+  font: inherit;
+  font-size: 0.75rem;
+}
+.search-primary button {
+  border: 0;
+  border-radius: 9px;
+  padding: 0.58rem 0.72rem;
+  color: white;
+  background: var(--forest);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.search-primary button.secondary { border: 1px solid var(--line); color: var(--muted); background: white; }
+.quick-filter { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.6rem; color: var(--muted); font-size: 0.68rem; }
+.search-details { border-top: 1px solid var(--line); padding-top: 0.62rem; }
+.search-details summary { color: var(--forest); cursor: pointer; font-size: 0.72rem; font-weight: 700; }
+#search-active-count { margin-left: 0.35rem; color: var(--orange); }
+.search-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; margin-top: 0.7rem; }
+.search-grid label { display: grid; gap: 0.25rem; min-width: 0; color: var(--muted); font-size: 0.65rem; }
 .message-row {
   display: grid;
   grid-template-columns: 8px minmax(0, 1fr) auto;

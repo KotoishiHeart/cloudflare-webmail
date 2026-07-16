@@ -79,6 +79,15 @@ describe('outbound delivery', () => {
     );
     expect(raw).not.toBeNull();
     await expect(raw?.text()).resolves.toContain('X-CF-Webmail-Archive: compose-snapshot');
+    const search = await handleWebRequest(new Request(
+      `${ORIGIN}/api/mailboxes/${MAILBOX_ID}/messages?folder=outbox&to=hidden%40example.net`,
+    ), env, {
+      authenticate: async () => ({ ok: true, identity: IDENTITY }),
+      now: () => NOW + 2_000,
+    });
+    await expect(search.json()).resolves.toMatchObject({
+      data: { messages: [{ id: firstPayload.data.messageId }] },
+    });
   });
 
   it('sends stored text and HTML through the binding and finishes once', async () => {

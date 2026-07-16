@@ -62,6 +62,45 @@ export type WebMessageCursor = {
   beforeId: string;
 };
 
+export const WEB_MESSAGE_QUICK_FILTERS = [
+  'all',
+  'unread',
+  'read',
+  'starred',
+  'attachments',
+  'large',
+  'html',
+  'bodyless',
+  'today',
+  'last7d',
+] as const;
+
+export type WebMessageQuickFilter = (typeof WEB_MESSAGE_QUICK_FILTERS)[number];
+
+export type WebMessageSearchFilters = {
+  query: string;
+  from: string;
+  to: string;
+  domain: string;
+  dateFrom: number | null;
+  dateToExclusive: number | null;
+  attachment: 'any' | 'with' | 'without';
+  read: 'any' | 'read' | 'unread';
+  starred: 'any' | 'starred' | 'unstarred';
+  minimumBytes: number | null;
+  maximumBytes: number | null;
+  quickFilter: WebMessageQuickFilter;
+  todayStart: number;
+  sevenDaysAgo: number;
+};
+
+export type WebMessageListQuery = {
+  folder: WebMailboxFolder;
+  limit: number;
+  cursor: WebMessageCursor | null;
+  filters: WebMessageSearchFilters;
+};
+
 export type WebMessagePage = {
   messages: WebMessageSummary[];
   nextCursor: WebMessageCursor | null;
