@@ -137,6 +137,10 @@ export async function loadAndValidateLegacyMapping(path, inventory) {
   };
 }
 
+export function legacyMappingSha256(mapping) {
+  return createHash('sha256').update(JSON.stringify(mapping)).digest('hex');
+}
+
 function accountInventory(database) {
   const accounts = new Map();
   for (const row of database.prepare(`

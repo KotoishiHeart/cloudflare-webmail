@@ -38,6 +38,45 @@ npm run migrate:legacy -- validate-mapping \
   --mapping ops/legacy-mapping.json
 ```
 
+## Snapshot archived raw MIME
+
+The old D1 SQL contains R2 references but no object bodies. Copy only the raw
+MIME objects into a resumable local snapshot. A restored object directory may
+be used without Cloudflare access:
+
+```bash
+npm run migrate:legacy -- fetch \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --snapshot ops/legacy-raw-snapshot \
+  --object-root /srv/legacy-r2
+```
+
+To read the archived bucket directly, select the target explicitly. The
+command only downloads objects and does not mutate the source bucket:
+
+```bash
+npm run migrate:legacy -- fetch \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --snapshot ops/legacy-raw-snapshot \
+  --bucket OLD_BUCKET --remote --config /srv/legacy/wrangler.toml \
+  --concurrency 4
+```
+
+Each object is written to a hashed local filename and checked against the old
+D1 `raw_sha256` and uncompressed size before it becomes `ready`. Missing and
+invalid objects remain in the snapshot database and are retried on the next
+`fetch`; changing the source database, mapping, bucket, or object directory is
+rejected during a resume.
+
+```bash
+npm run migrate:legacy -- verify-snapshot \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --snapshot ops/legacy-raw-snapshot
+```
+
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext
 secrets from the archived repository into any of these files.

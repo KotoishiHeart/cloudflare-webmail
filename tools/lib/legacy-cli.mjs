@@ -2,6 +2,7 @@ import { writeFile } from 'node:fs/promises';
 import { parseOptions } from './ops-cli.mjs';
 import { createLegacyInventory, createLegacyMappingTemplate, loadAndValidateLegacyMapping } from './legacy-inventory.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
+import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
 
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
@@ -39,6 +40,42 @@ export async function runLegacyMigrationCli(argv, io = {
     }, null, 2)}\n`);
     return 0;
   }
+  if (command === 'fetch') {
+    const database = required(options, 'database');
+    const mapping = await loadAndValidateLegacyMapping(
+      required(options, 'mapping'),
+      createLegacyInventory(database),
+    );
+    const result = await fetchLegacySnapshot({
+      database,
+      mapping,
+      snapshot: required(options, 'snapshot'),
+      objectRoot: options['object-root'],
+      bucket: options.bucket,
+      local: Boolean(options.local),
+      remote: Boolean(options.remote),
+      config: options.config,
+      persistTo: options['persist-to'],
+      concurrency: options.concurrency,
+      io,
+    });
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return result.complete ? 0 : 2;
+  }
+  if (command === 'verify-snapshot') {
+    const database = required(options, 'database');
+    const mapping = await loadAndValidateLegacyMapping(
+      required(options, 'mapping'),
+      createLegacyInventory(database),
+    );
+    const result = await verifyLegacySnapshot({
+      database,
+      mapping,
+      snapshot: required(options, 'snapshot'),
+    });
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return 0;
+  }
   throw new Error(`unknown command: ${command}`);
 }
 
@@ -57,5 +94,8 @@ function usage() {
     `  import-sql --sql OLD_SAFE_BACKUP.sql --database legacy.sqlite\n` +
     `  inventory --database legacy.sqlite --output inventory.json \\\n` +
     `    [--mapping-template mapping.json]\n` +
-    `  validate-mapping --database legacy.sqlite --mapping mapping.json\n`;
+    `  validate-mapping --database legacy.sqlite --mapping mapping.json\n` +
+    `  fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
+    `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
+    `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n`;
 }
