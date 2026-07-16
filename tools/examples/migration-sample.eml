@@ -1,0 +1,9 @@
+From: Sender <sender@example.net>
+To: mailbox@example.com
+Subject: Migration sample
+Message-ID: <migration-sample@example.net>
+Date: Thu, 16 Jul 2026 12:00:00 GMT
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+This message is a local migration smoke-test fixture.

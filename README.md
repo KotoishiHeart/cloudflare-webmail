@@ -97,6 +97,11 @@ SQL from a versioned manifest, requires an explicit local/remote target and
 confirmation for mutations, and provides aggregate status and single-message
 outbound retry commands.
 
+Maildir and archived raw-object migrations use the resumable stage workflow in
+[`docs/migration.md`](docs/migration.md). Preparation and hash verification are
+fully local; an explicit `apply --local|--remote --yes` uploads R2 objects
+before applying chunked D1 inserts.
+
 ## Implementation stages
 
 1. Completed: Worker entrypoints, versioned contracts, generated binding types,
