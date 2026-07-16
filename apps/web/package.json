@@ -2,5 +2,8 @@
   "name": "@cf-webmail/web",
   "version": "3.0.0-dev.1",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "jose": "^6.2.3"
+  }
 }

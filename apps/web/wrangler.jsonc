@@ -4,11 +4,21 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-16",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "ACCESS_TEAM_DOMAIN": "https://REPLACE_WITH_TEAM.cloudflareaccess.com",
+    "ACCESS_AUD": "REPLACE_WITH_ACCESS_AUD"
+  },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "cf-webmail",
       "migrations_dir": "../../migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "RAW_EMAILS",
+      "bucket_name": "cf-webmail-raw"
     }
   ],
   "observability": {

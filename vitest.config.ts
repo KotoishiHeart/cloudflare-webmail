@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [
     cloudflareTest(async () => ({
-      wrangler: { configPath: './apps/jobs/wrangler.jsonc' },
+      wrangler: { configPath: './apps/web/wrangler.jsonc' },
       miniflare: {
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations(
