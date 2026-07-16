@@ -74,3 +74,26 @@ the original run instead of replacing current state unconditionally.
 
 Unauthorized message IDs return the same not-found response as nonexistent
 IDs. Responses never expose R2 storage keys.
+
+## System administration
+
+All `/api/admin/*` routes require an active user with an explicit row in
+`system_administrators`. Mutations also require a same-origin `Origin` header.
+
+- `GET /api/admin/summary`
+- `GET|POST /api/admin/users`
+- `GET|PATCH /api/admin/users/:userId`
+- `POST|DELETE /api/admin/users/:userId/identities`
+- `PUT|DELETE /api/admin/users/:userId/administrator`
+- `GET|POST /api/admin/mailboxes`
+- `GET|PATCH /api/admin/mailboxes/:mailboxId`
+- `POST|PATCH|DELETE /api/admin/mailboxes/:mailboxId/addresses`
+- `PUT|DELETE /api/admin/mailboxes/:mailboxId/members/:userId`
+- `GET /api/admin/audit-events`
+- `GET /api/admin/delivery-events`
+
+User and mailbox deletion are reversible `status: "disabled"` transitions.
+The API rejects disabling the current administrator, revoking the current or
+last active administrator, removing an active user's last Access identity,
+deleting a primary address, and deleting a mailbox's last owner. Event lists
+use `before` plus `beforeId` keyset cursors and a maximum page size of 100.

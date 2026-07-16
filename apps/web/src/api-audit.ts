@@ -53,7 +53,9 @@ function actionFor(method: string, pathname: string, category: AuditCategory): s
 
 function targetForPath(pathname: string): { type: string; id: string } {
   const segments = pathname.split('/').filter(Boolean);
-  for (const marker of ['rule-runs', 'rules', 'messages', 'labels']) {
+  for (const marker of [
+    'rule-runs', 'rules', 'messages', 'labels', 'users', 'mailboxes',
+  ]) {
     const index = segments.lastIndexOf(marker);
     const candidate = segments[index + 1];
     if (index >= 0 && candidate !== undefined) return { type: marker, id: candidate };

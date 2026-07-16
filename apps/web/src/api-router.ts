@@ -38,6 +38,7 @@ import {
   OutboundQueueUnavailableError,
 } from './outbound-api.js';
 import { ComposeMediaTypeError } from './compose-input.js';
+import { routeAdminApi } from './admin-router.js';
 
 export async function routeApi(
   request: Request,
@@ -68,6 +69,9 @@ async function routeKnownApi(
   now: number,
 ): Promise<Response> {
   const pathname = new URL(request.url).pathname;
+  if (pathname === '/api/admin' || pathname.startsWith('/api/admin/')) {
+    return routeAdminApi(request, env.DB, identity, now);
+  }
   if (pathname === '/api/preferences') {
     return preferencesResponse(request, env.DB, identity, now);
   }
