@@ -32,6 +32,8 @@ export function senderLabel(value) {
 
 export const FOLDER_LABELS = {
   inbox: '受信箱',
+  outbox: '送信トレイ',
+  sent: '送信済み',
   starred: 'スター付き',
   archive: 'アーカイブ',
   trash: 'ゴミ箱',

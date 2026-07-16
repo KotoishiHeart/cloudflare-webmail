@@ -9,6 +9,8 @@ import { toWebMessageSummary, type WebMessageRow } from './web-message-rows.js';
 
 const FOLDER_WHERE: Record<WebMailboxFolder, string> = {
   inbox: "direction = 'inbound' AND is_archived = 0 AND is_deleted = 0",
+  outbox: "direction = 'outbound' AND status IN ('draft', 'queued', 'sending', 'failed') AND is_deleted = 0",
+  sent: "direction = 'outbound' AND status = 'sent' AND is_deleted = 0",
   starred: 'is_starred = 1 AND is_deleted = 0',
   archive: 'is_archived = 1 AND is_deleted = 0',
   trash: 'is_deleted = 1',

@@ -26,7 +26,8 @@ export type WebMessageRow = {
 export function toWebMessageSummary(row: WebMessageRow): WebMessageSummary {
   if (
     (row.direction !== 'inbound' && row.direction !== 'outbound')
-    || (row.status !== 'ready' && row.status !== 'quarantined')
+    || !['ready', 'quarantined', 'draft', 'queued', 'sending', 'sent', 'failed']
+      .includes(row.status)
   ) {
     throw new Error('D1 returned an unsupported web message state');
   }
@@ -34,7 +35,7 @@ export function toWebMessageSummary(row: WebMessageRow): WebMessageSummary {
     id: row.id,
     mailboxId: row.mailbox_id,
     direction: row.direction,
-    status: row.status,
+    status: row.status as WebMessageSummary['status'],
     subject: row.subject,
     sender: row.sender,
     recipients: row.recipients,

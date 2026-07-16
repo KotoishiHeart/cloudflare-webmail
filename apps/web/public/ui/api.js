@@ -42,6 +42,18 @@ export async function patchMessage(messageId, patch) {
   });
 }
 
+export async function createMessage(mailboxId, input) {
+  const { requestId, ...message } = input;
+  return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/messages`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'idempotency-key': requestId,
+    },
+    body: JSON.stringify(message),
+  });
+}
+
 async function requestJson(path, init = {}) {
   const response = await fetch(path, {
     ...init,

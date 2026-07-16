@@ -89,6 +89,10 @@ function renderAttachments(attachments) {
 
 function statusLabel(message, bodySource) {
   if (message.status === 'quarantined') return '隔離済みメッセージ';
+  if (message.status === 'queued') return '送信待ち';
+  if (message.status === 'sending') return '送信処理中';
+  if (message.status === 'sent') return '送信済み';
+  if (message.status === 'failed') return `送信失敗${message.processingError ? ` (${message.processingError})` : ''}`;
   if (bodySource === 'html-source') return 'HTMLソースを安全なテキストで表示';
   return message.isRead ? '既読' : '未読';
 }

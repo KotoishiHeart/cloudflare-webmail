@@ -4,7 +4,9 @@ import {
   getMessages,
   getSession,
   patchMessage,
+  createMessage,
 } from './ui/api.js';
+import { bindCompose, openCompose } from './ui/compose.js';
 import {
   closeMessageDetail,
   showDetailLoading,
@@ -26,7 +28,9 @@ bindShell({
   onRefresh: () => loadMessages(false),
   onLoadMore: () => loadMessages(true),
   onClose: closeDetail,
+  onCompose: () => openCompose(selectedMailbox()),
 });
+bindCompose(sendMessage);
 
 await start();
 
@@ -113,6 +117,21 @@ async function applyPatch(messageId, patch) {
   } catch (error) {
     handleError(error, 'メッセージを更新できませんでした。');
   }
+}
+
+async function sendMessage(input) {
+  try {
+    await createMessage(state.mailboxId, input);
+    showStatus('メールを送信トレイに追加しました。');
+    await changeFolder('outbox');
+  } catch (error) {
+    handleError(error, 'メールを送信トレイへ追加できませんでした。');
+    throw error;
+  }
+}
+
+function selectedMailbox() {
+  return state.session?.mailboxes.find((mailbox) => mailbox.id === state.mailboxId);
 }
 
 function closeDetail() {

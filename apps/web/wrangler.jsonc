@@ -21,6 +21,14 @@
       "bucket_name": "cf-webmail-raw"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "OUTBOUND_QUEUE",
+        "queue": "cf-webmail-outbound"
+      }
+    ]
+  },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

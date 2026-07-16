@@ -58,7 +58,7 @@ export function requestIsSameOrigin(request: Request): boolean {
 export class UnsupportedMediaTypeError extends Error {}
 export class ApiInputError extends Error {}
 
-async function readBoundedJson(request: Request, maxBytes: number): Promise<unknown> {
+export async function readBoundedJson(request: Request, maxBytes: number): Promise<unknown> {
   if (request.body === null) throw new ApiInputError('request body is required');
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -86,6 +86,6 @@ async function readBoundedJson(request: Request, maxBytes: number): Promise<unkn
   }
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

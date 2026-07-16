@@ -18,6 +18,10 @@ export function renderSession(session, selectedMailboxId) {
     mailboxSelect.append(option);
   }
   mailboxSelect.disabled = session.mailboxes.length < 2;
+  const selected = session.mailboxes.find((mailbox) => mailbox.id === selectedMailboxId);
+  const compose = document.querySelector('#compose-button');
+  compose.disabled = !selected || selected.role === 'viewer';
+  compose.title = compose.disabled ? 'このメールボックスは閲覧専用です' : '';
 }
 
 export function renderFolder(folder) {
@@ -37,7 +41,7 @@ export function showStatus(message, error = false) {
   }, error ? 7000 : 3500);
 }
 
-export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose }) {
+export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose, onCompose }) {
   mailboxSelect.addEventListener('change', () => onMailbox(mailboxSelect.value));
   document.querySelector('#folder-nav').addEventListener('click', (event) => {
     const button = event.target.closest('[data-folder]');
@@ -46,4 +50,5 @@ export function bindShell({ onMailbox, onFolder, onRefresh, onLoadMore, onClose 
   document.querySelector('#refresh-button').addEventListener('click', onRefresh);
   document.querySelector('#load-more').addEventListener('click', onLoadMore);
   document.querySelector('#detail-close').addEventListener('click', onClose);
+  document.querySelector('#compose-button').addEventListener('click', onCompose);
 }

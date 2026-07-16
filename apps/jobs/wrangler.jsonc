@@ -17,7 +17,18 @@
       "bucket_name": "cf-webmail-raw"
     }
   ],
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
   "queues": {
+    "producers": [
+      {
+        "binding": "OUTBOUND_QUEUE",
+        "queue": "cf-webmail-outbound"
+      }
+    ],
     "consumers": [
       {
         "queue": "cf-webmail-inbound",
@@ -25,8 +36,18 @@
         "max_batch_timeout": 5,
         "max_retries": 5,
         "dead_letter_queue": "cf-webmail-inbound-dlq"
+      },
+      {
+        "queue": "cf-webmail-outbound",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "cf-webmail-outbound-dlq"
       }
     ]
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *"]
   },
   "observability": {
     "enabled": true,

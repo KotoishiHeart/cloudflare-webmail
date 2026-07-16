@@ -29,9 +29,12 @@
       </header>
 
       <aside class="sidebar" aria-label="メールフォルダー">
+        <button id="compose-button" class="compose-button" type="button">メールを作成</button>
         <p class="eyebrow">Folders</p>
         <nav id="folder-nav" class="folder-nav">
           <button class="active" data-folder="inbox"><span>受信箱</span></button>
+          <button data-folder="outbox"><span>送信トレイ</span></button>
+          <button data-folder="sent"><span>送信済み</span></button>
           <button data-folder="starred"><span>スター付き</span></button>
           <button data-folder="archive"><span>アーカイブ</span></button>
           <button data-folder="trash"><span>ゴミ箱</span></button>
@@ -91,6 +94,30 @@
     </div>
 
     <div id="status" class="status-toast" role="status" aria-live="polite" hidden></div>
+
+    <dialog id="compose-dialog" class="compose-dialog" aria-labelledby="compose-title">
+      <form id="compose-form" method="dialog">
+        <div class="compose-heading">
+          <div>
+            <p class="eyebrow">New message</p>
+            <h2 id="compose-title">メールを作成</h2>
+          </div>
+          <button id="compose-close" class="icon-button" type="button">閉じる</button>
+        </div>
+        <p id="compose-from" class="compose-from"></p>
+        <label>宛先 <input id="compose-to" name="to" type="text" autocomplete="off" required placeholder="user@example.com（複数はカンマ区切り）"></label>
+        <div class="compose-copy-fields">
+          <label>CC <input id="compose-cc" name="cc" type="text" autocomplete="off"></label>
+          <label>BCC <input id="compose-bcc" name="bcc" type="text" autocomplete="off"></label>
+        </div>
+        <label>件名 <input id="compose-subject" name="subject" type="text" maxlength="998"></label>
+        <label>本文 <textarea id="compose-text" name="text" rows="14" required></textarea></label>
+        <div class="compose-actions">
+          <span id="compose-hint">添付ファイルは次の段階で対応します。</span>
+          <button id="compose-submit" type="submit">送信トレイに追加</button>
+        </div>
+      </form>
+    </dialog>
 
     <template id="message-template">
       <button class="message-row" type="button">

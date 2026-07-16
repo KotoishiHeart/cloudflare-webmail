@@ -22,6 +22,13 @@ validates staged objects, parses MIME, stores canonical message objects in R2,
 and records searchable message metadata in D1. Queue redelivery is idempotent by
 message ID and raw-message SHA-256.
 
+Outbound compose requests are first persisted as D1/R2 outbox records and then
+sent by the jobs Worker through the Cloudflare Email Service binding. The
+outbound Queue is processed one message at a time, with D1 leases, delayed
+retry, a dead-letter queue, and a scheduled recovery scan. The current compose
+surface sends text plus generated safe HTML and intentionally does not accept
+attachments yet.
+
 The web Worker independently verifies the Cloudflare Access application JWT,
 maps its issuer and subject to D1 memberships, exposes a bounded JSON and
 streaming API, and serves the browser application through Workers Static
@@ -42,15 +49,25 @@ production `database_id`. Create the `cf-webmail` D1 database and add the ID to
 all three Worker configurations before a remote migration or deployment. Local
 migrations and tests do not require a Cloudflare account.
 
-Stages 3 and 4 expect these account resources before remote deployment:
+Inbound and outbound processing expect these account resources before remote
+deployment:
 
 ```bash
 npx wrangler r2 bucket create cf-webmail-raw
 npx wrangler queues create cf-webmail-inbound
 npx wrangler queues create cf-webmail-inbound-dlq
+npx wrangler queues create cf-webmail-outbound
+npx wrangler queues create cf-webmail-outbound-dlq
 ```
 
-Apply both D1 migrations and deploy the ingest and jobs Workers before enabling
+Onboard every sender domain in **Compute > Email Service > Email Sending** and
+confirm its SPF/DKIM records before deploying the jobs Worker. The committed
+`EMAIL` binding has no static destination restriction because authorized D1
+mailboxes are dynamic; the application still restricts `From` to each active
+mailbox's primary address. Keep DMARC policy and monitoring under operational
+control.
+
+Apply all D1 migrations and deploy the ingest and jobs Workers before enabling
 a production Email Routing rule. The jobs consumer retries each message up to
 five times and then sends it to the dead-letter queue for inspection.
 
@@ -82,4 +99,5 @@ with Wrangler and are checked in CI through `npm run types:check`.
 3. Completed: Email Routing to R2 staging and Queue production.
 4. Completed: Queue MIME parsing and D1/R2 persistence.
 5. Completed: Access-protected Web API and Static Assets UI.
-6. Outbox delivery, operational CLI, migration, and backup tooling.
+6. In progress: completed Queue-backed outbox delivery; operational CLI,
+   migration, and backup tooling follow as separate commits.

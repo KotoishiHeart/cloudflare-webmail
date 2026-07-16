@@ -14,7 +14,9 @@ export function renderMessageList(state, onSelect) {
     row.dataset.messageId = message.id;
     row.classList.toggle('read', message.isRead);
     row.classList.toggle('active', message.id === state.selectedMessageId);
-    row.querySelector('.message-sender').textContent = senderLabel(message.sender);
+    row.querySelector('.message-sender').textContent = message.direction === 'outbound'
+      ? `宛先: ${message.recipients || 'BCCのみ'}`
+      : senderLabel(message.sender);
     row.querySelector('time').textContent = shortDate(message.receivedAt);
     row.querySelector('time').dateTime = new Date(message.receivedAt).toISOString();
     row.querySelector('.message-subject').textContent = message.subject || '（件名なし）';
@@ -36,5 +38,8 @@ function badges(message) {
   if (message.isStarred) values.push('★');
   if (message.attachmentCount > 0) values.push('⌕');
   if (message.status === 'quarantined') values.push('!');
+  if (message.status === 'queued') values.push('送信待ち');
+  if (message.status === 'sending') values.push('送信中');
+  if (message.status === 'failed') values.push('送信失敗');
   return values.join(' ');
 }

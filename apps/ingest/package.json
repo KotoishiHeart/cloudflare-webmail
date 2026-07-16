@@ -5,6 +5,6 @@
   "type": "module",
   "dependencies": {
     "@cf-webmail/contracts": "3.0.0-dev.1",
-    "@cf-webmail/database": "0.0.0"
+    "@cf-webmail/database": "3.0.0-dev.1"
   }
 }

@@ -2,6 +2,8 @@ import type { MailboxRole } from './domain.js';
 
 export const WEB_MAILBOX_FOLDERS = [
   'inbox',
+  'outbox',
+  'sent',
   'starred',
   'archive',
   'trash',
@@ -14,7 +16,7 @@ export type WebMessageSummary = {
   id: string;
   mailboxId: string;
   direction: 'inbound' | 'outbound';
-  status: 'ready' | 'quarantined';
+  status: 'ready' | 'quarantined' | 'draft' | 'queued' | 'sending' | 'sent' | 'failed';
   subject: string;
   sender: string;
   recipients: string;

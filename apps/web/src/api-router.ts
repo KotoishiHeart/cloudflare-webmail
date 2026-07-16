@@ -13,21 +13,29 @@ import {
   getMessageBody,
 } from './message-object-api.js';
 import { getSession } from './session-api.js';
+import {
+  createOutboundMessage,
+  OutboundQueueUnavailableError,
+} from './outbound-api.js';
+import { ComposeMediaTypeError } from './compose-input.js';
 
 export async function routeApi(
   request: Request,
-  env: Pick<Env, 'DB' | 'RAW_EMAILS'>,
+  env: Pick<Env, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>,
   identity: AccessIdentity,
   now: number,
 ): Promise<Response> {
   try {
     return await routeKnownApi(request, env, identity, now);
   } catch (error) {
-    if (error instanceof UnsupportedMediaTypeError) {
+    if (error instanceof UnsupportedMediaTypeError || error instanceof ComposeMediaTypeError) {
       return apiError('unsupported_media_type', 415);
     }
     if (error instanceof ApiInputError || error instanceof DatabaseInputError) {
       return apiError('invalid_request', 400);
+    }
+    if (error instanceof OutboundQueueUnavailableError) {
+      return apiError('outbound_queue_unavailable', 503);
     }
     throw error;
   }
@@ -35,7 +43,7 @@ export async function routeApi(
 
 async function routeKnownApi(
   request: Request,
-  env: Pick<Env, 'DB' | 'RAW_EMAILS'>,
+  env: Pick<Env, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>,
   identity: AccessIdentity,
   now: number,
 ): Promise<Response> {
@@ -48,9 +56,13 @@ async function routeKnownApi(
 
   const mailboxList = pathname.match(/^\/api\/mailboxes\/([^/]+)\/messages$/u);
   if (mailboxList !== null) {
-    return request.method === 'GET'
-      ? getMessageList(request, env.DB, identity, mailboxList[1] ?? '')
-      : apiError('method_not_allowed', 405, 'GET');
+    if (request.method === 'GET') {
+      return getMessageList(request, env.DB, identity, mailboxList[1] ?? '');
+    }
+    if (request.method === 'POST') {
+      return createOutboundMessage(request, env, identity, mailboxList[1] ?? '', now);
+    }
+    return apiError('method_not_allowed', 405, 'GET, POST');
   }
 
   const attachment = pathname.match(/^\/api\/messages\/([^/]+)\/attachments\/(\d+)$/u);
