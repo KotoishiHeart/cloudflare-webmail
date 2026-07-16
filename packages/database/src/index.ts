@@ -6,3 +6,7 @@ export * from './message-queries.js';
 export * from './provisioning.js';
 export { resolveActiveMailboxAddress } from './routing.js';
 export * from './validation.js';
+export * from './web-message-detail.js';
+export * from './web-message-domain.js';
+export * from './web-message-list.js';
+export * from './web-message-update.js';

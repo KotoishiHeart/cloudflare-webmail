@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@cf-webmail/database": "3.0.0-dev.1",
     "jose": "^6.2.3"
   }
 }

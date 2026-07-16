@@ -2,6 +2,8 @@ import {
   authenticateAccessRequest,
   type AccessAuthResult,
 } from './access-auth.js';
+import { routeApi } from './api-router.js';
+import { apiError } from './api-response.js';
 
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
@@ -11,10 +13,12 @@ const JSON_HEADERS = {
 
 export type WebRequestDependencies = {
   authenticate(request: Request, env: Env): Promise<AccessAuthResult>;
+  now?(): number;
 };
 
 const DEFAULT_DEPENDENCIES: WebRequestDependencies = {
   authenticate: authenticateAccessRequest,
+  now: Date.now,
 };
 
 export async function handleWebRequest(
@@ -36,5 +40,21 @@ export async function handleWebRequest(
       { status: auth.status, headers: JSON_HEADERS },
     );
   }
-  return Response.json({ ok: false, error: 'not_found' }, { status: 404, headers: JSON_HEADERS });
+  try {
+    if (url.pathname.startsWith('/api/')) {
+      return await routeApi(request, env, auth.identity, dependencies.now?.() ?? Date.now());
+    }
+    return Response.json(
+      { ok: false, error: 'not_found' },
+      { status: 404, headers: JSON_HEADERS },
+    );
+  } catch (error) {
+    console.error(JSON.stringify({
+      event: 'web.request_failed',
+      path: url.pathname,
+      errorType: error instanceof Error ? error.name : typeof error,
+      cfRay: request.headers.get('cf-ray') ?? '',
+    }));
+    return apiError('internal_error', 500);
+  }
 }
