@@ -4,8 +4,10 @@ import { spawnSync } from 'node:child_process';
 import { discoverMessageFiles, maildirFlags, readMessageFile } from './migration-source.mjs';
 import { prepareMigratedMessage, sha256 } from './migration-message.mjs';
 import { renderMigratedMessageSql } from './migration-sql.mjs';
+import { validateStageManifest } from './migration-stage-validation.mjs';
 
 const STAGE_VERSION = 1;
+const LEGACY_STAGE_VERSION = 2;
 const SQL_CHUNK_SIZE = 50;
 
 export async function prepareMigrationStage(options) {
@@ -89,11 +91,16 @@ export async function prepareMigrationStage(options) {
 export async function verifyMigrationStage(stageInput) {
   const stage = resolve(stageInput);
   const manifest = JSON.parse(await readFile(join(stage, 'manifest.json'), 'utf8'));
-  if (manifest.version !== STAGE_VERSION || manifest.kind !== 'cf-webmail-migration-stage') {
+  if (
+    (manifest.version !== STAGE_VERSION && manifest.version !== LEGACY_STAGE_VERSION)
+    || manifest.kind !== 'cf-webmail-migration-stage'
+  ) {
     throw new Error('unsupported migration stage');
   }
   const objects = await readJsonLines(join(stage, 'objects.jsonl'));
   if (objects.length !== manifest.counts.objects) throw new Error('object count does not match manifest');
+  const failures = await readJsonLines(join(stage, 'failures.jsonl'));
+  if (failures.length !== manifest.counts.failed) throw new Error('failure count does not match manifest');
   validateStageManifest(manifest, objects);
   for (const object of objects) {
     const content = await readFile(join(stage, object.file));
@@ -113,6 +120,9 @@ export async function verifyMigrationStage(stageInput) {
 export async function applyMigrationStage(stageInput, options, io = { spawn: spawnSync }) {
   const stage = resolve(stageInput);
   const verified = await verifyMigrationStage(stage);
+  if (verified.manifest.version === LEGACY_STAGE_VERSION && verified.manifest.complete !== true) {
+    throw new Error('incomplete legacy migration stages cannot be applied');
+  }
   const target = {
     mode: options.local ? 'local' : 'remote',
     bucket: options.bucket,
@@ -212,55 +222,4 @@ async function assertMissing(path) {
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
-}
-
-function validateStageManifest(manifest, objects) {
-  if (!uuid(manifest.mailboxId)) throw new Error('stage mailbox ID is invalid');
-  if (!Array.isArray(manifest.sqlFiles)) throw new Error('stage SQL file list is invalid');
-  if (manifest.direction !== 'inbound' && manifest.direction !== 'outbound') {
-    throw new Error('stage direction is invalid');
-  }
-  const objectKeys = new Set();
-  const objectFiles = new Set();
-  const prefix = `mailboxes/${manifest.mailboxId}/messages/`;
-  for (const object of objects) {
-    if (
-      typeof object.key !== 'string'
-      || !object.key.startsWith(prefix)
-      || object.key.length > 1024
-      || /[\u0000-\u001f\u007f]/u.test(object.key)
-    ) throw new Error('stage object key is invalid');
-    if (typeof object.file !== 'string' || !/^objects\/\d{8}\.bin$/u.test(object.file)) {
-      throw new Error('stage object file path is invalid');
-    }
-    if (
-      typeof object.contentType !== 'string'
-      || object.contentType.length < 1
-      || object.contentType.length > 255
-      || /[\u0000-\u001f\u007f]/u.test(object.contentType)
-    ) throw new Error('stage object content type is invalid');
-    if (!Number.isSafeInteger(object.size) || object.size < 0 || object.size > 25 * 1024 * 1024) {
-      throw new Error('stage object size is invalid');
-    }
-    if (!/^[0-9a-f]{64}$/u.test(object.sha256)) throw new Error('stage object hash is invalid');
-    if (objectKeys.has(object.key) || objectFiles.has(object.file)) {
-      throw new Error('stage contains a duplicate object key or file');
-    }
-    objectKeys.add(object.key);
-    objectFiles.add(object.file);
-  }
-  for (const sqlFile of manifest.sqlFiles) {
-    if (typeof sqlFile.file !== 'string' || !/^d1\/\d{6}\.sql$/u.test(sqlFile.file)) {
-      throw new Error('stage SQL file path is invalid');
-    }
-    if (!Number.isSafeInteger(sqlFile.size) || sqlFile.size < 1) {
-      throw new Error('stage SQL size is invalid');
-    }
-    if (!/^[0-9a-f]{64}$/u.test(sqlFile.sha256)) throw new Error('stage SQL hash is invalid');
-  }
-}
-
-function uuid(value) {
-  return typeof value === 'string'
-    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(value);
 }

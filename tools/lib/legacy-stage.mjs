@@ -1,0 +1,177 @@
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
+import { legacyMappingSha256 } from './legacy-inventory.mjs';
+import { prepareMigratedMessage, deterministicUuid, sha256 } from './migration-message.mjs';
+import { renderLegacyBatchSql, renderLegacyMessageSql } from './legacy-stage-sql.mjs';
+import {
+  loadLegacyRaw,
+  normalizeLegacyMessage,
+  openLegacyStageSource,
+  requireMatchingAttachments,
+} from './legacy-stage-source.mjs';
+
+const SQL_CHUNK_SIZE = 50;
+
+export async function prepareLegacyMigrationStage(options) {
+  const stage = resolve(options.stage);
+  await assertMissing(stage);
+  await mkdir(join(stage, 'objects'), { recursive: true });
+  await mkdir(join(stage, 'd1'), { recursive: true });
+  const source = openLegacyStageSource(options);
+  const createdAt = options.now ?? Date.now();
+  const mappingSha256 = legacyMappingSha256(options.mapping);
+  const batchId = deterministicUuid([
+    'cloudflare-webmail-archived', source.imported.sourceSha256,
+    mappingSha256, source.snapshotSha256,
+  ].join('\u0000'));
+  const objects = [];
+  const failures = [];
+  const sqlChunks = [];
+  const seen = new Set();
+  const accountCounts = new Map(options.mapping.mappings.map((mapping) => [mapping.sourceAddress, {
+    sourceAddress: mapping.sourceAddress,
+    mailboxId: mapping.mailboxId,
+    address: mapping.address,
+    discovered: 0,
+    prepared: 0,
+    failed: 0,
+  }]));
+  let currentSql = [];
+  let discovered = 0;
+  let prepared = 0;
+  let duplicates = 0;
+  let quarantined = 0;
+  try {
+    for (const row of source.messageStatement.iterate()) {
+      const mapping = source.mappings.get(String(row.account_email));
+      if (mapping === undefined) continue;
+      discovered += 1;
+      accountCounts.get(mapping.sourceAddress).discovered += 1;
+      try {
+        const legacy = normalizeLegacyMessage(row, mapping);
+        const raw = await loadLegacyRaw(source, legacy);
+        const message = await prepareMigratedMessage(raw, {
+          mailboxId: legacy.targetMailboxId,
+          address: legacy.targetAddress,
+          direction: legacy.direction === 'in' ? 'inbound' : 'outbound',
+          modifiedAt: legacy.receivedAt,
+          createdAt: legacy.createdAt,
+          flags: legacy.flags,
+          metadata: legacy.metadata,
+        });
+        if (message.rawSha256 !== legacy.rawSha256 || message.rawSize !== legacy.rawSize) {
+          throw new Error('prepared raw MIME differs from legacy D1');
+        }
+        requireMatchingAttachments(source, legacy.id, message.attachments);
+        const dedupeKey = `${message.mailboxId}\u0000${message.rawSha256}`;
+        if (seen.has(dedupeKey)) {
+          duplicates += 1;
+          throw new Error('target mailbox contains a duplicate raw MIME record');
+        }
+        seen.add(dedupeKey);
+        await addObject(stage, objects, message.rawKey, message.raw, 'message/rfc822');
+        if (message.bodyTextKey !== null) {
+          await addObject(stage, objects, message.bodyTextKey, message.bodyText, 'text/plain; charset=utf-8');
+        }
+        if (message.bodyHtmlKey !== null) {
+          await addObject(stage, objects, message.bodyHtmlKey, message.bodyHtml, 'text/html; charset=utf-8');
+        }
+        for (const attachment of message.attachments) {
+          await addObject(stage, objects, attachment.key, attachment.content, attachment.contentType);
+        }
+        currentSql.push(renderLegacyMessageSql(message, legacy, batchId, createdAt));
+        if (message.status === 'quarantined') quarantined += 1;
+        prepared += 1;
+        accountCounts.get(mapping.sourceAddress).prepared += 1;
+        if (currentSql.length >= SQL_CHUNK_SIZE) {
+          sqlChunks.push(await writeSqlChunk(stage, sqlChunks.length + 1, currentSql));
+          currentSql = [];
+        }
+      } catch (error) {
+        failures.push({
+          sourceRecordId: String(row.id ?? ''),
+          sourceAccount: String(row.account_email ?? ''),
+          sourceRawKey: String(row.raw_key ?? ''),
+          error: error instanceof Error ? error.message : String(error),
+        });
+        accountCounts.get(mapping.sourceAddress).failed += 1;
+      }
+    }
+    if (currentSql.length > 0) {
+      sqlChunks.push(await writeSqlChunk(stage, sqlChunks.length + 1, currentSql));
+    }
+  } finally {
+    source.close();
+  }
+  if (discovered === 0 || prepared === 0) throw new Error('legacy stage contains no prepared messages');
+  const batch = {
+    id: batchId,
+    sourceDatabaseSha256: source.imported.sourceSha256,
+    mappingSha256,
+    snapshotSha256: source.snapshotSha256,
+    expectedMessages: discovered,
+    sourceObjects: source.snapshotSummary.objects,
+    stagedObjects: objects.length,
+    createdAt,
+  };
+  const batchSql = await writeSqlChunk(stage, 0, [renderLegacyBatchSql(batch)]);
+  const sqlFiles = [batchSql, ...sqlChunks];
+  await writeFile(
+    join(stage, 'objects.jsonl'),
+    objects.map((object) => JSON.stringify(object)).join('\n') + '\n',
+  );
+  await writeFile(
+    join(stage, 'failures.jsonl'),
+    failures.map((failure) => JSON.stringify(failure)).join('\n') + (failures.length > 0 ? '\n' : ''),
+  );
+  const complete = failures.length === 0 && duplicates === 0 && prepared === discovered;
+  const manifest = {
+    version: 2,
+    kind: 'cf-webmail-migration-stage',
+    sourceFormat: 'cloudflare-webmail-archived-d1-r2',
+    createdAt,
+    batchId,
+    sourceDatabaseSha256: batch.sourceDatabaseSha256,
+    mappingSha256,
+    snapshotSha256: batch.snapshotSha256,
+    complete,
+    mappings: [...accountCounts.values()],
+    exclusions: options.mapping.exclusions,
+    counts: {
+      discovered,
+      prepared,
+      duplicates,
+      failed: failures.length,
+      quarantined,
+      sourceObjects: batch.sourceObjects,
+      objects: objects.length,
+    },
+    sqlFiles,
+  };
+  await writeFile(join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  return manifest;
+}
+
+async function addObject(stage, objects, key, value, contentType) {
+  const content = typeof value === 'string' ? Buffer.from(value) : Buffer.from(value);
+  const file = `objects/${String(objects.length).padStart(8, '0')}.bin`;
+  await mkdir(dirname(join(stage, file)), { recursive: true });
+  await writeFile(join(stage, file), content);
+  objects.push({ key, file, contentType, size: content.byteLength, sha256: sha256(content) });
+}
+
+async function writeSqlChunk(stage, index, statements) {
+  const file = `d1/${String(index).padStart(6, '0')}.sql`;
+  const content = Buffer.from(`${statements.join('\n\n')}\n`);
+  await writeFile(join(stage, file), content);
+  return { file, size: content.byteLength, sha256: sha256(content) };
+}
+
+async function assertMissing(path) {
+  try {
+    await access(path);
+    throw new Error(`stage already exists: ${path}`);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+}

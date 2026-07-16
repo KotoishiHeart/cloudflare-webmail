@@ -170,6 +170,29 @@ export function legacySnapshotSummary(state) {
   };
 }
 
+export function legacySnapshotSha256(state) {
+  const summary = legacySnapshotSummary(state);
+  if (!summary.complete) throw new Error('legacy snapshot is incomplete');
+  const hash = createHash('sha256');
+  hash.update(`${summary.sourceDatabaseSha256}\n${summary.mappingSha256}\n${summary.messageReferences}\n`);
+  for (const row of state.prepare(`
+    SELECT source_key, compressed, expected_raw_sha256, expected_raw_size,
+      message_refs, stored_size, stored_sha256
+    FROM snapshot_objects ORDER BY source_key
+  `).iterate()) {
+    hash.update(`${JSON.stringify([
+      row.source_key,
+      row.compressed,
+      row.expected_raw_sha256,
+      row.expected_raw_size,
+      row.message_refs,
+      row.stored_size,
+      row.stored_sha256,
+    ])}\n`);
+  }
+  return hash.digest('hex');
+}
+
 export function resolveLegacySnapshotFile(snapshot, file) {
   const path = resolve(snapshot, file);
   const prefix = snapshot.endsWith(sep) ? snapshot : `${snapshot}${sep}`;

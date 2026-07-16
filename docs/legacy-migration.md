@@ -77,6 +77,38 @@ npm run migrate:legacy -- verify-snapshot \
   --snapshot ops/legacy-raw-snapshot
 ```
 
+## Build the current-format stage
+
+Preparation reads only the isolated database and verified raw snapshot. It
+preserves old flags, direction, received/created timestamps, Message-ID and
+thread headers, while rebuilding body and attachment objects from raw MIME.
+The old record ID, account, Bcc, compose/send metadata, deletion time, and old
+R2 keys are retained in dedicated migration provenance tables.
+
+```bash
+npm run migrate:legacy -- prepare \
+  --database ops/legacy.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --snapshot ops/legacy-raw-snapshot \
+  --stage ops/legacy-stage
+
+npm run migrate:legacy -- verify-stage --stage ops/legacy-stage
+```
+
+Attachment content hashes and sizes extracted from MIME must match the old D1
+attachment/blob rows. Any mismatch, duplicate target raw hash, unavailable raw
+object, or invalid metadata makes the stage incomplete. An incomplete archived
+stage can be inspected but the shared apply command refuses to apply it.
+
+After provisioning every mapped mailbox and applying all current D1 migrations,
+rehearse and then apply through the common stage runner:
+
+```bash
+npm run migrate:mail -- apply --stage ops/legacy-stage --local --yes
+npm run migrate:mail -- apply --stage ops/legacy-stage --remote --yes \
+  --config ops/deploy-production/configs/web.wrangler.json
+```
+
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext
 secrets from the archived repository into any of these files.

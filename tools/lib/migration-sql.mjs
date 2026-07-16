@@ -1,4 +1,5 @@
 export function renderMigratedMessageSql(message, createdAt) {
+  const messageCreatedAt = message.createdAt ?? createdAt;
   const statements = [sql(`
     INSERT INTO messages (
       id, mailbox_id, direction, status, processing_error,
@@ -18,7 +19,7 @@ export function renderMigratedMessageSql(message, createdAt) {
         message.rawSize, message.bodyTextKey, message.bodyHtmlKey,
         message.attachments.length, flag(message.flags.isRead),
         flag(message.flags.isStarred), flag(message.flags.isArchived),
-        flag(message.flags.isDeleted), createdAt, createdAt,
+        flag(message.flags.isDeleted), messageCreatedAt, messageCreatedAt,
       ])}
     ) ON CONFLICT DO NOTHING
   `)];
@@ -31,7 +32,7 @@ export function renderMigratedMessageSql(message, createdAt) {
       SELECT ${values([
         message.id, attachment.ordinal, attachment.filename, attachment.contentType,
         attachment.disposition, attachment.contentId, attachment.size,
-        attachment.sha256, attachment.key, createdAt,
+        attachment.sha256, attachment.key, messageCreatedAt,
       ])}
       WHERE EXISTS (
         SELECT 1 FROM messages WHERE id = ${q(message.id)} AND raw_sha256 = ${q(message.rawSha256)}

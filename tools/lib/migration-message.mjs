@@ -40,10 +40,10 @@ export async function prepareMigratedMessage(raw, options) {
       content,
     });
   }
+  const metadata = options.metadata ?? {};
   const dateValue = parsed?.date ? Date.parse(parsed.date) : Number.NaN;
-  const receivedAt = Number.isSafeInteger(dateValue) && dateValue > 0
-    ? dateValue
-    : options.modifiedAt;
+  const receivedAt = positiveInteger(metadata.receivedAt)
+    ?? (Number.isSafeInteger(dateValue) && dateValue > 0 ? dateValue : options.modifiedAt);
   const direction = options.direction;
   const status = direction === 'outbound'
     ? 'sent'
@@ -58,17 +58,17 @@ export async function prepareMigratedMessage(raw, options) {
     processingError,
     envelopeFrom: clean(parsed?.returnPath || mailboxAddress(parsed?.from), 320),
     deliveredTo: options.address,
-    rfcMessageId: clean(parsed?.messageId ?? '', 998),
-    inReplyTo: clean(parsed?.inReplyTo ?? '', 998),
-    referencesHeader: clean(parsed?.references ?? '', 8192),
-    subject: clean(parsed?.subject ?? '', 998),
-    sender,
-    recipients,
-    cc: clean(formatAddresses(parsed?.cc), 8192),
+    rfcMessageId: clean(preferred(metadata.rfcMessageId, parsed?.messageId), 998),
+    inReplyTo: clean(preferred(metadata.inReplyTo, parsed?.inReplyTo), 998),
+    referencesHeader: clean(preferred(metadata.referencesHeader, parsed?.references), 8192),
+    subject: clean(preferred(metadata.subject, parsed?.subject), 998),
+    sender: clean(preferred(metadata.sender, sender), 2048),
+    recipients: clean(preferred(metadata.recipients, recipients), 8192),
+    cc: clean(preferred(metadata.cc, formatAddresses(parsed?.cc)), 8192),
     replyTo: clean(formatAddresses(parsed?.replyTo), 4096),
-    dateHeader: clean(parsed?.date ?? '', 256),
+    dateHeader: clean(preferred(metadata.dateHeader, parsed?.date), 256),
     receivedAt,
-    textPreview: clean(bodyText || textFromHtml(bodyHtml), 1024),
+    textPreview: clean(preferred(metadata.textPreview, bodyText || textFromHtml(bodyHtml)), 1024),
     rawKey: `${prefix}/raw.eml`,
     rawSha256,
     rawEtag: `import-sha256:${rawSha256}`,
@@ -79,6 +79,7 @@ export async function prepareMigratedMessage(raw, options) {
     bodyHtml,
     attachments,
     flags: options.flags,
+    createdAt: positiveInteger(options.createdAt) ?? undefined,
     raw,
   };
 }
@@ -87,12 +88,20 @@ export function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function deterministicUuid(seed) {
+export function deterministicUuid(seed) {
   const bytes = createHash('sha256').update(seed).digest().subarray(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x80;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString('hex');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function preferred(value, fallback) {
+  return typeof value === 'string' ? value : fallback ?? '';
+}
+
+function positiveInteger(value) {
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 function toBuffer(content) {
