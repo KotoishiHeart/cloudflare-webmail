@@ -22,6 +22,17 @@ import {
 } from './label-api.js';
 import { preferencesResponse } from './preferences-api.js';
 import {
+  applyRuleRun,
+  createRule,
+  getRuleRun,
+  getRuleRuns,
+  getRules,
+  patchRule,
+  previewRule,
+  removeRule,
+  undoRuleRun,
+} from './rule-api.js';
+import {
   createOutboundMessage,
   OutboundQueueUnavailableError,
 } from './outbound-api.js';
@@ -83,6 +94,73 @@ async function routeKnownApi(
       return createLabel(request, env.DB, identity, mailboxLabels[1] ?? '', now);
     }
     return apiError('method_not_allowed', 405, 'GET, POST');
+  }
+
+  const mailboxRules = pathname.match(/^\/api\/mailboxes\/([^/]+)\/rules$/u);
+  if (mailboxRules !== null) {
+    if (request.method === 'GET') return getRules(env.DB, identity, mailboxRules[1] ?? '');
+    if (request.method === 'POST') {
+      return createRule(request, env.DB, identity, mailboxRules[1] ?? '', now);
+    }
+    return apiError('method_not_allowed', 405, 'GET, POST');
+  }
+
+  const mailboxRulePreview = pathname.match(
+    /^\/api\/mailboxes\/([^/]+)\/rules\/([^/]+)\/preview$/u,
+  );
+  if (mailboxRulePreview !== null) {
+    return request.method === 'POST'
+      ? previewRule(
+        request, env.DB, identity,
+        mailboxRulePreview[1] ?? '', mailboxRulePreview[2] ?? '', now,
+      )
+      : apiError('method_not_allowed', 405, 'POST');
+  }
+
+  const mailboxRule = pathname.match(/^\/api\/mailboxes\/([^/]+)\/rules\/([^/]+)$/u);
+  if (mailboxRule !== null) {
+    if (request.method === 'PATCH') {
+      return patchRule(
+        request, env.DB, identity, mailboxRule[1] ?? '', mailboxRule[2] ?? '', now,
+      );
+    }
+    if (request.method === 'DELETE') {
+      return removeRule(request, env.DB, identity, mailboxRule[1] ?? '', mailboxRule[2] ?? '');
+    }
+    return apiError('method_not_allowed', 405, 'PATCH, DELETE');
+  }
+
+  const mailboxRuleRuns = pathname.match(/^\/api\/mailboxes\/([^/]+)\/rule-runs$/u);
+  if (mailboxRuleRuns !== null) {
+    return request.method === 'GET'
+      ? getRuleRuns(env.DB, identity, mailboxRuleRuns[1] ?? '')
+      : apiError('method_not_allowed', 405, 'GET');
+  }
+
+  const mailboxRuleRunAction = pathname.match(
+    /^\/api\/mailboxes\/([^/]+)\/rule-runs\/([^/]+)\/(apply|undo)$/u,
+  );
+  if (mailboxRuleRunAction !== null) {
+    if (request.method !== 'POST') return apiError('method_not_allowed', 405, 'POST');
+    const action = mailboxRuleRunAction[3];
+    return action === 'apply'
+      ? applyRuleRun(
+        request, env.DB, identity,
+        mailboxRuleRunAction[1] ?? '', mailboxRuleRunAction[2] ?? '', now,
+      )
+      : undoRuleRun(
+        request, env.DB, identity,
+        mailboxRuleRunAction[1] ?? '', mailboxRuleRunAction[2] ?? '', now,
+      );
+  }
+
+  const mailboxRuleRun = pathname.match(
+    /^\/api\/mailboxes\/([^/]+)\/rule-runs\/([^/]+)$/u,
+  );
+  if (mailboxRuleRun !== null) {
+    return request.method === 'GET'
+      ? getRuleRun(env.DB, identity, mailboxRuleRun[1] ?? '', mailboxRuleRun[2] ?? '')
+      : apiError('method_not_allowed', 405, 'GET');
   }
 
   const mailboxLabel = pathname.match(/^\/api\/mailboxes\/([^/]+)\/labels\/([^/]+)$/u);

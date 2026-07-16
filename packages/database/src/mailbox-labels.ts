@@ -151,11 +151,20 @@ export async function deleteMailboxLabel(
   mailboxIdInput: string,
   labelIdInput: string,
 ): Promise<boolean> {
+  const mailboxId = normalizeId(mailboxIdInput, 'mailboxId');
+  const labelId = normalizeId(labelIdInput, 'labelId');
+  const referenced = await db.prepare(`
+    SELECT 1 AS found FROM mail_rule_labels
+    WHERE mailbox_id = ? AND label_id = ? LIMIT 1
+  `).bind(mailboxId, labelId).first<{ found: number }>();
+  if (referenced !== null) {
+    throw new DatabaseInputError('labelId', 'is used by a mail rule');
+  }
   const result = await db.prepare(`
     DELETE FROM mailbox_labels WHERE id = ? AND mailbox_id = ?
   `).bind(
-    normalizeId(labelIdInput, 'labelId'),
-    normalizeId(mailboxIdInput, 'mailboxId'),
+    labelId,
+    mailboxId,
   ).run();
   return Number(result.meta.changes ?? 0) === 1;
 }

@@ -8,6 +8,7 @@ import {
   findInboundMessageByContent,
   findInboundMessageById,
   activeMailboxOwnsPrimaryAddress,
+  applyIncomingMailRulesSafely,
   persistInboundMessage,
   resolveStorageIssuesForKeys,
 } from '@cf-webmail/database';
@@ -93,6 +94,12 @@ export async function processInboundQueueMessage(
     stored.rawEtag,
     now,
   ));
+  await applyIncomingMailRulesSafely(
+    dependencies.db,
+    result.message.mailboxId,
+    result.message.id,
+    dependencies.now(),
+  );
   const stagingDeleted = await deleteStaging(dependencies, queueMessage);
   await completeInboundHandoff(
     dependencies.db,
@@ -120,6 +127,12 @@ async function completeDuplicate(
   queueMessage: InboundQueueMessage,
   storedMessageId: string,
 ): Promise<InboundProcessResult> {
+  await applyIncomingMailRulesSafely(
+    dependencies.db,
+    queueMessage.mailboxId,
+    storedMessageId,
+    dependencies.now(),
+  );
   const stagingDeleted = await deleteStaging(dependencies, queueMessage);
   await completeInboundHandoff(
     dependencies.db,

@@ -21,6 +21,13 @@ JWT. A missing or invalid token is rejected before routing. JSON responses use
 | `PATCH, DELETE` | `/api/mailboxes/:id/labels/:labelId` | manage | Update or remove a mailbox label |
 | `PUT` | `/api/messages/:id/labels` | operate | Replace manual label assignments |
 | `GET, PATCH` | `/api/preferences` | linked identity | Read or update validated user preferences |
+| `GET, POST` | `/api/mailboxes/:id/rules` | manage | List or create mailbox rules |
+| `PATCH, DELETE` | `/api/mailboxes/:id/rules/:ruleId` | manage | Update or remove one rule |
+| `POST` | `/api/mailboxes/:id/rules/:ruleId/preview` | manage | Freeze up to 200 existing matches |
+| `GET` | `/api/mailboxes/:id/rule-runs` | manage | List recent preview/apply/incoming/undo runs |
+| `GET` | `/api/mailboxes/:id/rule-runs/:runId` | manage | Read one run and its message sample |
+| `POST` | `/api/mailboxes/:id/rule-runs/:runId/apply` | manage | Apply a frozen preview exactly once |
+| `POST` | `/api/mailboxes/:id/rule-runs/:runId/undo` | manage | Optimistically undo an applied run |
 
 The list route accepts
 `folder=inbox|outbox|sent|starred|archive|trash|all`, a limit from 1
@@ -55,6 +62,15 @@ IDs, all from the message mailbox.
 Preference patches accept only `theme`, `pageSize`, `defaultFolder`,
 `showHtmlByDefault`, and `compactLayout`. Unknown or invalid fields reject the
 entire request rather than being silently ignored.
+
+Rule mutations require a matching `Origin` and mailbox-owner access. Supported
+conditions are sender, recipient, subject, participant domain, bounded keyword
+search, attachment presence, raw byte range, and direction. Supported actions
+are star, archive, trash, and up to ten existing mailbox label IDs. Archive and
+trash cannot be selected together. Existing-mail apply is available only when
+the rule enables `applyExisting`, and fails with `409 stale_preview` if the rule
+was edited after preview. Undo preserves any flag or label change made after
+the original run instead of replacing current state unconditionally.
 
 Unauthorized message IDs return the same not-found response as nonexistent
 IDs. Responses never expose R2 storage keys.
