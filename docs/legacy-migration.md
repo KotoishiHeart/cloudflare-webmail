@@ -193,7 +193,9 @@ limit are replaced by the Date parsed from verified raw MIME; the bounded
 original value remains in migration provenance for audit.
 The generated stage directories and every MIME, SQL, manifest, failure, and
 apply-state file use owner-only permissions because they contain mail content
-or identifying metadata.
+or identifying metadata. `prepare` and `verify-stage` print aggregate counts
+only; account mappings remain in the protected manifest rather than terminal
+or CI logs.
 It also converts labels, message-label assignments, active rule definitions,
 and per-user page density/default-mailbox preferences. Archived labels and
 rules were global, so each is deterministically copied into every mapped

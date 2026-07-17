@@ -157,12 +157,12 @@ export async function runLegacyMigrationCli(argv, io = {
       snapshot: required(options, 'snapshot'),
       stage: required(options, 'stage'),
     });
-    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    io.stdout(`${JSON.stringify(stageCliSummary(result), null, 2)}\n`);
     return result.complete ? 0 : 2;
   }
   if (command === 'verify-stage') {
     const result = await verifyMigrationStage(required(options, 'stage'));
-    io.stdout(`${JSON.stringify(result.manifest, null, 2)}\n`);
+    io.stdout(`${JSON.stringify(stageCliSummary(result.manifest), null, 2)}\n`);
     return result.manifest.complete === false ? 2 : 0;
   }
   if (command === 'bulk-apply') {
@@ -219,6 +219,21 @@ function required(options, key) {
   const value = options[key];
   if (typeof value !== 'string' || value === '') throw new Error(`--${key} is required`);
   return value;
+}
+
+function stageCliSummary(manifest) {
+  return {
+    version: manifest.version,
+    kind: manifest.kind,
+    sourceFormat: manifest.sourceFormat,
+    ...(typeof manifest.complete === 'boolean' ? { complete: manifest.complete } : {}),
+    ...(typeof manifest.batchId === 'string' ? { batchId: manifest.batchId } : {}),
+    counts: manifest.counts,
+    ...(manifest.configuration === undefined ? {} : { configuration: manifest.configuration }),
+    mappedAccounts: Array.isArray(manifest.mappings) ? manifest.mappings.length : undefined,
+    excludedAccounts: Array.isArray(manifest.exclusions) ? manifest.exclusions.length : undefined,
+    sqlFiles: Array.isArray(manifest.sqlFiles) ? manifest.sqlFiles.length : 0,
+  };
 }
 
 function usage() {

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import { createLegacyInventory, createLegacyMappingTemplate } from '../lib/legacy-inventory.mjs';
+import { runLegacyMigrationCli } from '../lib/legacy-cli.mjs';
 import { fetchLegacySnapshot } from '../lib/legacy-snapshot.mjs';
 import { prepareLegacyMigrationStage } from '../lib/legacy-stage.mjs';
 import { importLegacySafeSql } from '../lib/legacy-sqlite.mjs';
@@ -71,6 +72,12 @@ describe('archived current-format stage', () => {
     });
     const verified = await verifyMigrationStage(stage);
     assert.equal(verified.objects.length, 5);
+    const verifyOutput = [];
+    assert.equal(await runLegacyMigrationCli([
+      'verify-stage', '--stage', stage,
+    ], { stdout: (value) => verifyOutput.push(value) }), 0);
+    assert.doesNotMatch(verifyOutput.join(''), /first@example\.com/u);
+    assert.match(verifyOutput.join(''), /"mappedAccounts": 2/u);
     assert.equal((await stat(stage)).mode & 0o777, 0o700);
     assert.equal((await stat(join(stage, 'objects'))).mode & 0o777, 0o700);
     assert.equal((await stat(join(stage, 'd1'))).mode & 0o777, 0o700);
