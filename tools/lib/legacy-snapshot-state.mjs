@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, rm, stat } from 'node:fs/promises';
+import { chmod, mkdir, rm, stat } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { legacyMappingSha256 } from './legacy-inventory.mjs';
@@ -13,13 +13,22 @@ const SHA256 = /^[0-9a-f]{64}$/u;
 export async function initializeLegacySnapshot(snapshot, statePath, options) {
   try {
     await stat(statePath);
+    await Promise.all([
+      chmod(resolve(snapshot), 0o700),
+      chmod(resolve(snapshot, 'objects'), 0o700),
+      chmod(statePath, 0o600),
+    ]);
     return;
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
-  await mkdir(resolve(snapshot, 'objects'), { recursive: true });
+  const snapshotRoot = resolve(snapshot);
+  const objectsRoot = resolve(snapshot, 'objects');
+  await mkdir(objectsRoot, { recursive: true, mode: 0o700 });
+  await Promise.all([chmod(snapshotRoot, 0o700), chmod(objectsRoot, 0o700)]);
   const sourceDatabase = new DatabaseSync(resolve(options.database), { readOnly: true });
   const state = new DatabaseSync(statePath);
+  await chmod(statePath, 0o600);
   try {
     const imported = readLegacyImportMetadata(sourceDatabase);
     const mappingHash = legacyMappingSha256(options.mapping);

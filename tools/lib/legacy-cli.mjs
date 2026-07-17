@@ -39,8 +39,17 @@ export async function runLegacyMigrationCli(argv, io = {
     if (typeof options['mapping-template'] === 'string') {
       await writeExclusive(options['mapping-template'], createLegacyMappingTemplate(inventory));
     }
-    io.stdout(`${JSON.stringify(inventory, null, 2)}\n`);
-    return Object.values(inventory.integrity).every((count) => count === 0) ? 0 : 2;
+    const integrityOk = Object.values(inventory.integrity).every((count) => count === 0);
+    io.stdout(`${JSON.stringify({
+      ok: integrityOk,
+      accounts: inventory.accounts.length,
+      accountsWithMessages: inventory.accounts.filter(
+        (account) => account.counts.messages > 0,
+      ).length,
+      counts: inventory.counts,
+      integrity: inventory.integrity,
+    }, null, 2)}\n`);
+    return integrityOk ? 0 : 2;
   }
   if (command === 'validate-mapping') {
     const inventory = createLegacyInventory(required(options, 'database'));
@@ -196,7 +205,7 @@ export async function runLegacyMigrationCli(argv, io = {
 }
 
 async function writeExclusive(path, value) {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
 }
 
 async function requireMissing(path) {

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { access, rm, stat } from 'node:fs/promises';
+import { access, chmod, rm, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
@@ -64,7 +64,8 @@ export async function importLegacySafeSql(options) {
   let database;
   try {
     database = new DatabaseSync(destination);
-    database.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = OFF;');
+    await chmod(destination, 0o600);
+    database.exec('PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF;');
     createCompatibilitySchema(database, schema);
     database.exec('BEGIN IMMEDIATE;');
     const inserted = Object.fromEntries([...schema.keys()].map((table) => [table, 0]));
@@ -92,7 +93,7 @@ export async function importLegacySafeSql(options) {
       importedAt,
       JSON.stringify(inserted),
     );
-    database.exec('PRAGMA synchronous = NORMAL; PRAGMA wal_checkpoint(TRUNCATE);');
+    database.exec('PRAGMA synchronous = NORMAL;');
     database.close();
     return {
       format: FORMAT,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
@@ -35,8 +35,9 @@ export async function fetchLegacySnapshotBulk(options) {
   const pending = rows.filter((row) => row.status !== 'ready').length;
   const bulkRoot = join(snapshot, '.rclone-source');
   if (pending > 0) {
-    await writeFile(pendingList, pendingKeys);
-    await mkdir(bulkRoot, { recursive: true });
+    await writeFile(pendingList, pendingKeys, { mode: 0o600 });
+    await mkdir(bulkRoot, { recursive: true, mode: 0o700 });
+    await chmod(bulkRoot, 0o700);
     try {
       await run(options.io, ['version']);
       await run(options.io, [
@@ -90,9 +91,10 @@ async function writeStable(path, content) {
   try {
     const existing = await readFile(path, 'utf8');
     if (existing !== content) throw new Error('legacy bulk source key list changed');
+    await chmod(path, 0o600);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
-    await writeFile(path, content, { flag: 'wx' });
+    await writeFile(path, content, { flag: 'wx', mode: 0o600 });
   }
 }
 

@@ -26,7 +26,9 @@ The inventory records source hashes, global counts, account-level message and
 flag counts, attachment counts, raw bytes, R2 reference counts, labels,
 message-label assignments, rules, user preferences, and relational-integrity
 failures. Exit status `2` means the inventory was written but at least one
-integrity count is nonzero.
+integrity count is nonzero. The command prints only aggregate counts; addresses
+remain in the owner-only inventory and mapping files instead of terminal or CI
+logs.
 
 Review the generated mapping. Every account containing messages must either
 map to one unique target mailbox or have an explicit exclusion with a reason.
@@ -149,7 +151,10 @@ checked against the old D1 raw size and SHA-256 before entering the hashed
 snapshot. Verified keys are skipped on resume, the transient key-shaped copy is
 removed locally, and changing the named source or rclone configuration is
 rejected. This avoids launching one Wrangler process for each of tens of
-thousands of archived messages.
+thousands of archived messages. The isolated SQLite database, JSON migration
+artifacts, snapshot database, source-key list, and verified MIME objects are
+created with owner-only permissions; the snapshot directories are not
+traversable by other local users.
 
 The per-object Wrangler path remains useful for a small rehearsal or diagnostic.
 Select its local/remote target explicitly; it also only reads the source bucket:

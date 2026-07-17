@@ -1,7 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
@@ -108,10 +108,17 @@ describe('archived raw R2 snapshot', () => {
     assert.equal(result.bulkSource.sourceObjects, 2);
     assert.equal(result.bulkSource.copied, 2);
     assert.match(result.bulkSource.sourceListSha256, /^[0-9a-f]{64}$/u);
+    assert.equal((await stat(snapshot)).mode & 0o777, 0o700);
+    assert.equal((await stat(join(snapshot, 'snapshot.sqlite'))).mode & 0o777, 0o600);
+    assert.equal((await stat(result.bulkSource.sourceList)).mode & 0o777, 0o600);
     assert.equal(
       await readFile(result.bulkSource.sourceList, 'utf8'),
       'raw/one.eml.gz\nraw/two.eml.gz\n',
     );
+    const state = new DatabaseSync(join(snapshot, 'snapshot.sqlite'), { readOnly: true });
+    const storedFile = state.prepare('SELECT file FROM snapshot_objects LIMIT 1').get().file;
+    state.close();
+    assert.equal((await stat(join(snapshot, storedFile))).mode & 0o777, 0o600);
     await assert.rejects(readFile(join(snapshot, '.rclone-source', 'raw', 'one.eml.gz')), /ENOENT/u);
     const resumed = await fetchLegacySnapshotBulk({
       database, mapping, snapshot, rcloneSource: 'archive:old-bucket', io,

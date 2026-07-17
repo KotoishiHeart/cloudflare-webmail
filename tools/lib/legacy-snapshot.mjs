@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { gunzip } from 'node:zlib';
@@ -81,7 +81,7 @@ export async function verifyLegacySnapshot(options) {
 async function fetchOne(snapshot, state, row, source, io) {
   const destination = resolveLegacySnapshotFile(snapshot, row.file);
   const temporary = `${destination}.part`;
-  await mkdir(dirname(destination), { recursive: true });
+  await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
   await rm(temporary, { force: true });
   try {
     if (source.kind === 'directory') {
@@ -91,6 +91,7 @@ async function fetchOne(snapshot, state, row, source, io) {
     }
     const verified = await verifyStoredObject(snapshot, { ...row, file: relative(snapshot, temporary) });
     await rename(temporary, destination);
+    await chmod(destination, 0o600);
     state.prepare(`
       UPDATE snapshot_objects SET status = 'ready', stored_size = ?, stored_sha256 = ?,
         error = '', updated_at = ? WHERE source_key = ?

@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -31,6 +31,7 @@ describe('archived SQL isolation', () => {
     const imported = await importLegacySafeSql({ sql, database, now: 1234 });
     assert.equal(imported.inserted.messages, 2);
     assert.match(imported.source.sha256, /^[0-9a-f]{64}$/u);
+    assert.equal((await stat(database)).mode & 0o777, 0o600);
 
     const inventory = createLegacyInventory(database, 2345);
     assert.equal(inventory.createdAt, 2345);
@@ -68,6 +69,18 @@ describe('archived SQL isolation', () => {
     await writeFile(mappingPath, `${JSON.stringify(template)}\n`);
     const mapping = await loadAndValidateLegacyMapping(mappingPath, inventory);
     assert.equal(mapping.mappings.length, 2);
+
+    const inventoryPath = join(root, 'cli-inventory.json');
+    const cliMappingPath = join(root, 'cli-mapping.json');
+    const inventoryOutput = [];
+    assert.equal(await runLegacyMigrationCli([
+      'inventory', '--database', database, '--output', inventoryPath,
+      '--mapping-template', cliMappingPath,
+    ], { stdout: (value) => inventoryOutput.push(value) }), 0);
+    assert.doesNotMatch(inventoryOutput.join(''), /first@example\.com/u);
+    assert.match(inventoryOutput.join(''), /"accounts": 2/u);
+    assert.equal((await stat(inventoryPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(cliMappingPath)).mode & 0o777, 0o600);
 
     const provisioning = createLegacyProvisioningDraft({
       database,
