@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { verifyQueueTopology } from './deploy-queue-topology.mjs';
 
 const EMPTY_DATABASE_SQL = `
   SELECT COUNT(*) AS table_count
@@ -26,7 +27,8 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
   ], options, checks, 'r2');
   assertR2Identity(r2Output, plan.deployment.resources.r2.bucket);
 
-  for (const queue of Object.values(plan.deployment.resources.queues)) {
+  const queueTopologies = [];
+  for (const [role, queue] of Object.entries(plan.deployment.resources.queues)) {
     const output = check(
       runner,
       ['queues', 'info', queue, '--config', jobsConfig],
@@ -34,7 +36,7 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
       checks,
       `queue:${queue}`,
     );
-    if (!output.includes(queue)) throw new Error(`Queue lookup did not confirm ${queue}`);
+    queueTopologies.push({ role, ...verifyQueueTopology(output, role, plan.deployment) });
   }
   for (const domain of plan.deployment.email.sendingDomains) {
     const output = check(
@@ -80,6 +82,7 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
     completedAt: Date.now(),
     tableCount,
     databaseEmpty: tableCount === 0,
+    queueTopologies,
     checks,
     manualChecks: [
       'Access application hostname and Allow policy',

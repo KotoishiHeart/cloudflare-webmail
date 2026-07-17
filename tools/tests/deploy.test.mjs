@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { assertBackupTarget } from '../lib/deploy-cli.mjs';
 import { runDeployApply, runDeployPreflight } from '../lib/deploy-cloudflare.mjs';
+import { verifyQueueTopology } from '../lib/deploy-queue-topology.mjs';
 import {
   createRollbackPlan,
   extractActiveVersion,
@@ -82,6 +83,7 @@ describe('review-first deployment stage', () => {
     const calls = [];
     const report = await runDeployPreflight(stage, plan, {}, fakeRunner(calls, 0));
     assert.equal(report.databaseEmpty, true);
+    assert.equal(report.queueTopologies.length, 4);
     assert.ok(report.checks.includes('email-sending:example.com'));
     assert.ok(calls.some((args) => args.includes('--dry-run')));
 
@@ -122,6 +124,18 @@ describe('review-first deployment stage', () => {
     const config = join(stage, 'configs/web.wrangler.json');
     await writeFile(config, `${await readFile(config, 'utf8')}\n`);
     await assert.rejects(verifyDeployStage(stage), /hash mismatch/u);
+  });
+
+  it('rejects Queue bindings owned by the archived Worker', () => {
+    const output = queueInfo('cf-webmail-inbound', ['cf-webmail-starter'], ['cf-webmail-starter']);
+    assert.throws(
+      () => verifyQueueTopology(output, 'inbound', MANIFEST),
+      /already bound/u,
+    );
+    assert.throws(
+      () => verifyQueueTopology(output, 'inbound', { ...MANIFEST, mode: 'upgrade' }),
+      /unexpected producer Worker/u,
+    );
   });
 
   it('fails closed on placeholder-like or misspelled manifest fields', () => {
@@ -213,7 +227,11 @@ function fakeRunner(calls, tableCount) {
         return { status: 0, stdout: JSON.stringify({ name: 'cf-webmail-raw' }), stderr: '' };
       }
       if (args.includes('queues') && args.includes('info')) {
-        return { status: 0, stdout: String(args[args.indexOf('info') + 1]), stderr: '' };
+        return {
+          status: 0,
+          stdout: queueInfo(String(args[args.indexOf('info') + 1])),
+          stderr: '',
+        };
       }
       if (args.includes('execute')) {
         return { status: 0, stdout: JSON.stringify([{ results: [{ table_count: tableCount }] }]), stderr: '' };
@@ -227,4 +245,15 @@ function fakeRunner(calls, tableCount) {
       return { status: 0, stdout: 'ok', stderr: '' };
     },
   };
+}
+
+function queueInfo(name, producers = [], consumers = []) {
+  const lines = [
+    `Queue Name: ${name}`,
+    `Number of Producers: ${producers.length}`,
+    `Number of Consumers: ${consumers.length}`,
+  ];
+  if (producers.length > 0) lines.push(`Producers: ${producers.map((item) => `worker:${item}`).join(', ')}`);
+  if (consumers.length > 0) lines.push(`Consumers: ${consumers.map((item) => `worker:${item}`).join(', ')}`);
+  return `${lines.join('\n')}\n`;
 }
