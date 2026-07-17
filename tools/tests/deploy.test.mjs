@@ -4,6 +4,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { assertBackupTarget } from '../lib/deploy-cli.mjs';
+import { verifyAccessBoundary } from '../lib/deploy-access-boundary.mjs';
 import { runDeployApply, runDeployPreflight } from '../lib/deploy-cloudflare.mjs';
 import { verifyQueueTopology } from '../lib/deploy-queue-topology.mjs';
 import {
@@ -95,7 +96,14 @@ describe('review-first deployment stage', () => {
       fakeRunner(calls, 0),
     );
     assert.equal(report.databaseEmpty, true);
+    assert.deepEqual(report.accessBoundary, {
+      hostname: 'mail.example.com',
+      status: 302,
+      loginOrigin: 'https://example-team.cloudflareaccess.com',
+      audienceMatches: true,
+    });
     assert.equal(report.queueTopologies.length, 4);
+    assert.ok(report.checks.includes('access-boundary'));
     assert.ok(report.checks.includes('outbound-provider:smtp2go'));
     assert.ok(calls.some((args) => args.includes('--dry-run')));
     const whoami = calls.find((args) => args.includes('whoami'));
@@ -165,6 +173,12 @@ describe('review-first deployment stage', () => {
       () => verifyQueueTopology(output, 'inbound', { ...MANIFEST, mode: 'upgrade' }),
       /unexpected producer Worker/u,
     );
+  });
+
+  it('rejects an Access boundary bound to a different audience', async () => {
+    await assert.rejects(verifyAccessBoundary(MANIFEST, async () => accessResponse({
+      audience: 'd'.repeat(64),
+    })), /audience differs/u);
   });
 
   it('requires the SMTP2GO provider and rejects obsolete Email Sending evidence', () => {
@@ -277,6 +291,7 @@ function versionRunner(calls) {
 
 function fakeRunner(calls, tableCount) {
   return {
+    fetch: async () => accessResponse(),
     spawn: (_command, args) => {
       calls.push(args);
       if (args.includes('info') && args.includes('d1')) {
@@ -300,6 +315,17 @@ function fakeRunner(calls, tableCount) {
       }
       return { status: 0, stdout: 'ok', stderr: '' };
     },
+  };
+}
+
+function accessResponse(options = {}) {
+  const teamDomain = options.teamDomain ?? MANIFEST.access.teamDomain;
+  const audience = options.audience ?? MANIFEST.access.audience;
+  const login = new URL(`/cdn-cgi/access/login/${MANIFEST.hostname}`, teamDomain);
+  login.searchParams.set('kid', audience);
+  return {
+    status: 302,
+    headers: { get: (name) => name.toLowerCase() === 'location' ? login.href : null },
   };
 }
 

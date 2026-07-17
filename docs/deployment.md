@@ -57,10 +57,13 @@ receiving domain, and verify every declared sender domain in SMTP2GO.
 npm run deploy -- preflight --stage ops/deploy-production
 ```
 
-Preflight checks Wrangler authentication, the exact D1 UUID, R2, all Queues,
-Email Routing settings, the D1 table count, and three dry builds. The resulting
-`preflight.json` records check names but does not persist Wrangler output or
-account details. `email.outboundProvider` must be `smtp2go`, and
+Preflight checks Wrangler authentication, the public Access redirect and its
+exact team domain/application audience, the exact D1 UUID, R2, all Queues,
+Email Routing settings, the D1 table count, and three dry builds. It sends no
+Access cookie and follows no redirect. The resulting `preflight.json` records
+only sanitized Access boundary evidence and check names; it does not persist
+the signed login redirect, Wrangler output, or account details.
+`email.outboundProvider` must be `smtp2go`, and
 `email.senderDomains` declares the sender domains that provisioning is allowed
 to use.
 
@@ -81,8 +84,8 @@ the rebuilt deployment to the archived Worker.
 The following checks remain manual because their policy content is not owned by
 this repository:
 
-- The Access application protects the exact hostname with an explicit Allow
-  policy.
+- The Access Allow policy admits only the intended owner identities. Preflight
+  already fails if the exact hostname, team domain, or audience does not match.
 - Email Routing rules target `cf-webmail-ingest` (or the manifest's Ingest
   Worker name).
 - SMTP2GO shows every declared sender domain as verified, and its dedicated API

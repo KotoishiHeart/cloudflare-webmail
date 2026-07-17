@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { verifyAccessBoundary } from './deploy-access-boundary.mjs';
 import { verifyQueueTopology } from './deploy-queue-topology.mjs';
 
 const EMPTY_DATABASE_SQL = `
@@ -17,6 +18,11 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
   const ingestConfig = configPath(stage, plan, 'ingest');
   const checks = [];
   check(runner, ['whoami'], { ...options, profile: undefined }, checks, 'wrangler-auth');
+  const accessBoundary = await verifyAccessBoundary(
+    plan.deployment,
+    runner.fetch ?? globalThis.fetch,
+  );
+  checks.push('access-boundary');
 
   const d1Output = check(runner, [
     'd1', 'info', plan.deployment.resources.d1.name, '--json', '--config', webConfig,
@@ -73,10 +79,11 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
     completedAt: Date.now(),
     tableCount,
     databaseEmpty: tableCount === 0,
+    accessBoundary,
     queueTopologies,
     checks,
     manualChecks: [
-      'Access application hostname and Allow policy',
+      'Access Allow policy admits the intended owner identity',
       'Email Routing rule targets the ingest Worker',
       'SMTP2GO sender domains, API key permission, and free-plan quota',
       'SPF, DKIM, and DMARC alignment in SMTP2GO',
