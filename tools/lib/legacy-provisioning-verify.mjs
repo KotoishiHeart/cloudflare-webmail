@@ -62,7 +62,7 @@ export function verifyLegacyProvisioning(options) {
     expected.manifest.mailboxes.map((mailbox) => [mailbox.id, mailbox]),
   );
   const routingDomains = new Set(options.deployment.email.routingDomains);
-  const sendingDomains = new Set(options.deployment.email.sendingDomains);
+  const senderDomains = new Set(options.deployment.email.senderDomains);
   const teamIssuer = options.deployment.access.teamDomain;
   let aliases = 0;
   for (const mapping of options.mapping.mappings) {
@@ -73,7 +73,7 @@ export function verifyLegacyProvisioning(options) {
     const ownerUser = users.get(mailbox.ownerUserId);
     requireTeamIdentity(ownerUser, teamIssuer, 'mapped mailbox owner');
     requireDomain(mapping.address, routingDomains, 'Email Routing');
-    requireDomain(mapping.address, sendingDomains, 'Email Sending');
+    requireDomain(mapping.address, senderDomains, 'SMTP2GO sender verification');
     for (const alias of expectedMailboxes.get(mapping.mailboxId)?.aliases ?? []) {
       if (!mailbox.aliases.includes(alias)) {
         throw new Error('provision manifest is missing a generated local alias');
@@ -115,7 +115,7 @@ export function verifyLegacyProvisioning(options) {
       resolvedMemberships: memberships.resolved,
       ignoredInactiveMemberships: memberships.ignored,
       routingDomains: routingDomains.size,
-      sendingDomains: sendingDomains.size,
+      senderDomains: senderDomains.size,
     },
   };
 }

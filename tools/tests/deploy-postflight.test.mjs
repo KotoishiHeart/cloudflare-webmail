@@ -33,7 +33,11 @@ const MANIFEST = {
       outbound: 'cf-webmail-v2-outbound', outboundDlq: 'cf-webmail-v2-outbound-dlq',
     },
   },
-  email: { sendingDomains: ['example.com'], routingDomains: ['example.com'] },
+  email: {
+    outboundProvider: 'smtp2go',
+    senderDomains: ['example.com'],
+    routingDomains: ['example.com'],
+  },
   limits: { queueMaxConcurrency: 1 },
 };
 

@@ -203,7 +203,7 @@ describe('archived SQL isolation', () => {
       resolvedMemberships: 1,
       ignoredInactiveMemberships: 0,
       routingDomains: 1,
-      sendingDomains: 1,
+      senderDomains: 1,
     });
     assert.match(verification.artifacts.manifestSha256, /^[0-9a-f]{64}$/u);
   });
@@ -291,7 +291,11 @@ function deploymentManifest() {
         outboundDlq: 'cf-webmail-v2-outbound-dlq',
       },
     },
-    email: { sendingDomains: ['example.com'], routingDomains: ['example.com'] },
+    email: {
+      outboundProvider: 'smtp2go',
+      senderDomains: ['example.com'],
+      routingDomains: ['example.com'],
+    },
     limits: { queueMaxConcurrency: 1 },
   };
 }

@@ -29,7 +29,8 @@
     }
   },
   "email": {
-    "sendingDomains": ["example.com"],
+    "outboundProvider": "smtp2go",
+    "senderDomains": ["example.com"],
     "routingDomains": ["example.com"]
   },
   "limits": {

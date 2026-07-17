@@ -178,6 +178,9 @@ function assertGeneratedConfig(app, config, deployment) {
     }
   }
   if (app === 'jobs') {
+    if (JSON.stringify(config.secrets?.required) !== JSON.stringify(['SMTP2GO_API_KEY'])) {
+      throw new Error('jobs must require the SMTP2GO_API_KEY secret');
+    }
     const expectedConsumers = [
       [deployment.resources.queues.inbound, deployment.resources.queues.inboundDlq],
       [deployment.resources.queues.outbound, deployment.resources.queues.outboundDlq],

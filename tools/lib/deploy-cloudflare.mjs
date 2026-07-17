@@ -38,16 +38,7 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
     );
     queueTopologies.push({ role, ...verifyQueueTopology(output, role, plan.deployment) });
   }
-  for (const domain of plan.deployment.email.sendingDomains) {
-    checkEmailSending(
-      runner,
-      ['email', 'sending', 'list', domain, '--config', jobsConfig],
-      options,
-      checks,
-      domain,
-      plan.deployment.email.sendingVerification,
-    );
-  }
+  checks.push(`outbound-provider:${plan.deployment.email.outboundProvider}`);
   for (const domain of plan.deployment.email.routingDomains) {
     const output = check(
       runner,
@@ -87,36 +78,10 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
     manualChecks: [
       'Access application hostname and Allow policy',
       'Email Routing rule targets the ingest Worker',
-      'SPF, DKIM, and DMARC dashboard status',
+      'SMTP2GO sender domains, API key permission, and free-plan quota',
+      'SPF, DKIM, and DMARC alignment in SMTP2GO',
     ],
   };
-}
-
-function checkEmailSending(runner, args, options, checks, domain, verification) {
-  const result = spawn(runner, args, options, 'pipe');
-  if (result.status === 0) {
-    assertEmailSendingReady(String(result.stdout ?? ''), domain);
-    checks.push(`email-sending:${domain}`);
-    return;
-  }
-  const detail = `${String(result.stdout ?? '')}\n${String(result.stderr ?? '')}`;
-  if (!/Unauthorized[\s\S]*code:\s*2036/iu.test(detail)) {
-    throw failure(`email-sending:${domain}`, result);
-  }
-  assertRecentSendingVerification(verification);
-  checks.push(`email-sending-attested:${domain}`);
-}
-
-function assertRecentSendingVerification(verification) {
-  const timestamp = Date.parse(verification?.verifiedAt ?? '');
-  const age = Date.now() - timestamp;
-  if (
-    verification?.method !== 'dashboard'
-    || verification?.confirmation !== 'EMAIL_SENDING_READY'
-    || !Number.isFinite(timestamp)
-    || age < -5 * 60 * 1000
-    || age > 24 * 60 * 60 * 1000
-  ) throw new Error('Email Sending API is unauthorized and no recent dashboard verification exists');
 }
 
 export function runDeployApply(stage, plan, preflight, options = {}, runner = defaultRunner()) {
@@ -128,9 +93,12 @@ export function runDeployApply(stage, plan, preflight, options = {}, runner = de
     '--remote', '--config', webConfig,
   ], options, checks, 'migrate');
   for (const app of ['jobs', 'ingest', 'web']) {
+    const secretArguments = app === 'jobs'
+      ? ['--secrets-file', requiredSecretsFile(options)]
+      : [];
     mutate(
       runner,
-      ['deploy', '--config', configPath(stage, plan, app)],
+      ['deploy', '--config', configPath(stage, plan, app), ...secretArguments],
       options,
       checks,
       `deploy:${app}`,
@@ -176,13 +144,6 @@ function assertR2Identity(output, expected) {
   const payload = parseJson(output);
   const name = payload.name ?? payload.bucket_name ?? payload.bucket;
   if (name !== expected) throw new Error('remote R2 bucket does not match the deployment manifest');
-}
-
-function assertEmailSendingReady(output, domain) {
-  const row = output.split(/\r?\n/u).find((line) => line.toLowerCase().includes(domain));
-  if (row === undefined || !/\byes\b/iu.test(row)) {
-    throw new Error(`Email Sending is not ready for ${domain}`);
-  }
 }
 
 function extractTableCount(output) {
@@ -241,6 +202,13 @@ function configPath(stage, plan, app) {
   const descriptor = plan.configs.find((item) => item.app === app);
   if (!descriptor) throw new Error(`deployment plan has no ${app} config`);
   return join(stage, descriptor.file);
+}
+
+function requiredSecretsFile(options) {
+  if (typeof options.secretsFile !== 'string' || options.secretsFile === '') {
+    throw new Error('deploy requires a validated SMTP2GO secrets file');
+  }
+  return options.secretsFile;
 }
 
 function defaultRunner() {

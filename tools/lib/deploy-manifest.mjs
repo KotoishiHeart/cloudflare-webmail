@@ -12,9 +12,11 @@ export function validateDeploymentManifest(input) {
   if (input.version !== 1) fail('version must be 1');
   const workers = validateWorkers(input.workers);
   const resources = validateResources(input.resources);
-  const sendingDomains = domains(input.email, 'sendingDomains');
+  const senderDomains = domains(input.email, 'senderDomains');
   const routingDomains = domains(input.email, 'routingDomains');
-  const sendingVerification = validateSendingVerification(input.email.sendingVerification);
+  if (input.email.outboundProvider !== 'smtp2go') {
+    fail('email.outboundProvider must be smtp2go');
+  }
   return {
     version: 1,
     environment: name(input.environment, 'environment'),
@@ -25,9 +27,9 @@ export function validateDeploymentManifest(input) {
     access: validateAccess(input.access),
     resources,
     email: {
-      sendingDomains,
+      outboundProvider: 'smtp2go',
+      senderDomains,
       routingDomains,
-      ...(sendingVerification === undefined ? {} : { sendingVerification }),
     },
     limits: validateLimits(input.limits),
   };
@@ -97,7 +99,7 @@ function validateResources(input) {
 
 function domains(input, key) {
   object(input, 'email');
-  keys(input, ['sendingDomains', 'routingDomains', 'sendingVerification'], 'email');
+  keys(input, ['outboundProvider', 'senderDomains', 'routingDomains'], 'email');
   const value = input[key];
   if (!Array.isArray(value) || value.length < 1 || value.length > 30) {
     fail(`email.${key} must contain between 1 and 30 domains`);
@@ -105,24 +107,6 @@ function domains(input, key) {
   const normalized = value.map((item, index) => domain(item, `email.${key}[${index}]`));
   unique(normalized, `email.${key}`);
   return normalized;
-}
-
-function validateSendingVerification(input) {
-  if (input === undefined) return undefined;
-  object(input, 'email.sendingVerification');
-  keys(input, ['method', 'verifiedAt', 'evidenceReference', 'confirmation'], 'email.sendingVerification');
-  if (input.method !== 'dashboard') fail('email.sendingVerification.method must be dashboard');
-  const verifiedAt = String(input.verifiedAt ?? '').trim();
-  const timestamp = Date.parse(verifiedAt);
-  if (!Number.isFinite(timestamp)) fail('email.sendingVerification.verifiedAt must be an ISO timestamp');
-  const evidenceReference = boundedText(
-    input.evidenceReference,
-    'email.sendingVerification.evidenceReference',
-  );
-  if (input.confirmation !== 'EMAIL_SENDING_READY') {
-    fail('email.sendingVerification.confirmation must be EMAIL_SENDING_READY');
-  }
-  return { method: 'dashboard', verifiedAt, evidenceReference, confirmation: input.confirmation };
 }
 
 function validateLimits(input) {
@@ -153,15 +137,6 @@ function name(value, path) {
 function pattern(value, expression, path) {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!expression.test(normalized)) fail(`${path} has an invalid format`);
-  return normalized;
-}
-
-function boundedText(value, path) {
-  if (typeof value !== 'string') fail(`${path} must be a string`);
-  const normalized = value.trim();
-  if (normalized.length < 1 || normalized.length > 200 || /[\r\n]/u.test(normalized)) {
-    fail(`${path} must contain between 1 and 200 characters on one line`);
-  }
   return normalized;
 }
 

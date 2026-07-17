@@ -11,6 +11,7 @@ import {
   validateRollbackPlan,
 } from './deploy-rollback.mjs';
 import { createDeployStage, verifyDeployStage } from './deploy-stage.mjs';
+import { validateDeploySecrets } from './deploy-secrets.mjs';
 
 export async function runDeployCli(argv, io = defaultIo()) {
   const [command = 'help', ...args] = argv;
@@ -87,13 +88,20 @@ export async function runDeployCli(argv, io = defaultIo()) {
     const output = join(stage, 'deploy-result.json');
     await requireOutputAbsent(output);
     const preflight = JSON.parse(await readFile(join(stage, 'preflight.json'), 'utf8'));
+    const secrets = await validateDeploySecrets(required(options, 'secrets-file'));
     if (plan.deployment.mode === 'upgrade') {
       const backup = required(options, 'backup');
       const backupManifest = await verifyBackup(backup);
       assertBackupTarget(stage, plan, backupManifest);
     }
     const rollback = await loadOrCreateRollbackPlan(stage, plan, { profile: options.profile }, io);
-    const result = runDeployApply(stage, plan, preflight, { profile: options.profile }, io);
+    const result = runDeployApply(
+      stage,
+      plan,
+      preflight,
+      { profile: options.profile, secretsFile: secrets.path },
+      io,
+    );
     result.rollbackPlan = 'rollback-plan.json';
     result.rollbackAvailable = rollback.available;
     await writeJsonAtomic(output, result, false);
@@ -195,7 +203,7 @@ function usage() {
     `  plan --manifest FILE --stage DIR\n` +
     `  verify --stage DIR\n` +
     `  preflight --stage DIR [--profile NAME] [--force]\n` +
-    `  deploy --stage DIR --yes [--backup DIR] [--profile NAME]\n` +
+    `  deploy --stage DIR --secrets-file FILE --yes [--backup DIR] [--profile NAME]\n` +
     `  postflight --stage DIR [--profile NAME] [--force]\n` +
     `  rollback --stage DIR --reason TEXT --yes [--profile NAME]\n\n` +
     `Upgrade mode requires a verified backup. The tool never creates resources or Email Routing rules.\n`;

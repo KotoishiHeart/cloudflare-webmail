@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { assertBackupTarget } from '../lib/deploy-cli.mjs';
@@ -14,6 +14,7 @@ import {
 } from '../lib/deploy-rollback.mjs';
 import { validateDeploymentManifest } from '../lib/deploy-manifest.mjs';
 import { createDeployStage, verifyDeployStage } from '../lib/deploy-stage.mjs';
+import { validateDeploySecrets } from '../lib/deploy-secrets.mjs';
 
 const COMMIT = 'c'.repeat(40);
 const D1_ID = '11111111-1111-4111-8111-111111111111';
@@ -43,16 +44,21 @@ const MANIFEST = {
     },
   },
   email: {
-    sendingDomains: ['example.com'],
+    outboundProvider: 'smtp2go',
+    senderDomains: ['example.com'],
     routingDomains: ['example.com'],
   },
   limits: { queueMaxConcurrency: 1 },
 };
 
 let root;
+let secretsFile;
 
 before(async () => {
   root = await mkdtemp(join(tmpdir(), 'cf-webmail-deploy-test-'));
+  secretsFile = join(root, 'secrets.json');
+  await writeFile(secretsFile, JSON.stringify({ SMTP2GO_API_KEY: `api-${'a'.repeat(32)}` }));
+  await chmod(secretsFile, 0o600);
 });
 
 after(async () => {
@@ -76,6 +82,7 @@ describe('review-first deployment stage', () => {
     assert.equal(jobs.queues.consumers[2].dead_letter_queue, undefined);
     assert.equal(jobs.queues.consumers[3].queue, 'cf-webmail-v2-outbound-dlq');
     assert.equal(jobs.queues.producers[0].queue, 'cf-webmail-v2-inbound');
+    assert.deepEqual(jobs.secrets.required, ['SMTP2GO_API_KEY']);
   });
 
   it('runs read-only checks before migrations and deploys in dependency order', async () => {
@@ -84,14 +91,24 @@ describe('review-first deployment stage', () => {
     const report = await runDeployPreflight(stage, plan, {}, fakeRunner(calls, 0));
     assert.equal(report.databaseEmpty, true);
     assert.equal(report.queueTopologies.length, 4);
-    assert.ok(report.checks.includes('email-sending:example.com'));
+    assert.ok(report.checks.includes('outbound-provider:smtp2go'));
     assert.ok(calls.some((args) => args.includes('--dry-run')));
 
     const mutationCalls = [];
-    const result = runDeployApply(stage, plan, report, {}, fakeRunner(mutationCalls, 0));
+    const result = runDeployApply(
+      stage,
+      plan,
+      report,
+      { secretsFile },
+      fakeRunner(mutationCalls, 0),
+    );
     assert.deepEqual(result.steps, ['migrate', 'deploy:jobs', 'deploy:ingest', 'deploy:web']);
     assert.ok(mutationCalls[0].includes('migrations'));
     assert.match(mutationCalls[1].join(' '), /jobs\.wrangler\.json/u);
+    assert.deepEqual(
+      mutationCalls[1].slice(-2),
+      ['--secrets-file', secretsFile],
+    );
     assert.match(mutationCalls[2].join(' '), /ingest\.wrangler\.json/u);
     assert.match(mutationCalls[3].join(' '), /web\.wrangler\.json/u);
   });
@@ -100,7 +117,10 @@ describe('review-first deployment stage', () => {
     const { stage, plan } = await stageFixture('guards');
     const report = await runDeployPreflight(stage, plan, {}, fakeRunner([], 2));
     assert.equal(report.databaseEmpty, false);
-    assert.throws(() => runDeployApply(stage, plan, report, {}, fakeRunner([], 0)), /empty D1/u);
+    assert.throws(
+      () => runDeployApply(stage, plan, report, { secretsFile }, fakeRunner([], 0)),
+      /empty D1/u,
+    );
 
     assert.throws(
       () => assertBackupTarget(stage, plan, {
@@ -138,32 +158,34 @@ describe('review-first deployment stage', () => {
     );
   });
 
-  it('accepts recent dashboard evidence only when Email Sending returns 2036', async () => {
-    const manifest = {
-      ...MANIFEST,
-      email: {
-        ...MANIFEST.email,
-        sendingVerification: {
-          method: 'dashboard',
-          verifiedAt: new Date().toISOString(),
-          evidenceReference: 'change-ticket/email-sending-ready',
-          confirmation: 'EMAIL_SENDING_READY',
-        },
-      },
-    };
-    const { stage, plan } = await stageFixture('sending-attestation', manifest);
-    const report = await runDeployPreflight(stage, plan, {}, emailUnauthorizedRunner([], 0));
-    assert.ok(report.checks.includes('email-sending-attested:example.com'));
+  it('requires the SMTP2GO provider and rejects obsolete Email Sending evidence', () => {
     assert.throws(
       () => validateDeploymentManifest({
-        ...manifest,
-        email: {
-          ...manifest.email,
-          sendingVerification: { ...manifest.email.sendingVerification, confirmation: 'yes' },
-        },
+        ...MANIFEST,
+        email: { ...MANIFEST.email, outboundProvider: 'cloudflare-email-service' },
       }),
-      /EMAIL_SENDING_READY/u,
+      /smtp2go/u,
     );
+    assert.throws(
+      () => validateDeploymentManifest({
+        ...MANIFEST,
+        email: { ...MANIFEST.email, sendingVerification: {} },
+      }),
+      /unknown field/u,
+    );
+  });
+
+  it('accepts only a permission-restricted SMTP2GO secret file', async () => {
+    await assert.doesNotReject(validateDeploySecrets(secretsFile));
+    const extra = join(root, 'extra-secrets.json');
+    await writeFile(extra, JSON.stringify({
+      SMTP2GO_API_KEY: `api-${'b'.repeat(32)}`,
+      UNEXPECTED: 'value',
+    }));
+    await chmod(extra, 0o600);
+    await assert.rejects(validateDeploySecrets(extra), /only SMTP2GO_API_KEY/u);
+    await chmod(extra, 0o644);
+    await assert.rejects(validateDeploySecrets(extra), /0600/u);
   });
 
   it('fails closed on placeholder-like or misspelled manifest fields', () => {
@@ -264,26 +286,10 @@ function fakeRunner(calls, tableCount) {
       if (args.includes('execute')) {
         return { status: 0, stdout: JSON.stringify([{ results: [{ table_count: tableCount }] }]), stderr: '' };
       }
-      if (args.includes('sending')) {
-        return { status: 0, stdout: 'name enabled tag\ncf-bounce.example.com yes fixture', stderr: '' };
-      }
       if (args.includes('routing') && args.includes('settings')) {
         return { status: 0, stdout: 'Email Routing for example.com:\n  Enabled:  true\n', stderr: '' };
       }
       return { status: 0, stdout: 'ok', stderr: '' };
-    },
-  };
-}
-
-function emailUnauthorizedRunner(calls, tableCount) {
-  const base = fakeRunner(calls, tableCount);
-  return {
-    spawn: (command, args, options) => {
-      if (args.includes('sending')) {
-        calls.push(args);
-        return { status: 1, stdout: '', stderr: 'Unauthorized [code: 2036]' };
-      }
-      return base.spawn(command, args, options);
     },
   };
 }
