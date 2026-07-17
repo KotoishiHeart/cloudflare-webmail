@@ -132,6 +132,12 @@ does not reverse D1 migrations, R2 writes, Queue messages, routing, Access, or
 mail accepted after that timestamp. Preserve both systems and reconcile the
 interval explicitly.
 
+The retirement plan must enumerate archived provider/API credentials and the
+temporary R2/Access credentials used for migration and canaries. Before final
+retirement, require provider-side revocation or rotation evidence for every
+credential no longer needed; never treat local deletion as revocation or copy
+an archived SMTP credential into the rebuild.
+
 ## Readiness interpretation
 
 | State | Required evidence |

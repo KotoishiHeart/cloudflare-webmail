@@ -268,4 +268,7 @@ credential. Any mismatch exits without changing R2 or D1.
 
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext
-secrets from the archived repository into any of these files.
+secrets from the archived repository into any of these files. Treat every
+credential found in an archived configuration, backup, generated file, or
+repository history as exposed: rotate or revoke it at the provider and record
+non-secret evidence. Removing the file alone is not sufficient.

@@ -25,6 +25,9 @@ Before the window, record all of the following in the change ticket:
   address.
 - Current production Email Routing rule and its archived Worker target.
 - Operators authorized to change Access, Email Routing, Workers, D1, and R2.
+- A credential-retirement record for every archived SMTP/provider, API, R2,
+  Access service-token, and migration credential: owner, provider-side
+  identifier, planned revocation time, and replacement if still required.
 - Abort deadline, observation period, and the person making the go/no-go call.
 
 Keep the archived resources intact and disable all retention runs in the new
@@ -133,6 +136,13 @@ Remove archived Access only after the observation period. Keep the archived
 Workers disabled but deployable and keep archived D1/R2 read-only for the
 approved legal/operational retention period. Deleting old resources is a
 separate reviewed change, never part of cutover.
+
+Revoke or rotate every archived third-party and migration credential at the
+provider after the observation period, or earlier when the rebuild no longer
+needs it. Record provider-side evidence without recording the credential
+value. Deleting a plaintext value from a local file is not revocation and does
+not close this gate. The rebuild uses Cloudflare Email Service and must not
+retain an archived SMTP provider credential.
 
 ## Abort and rollback
 
