@@ -149,12 +149,14 @@ snapshot, passes only unfinished keys to a single `rclone copy`, and never uses
 delete or move against the source. Each download is then decompressed and
 checked against the old D1 raw size and SHA-256 before entering the hashed
 snapshot. Verified keys are skipped on resume, the transient key-shaped copy is
-removed locally, and changing the named source or rclone configuration is
-rejected. This avoids launching one Wrangler process for each of tens of
-thousands of archived messages. The isolated SQLite database, JSON migration
-artifacts, snapshot database, source-key list, and verified MIME objects are
-created with owner-only permissions; the snapshot directories are not
-traversable by other local users.
+removed locally after processing, and changing the named source or rclone
+configuration is rejected from the start of the first transfer. If rclone is
+interrupted, the owner-only transient copy is retained so the same command can
+skip files already present and resume. This avoids launching one Wrangler
+process for each of tens of thousands of archived messages. The isolated
+SQLite database, JSON migration artifacts, snapshot database, source-key list,
+and verified MIME objects are created with owner-only permissions; the snapshot
+directories are not traversable by other local users.
 
 The per-object Wrangler path remains useful for a small rehearsal or diagnostic.
 Select its local/remote target explicitly; it also only reads the source bucket:

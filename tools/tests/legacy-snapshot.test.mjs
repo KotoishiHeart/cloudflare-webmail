@@ -132,6 +132,55 @@ describe('archived raw R2 snapshot', () => {
       /different R2 source/u,
     );
   });
+
+  it('retains an interrupted rclone transfer and resumes only from the bound source', async () => {
+    const snapshot = join(root, 'snapshot-interrupted-bulk');
+    const remote = join(root, 'fake-interrupted-rclone-remote');
+    await mkdir(join(remote, 'raw'), { recursive: true });
+    await Promise.all([
+      writeFile(join(remote, 'raw', 'one.eml.gz'), gzipSync(rawOne)),
+      writeFile(join(remote, 'raw', 'two.eml.gz'), gzipSync(rawTwo)),
+    ]);
+    let copies = 0;
+    const io = {
+      async execFile(_command, args) {
+        if (args[0] === 'version') return { status: 0 };
+        copies += 1;
+        const destination = args[2];
+        const list = args[args.indexOf('--files-from-raw') + 1];
+        const keys = (await readFile(list, 'utf8')).trim().split('\n');
+        const selected = copies === 1 ? keys.slice(0, 1) : keys;
+        for (const key of selected) {
+          const target = join(destination, key);
+          await mkdir(dirname(target), { recursive: true });
+          await writeFile(target, await readFile(join(remote, key)));
+        }
+        return copies === 1 ? { status: 1, stderr: 'interrupted' } : { status: 0 };
+      },
+    };
+    await assert.rejects(
+      fetchLegacySnapshotBulk({
+        database, mapping, snapshot, rcloneSource: 'archive:old-bucket', io,
+      }),
+      /rclone exited with 1/u,
+    );
+    assert.equal(
+      await readFile(join(snapshot, '.rclone-source', 'raw', 'one.eml.gz'))
+        .then((value) => value.byteLength),
+      gzipSync(rawOne).byteLength,
+    );
+    await assert.rejects(
+      fetchLegacySnapshotBulk({
+        database, mapping, snapshot, rcloneSource: 'other:old-bucket', io,
+      }),
+      /different R2 source/u,
+    );
+    const resumed = await fetchLegacySnapshotBulk({
+      database, mapping, snapshot, rcloneSource: 'archive:old-bucket', io,
+    });
+    assert.equal(resumed.complete, true);
+    assert.equal(copies, 2);
+  });
 });
 
 function rawEmail(subject, messageId) {

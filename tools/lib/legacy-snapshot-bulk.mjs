@@ -5,7 +5,11 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { fetchLegacySnapshot } from './legacy-snapshot.mjs';
-import { initializeLegacySnapshot } from './legacy-snapshot-state.mjs';
+import {
+  bindLegacySnapshotSource,
+  initializeLegacySnapshot,
+  validateLegacySnapshotIdentity,
+} from './legacy-snapshot-state.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,9 +21,12 @@ export async function fetchLegacySnapshotBulk(options) {
   const checkers = integer(options.checkers ?? 32, 1, 128, 'checkers');
   const statePath = join(snapshot, 'snapshot.sqlite');
   await initializeLegacySnapshot(snapshot, statePath, options);
-  const state = new DatabaseSync(statePath, { readOnly: true });
+  const sourceIdentity = { kind: 'rclone-bulk', source, config };
+  const state = new DatabaseSync(statePath);
   let rows;
   try {
+    validateLegacySnapshotIdentity(state, options);
+    bindLegacySnapshotSource(state, sourceIdentity);
     rows = state.prepare(`
       SELECT source_key, status FROM snapshot_objects ORDER BY source_key
     `).all().map((row) => ({ sourceKey: String(row.source_key), status: String(row.status) }));
@@ -38,6 +45,7 @@ export async function fetchLegacySnapshotBulk(options) {
     await writeFile(pendingList, pendingKeys, { mode: 0o600 });
     await mkdir(bulkRoot, { recursive: true, mode: 0o700 });
     await chmod(bulkRoot, 0o700);
+    let processed = false;
     try {
       await run(options.io, ['version']);
       await run(options.io, [
@@ -53,14 +61,17 @@ export async function fetchLegacySnapshotBulk(options) {
         snapshot,
         objectRoot: bulkRoot,
         concurrency: options.concurrency,
-        sourceIdentity: { kind: 'rclone-bulk', source, config },
+        sourceIdentity,
       });
+      processed = true;
       return withBulkEvidence(summary, source, rows.length, sourceList, allKeys, pending);
     } finally {
-      await Promise.all([
-        rm(bulkRoot, { recursive: true, force: true }),
-        rm(pendingList, { force: true }),
-      ]);
+      if (processed) {
+        await Promise.all([
+          rm(bulkRoot, { recursive: true, force: true }),
+          rm(pendingList, { force: true }),
+        ]);
+      }
     }
   }
   const summary = await fetchLegacySnapshot({
@@ -69,7 +80,7 @@ export async function fetchLegacySnapshotBulk(options) {
     snapshot,
     objectRoot: bulkRoot,
     concurrency: options.concurrency,
-    sourceIdentity: { kind: 'rclone-bulk', source, config },
+    sourceIdentity,
   });
   return withBulkEvidence(summary, source, rows.length, sourceList, allKeys, 0);
 }
