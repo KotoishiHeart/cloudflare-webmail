@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { defaultRunner, queryD1 } from './backup-cloudflare.mjs';
 import { materializeLegacyR2Tree } from './legacy-bulk-stage.mjs';
 import { auditLegacyConfiguration } from './legacy-bulk-configuration-audit.mjs';
+import { auditLegacyDeltaTarget } from './legacy-delta-bulk-audit.mjs';
 
 export async function applyLegacyStageBulk(stageInput, options, runner = defaultRunner()) {
   if (!options.yes) throw new Error('bulk apply changes R2 and D1; pass --yes after verification');
@@ -51,6 +52,7 @@ export async function applyLegacyStageBulk(stageInput, options, runner = default
       '--checkers', String(checkers), '--combined', report,
       ...rcloneConfigArgs(options),
     ]);
+    await chmod(report, 0o600);
     const reportInfo = await stat(report);
     state.r2Verified = true;
     state.r2Report = {
@@ -77,6 +79,7 @@ export async function applyLegacyStageBulk(stageInput, options, runner = default
 }
 
 export function auditLegacyTarget(manifest, options, runner) {
+  if (manifest.version === 4) return auditLegacyDeltaTarget(manifest, options, runner);
   const batchRows = queryD1(`
     SELECT b.source_database_sha256, b.mapping_sha256, b.snapshot_sha256,
       b.expected_messages, b.source_objects, b.staged_objects,
@@ -192,7 +195,8 @@ async function readState(path, target, stageSha256, sqlFileCount) {
 }
 
 async function writeState(path, state) {
-  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`);
+  await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  await chmod(path, 0o600);
 }
 
 function rcloneDestination(value) {

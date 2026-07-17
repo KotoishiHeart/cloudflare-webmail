@@ -13,6 +13,7 @@ import { fetchLegacySnapshot } from '../lib/legacy-snapshot.mjs';
 import { prepareLegacyMigrationStage } from '../lib/legacy-stage.mjs';
 import { prepareLegacyDeltaStage } from '../lib/legacy-delta-stage.mjs';
 import { verifyMigrationStage } from '../lib/migration-stage.mjs';
+import { auditLegacyDeltaTarget } from '../lib/legacy-delta-bulk-audit.mjs';
 
 let root;
 const rawOne = rawEmail('One', '<one@example.net>');
@@ -137,12 +138,107 @@ describe('archived baseline and final delta stage', () => {
     }), /changed immutable field\(s\): subject/u);
     await assert.rejects(stat(stage), /ENOENT/u);
   });
+
+  it('creates a valid object-free delta when only flags changed', async () => {
+    const baseline = await legacySource('flags-baseline', [
+      legacyMessage('flags-1', 'first@example.com', 'raw/flags.eml.gz', rawOne),
+    ]);
+    const baselineStage = join(root, 'flags-baseline-stage');
+    await prepareLegacyMigrationStage({
+      database: baseline.database, mapping: baseline.mapping,
+      snapshot: baseline.snapshot, stage: baselineStage,
+    });
+    const final = await legacySource('flags-final', [
+      legacyMessage('flags-1', 'first@example.com', 'raw/flags.eml.gz', rawOne, { starred: 1 }),
+    ], { seed: baseline });
+    const delta = await prepareLegacyDeltaStage({
+      baselineDatabase: baseline.database, baselineStage,
+      database: final.database, mapping: final.mapping, snapshot: final.snapshot,
+      stage: join(root, 'flags-delta-stage'),
+    });
+    assert.equal(delta.messageBatchId, null);
+    assert.equal(delta.counts.newMessages, 0);
+    assert.equal(delta.counts.flagUpdates, 1);
+    assert.equal(delta.counts.objects, 0);
+    assert.equal((await verifyMigrationStage(join(root, 'flags-delta-stage'))).objects.length, 0);
+  });
+
+  it('synchronizes inserted, updated, and deleted legacy configuration', async () => {
+    const baseline = await legacySource('configuration-baseline', [
+      legacyMessage('config-1', 'first@example.com', 'raw/config-1.eml.gz', rawOne),
+      legacyMessage('config-2', 'second@example.com', 'raw/config-2.eml.gz', rawTwo),
+    ], { configuration: baselineConfiguration() });
+    const baselineStage = join(root, 'configuration-baseline-stage');
+    const baselineManifest = await prepareLegacyMigrationStage({
+      database: baseline.database, mapping: baseline.mapping,
+      snapshot: baseline.snapshot, stage: baselineStage, now: 6000,
+    });
+    const final = await legacySource('configuration-final', [
+      legacyMessage('config-1', 'first@example.com', 'raw/config-1.eml.gz', rawOne),
+      legacyMessage('config-2', 'second@example.com', 'raw/config-2.eml.gz', rawTwo),
+      legacyMessage('config-3', 'first@example.com', 'raw/config-3.eml.gz', rawThree),
+    ], { seed: baseline, configuration: finalConfiguration() });
+    const deltaStage = join(root, 'configuration-delta-stage');
+    const delta = await prepareLegacyDeltaStage({
+      baselineDatabase: baseline.database, baselineStage,
+      database: final.database, mapping: final.mapping, snapshot: final.snapshot,
+      stage: deltaStage, now: 7000,
+    });
+    assert.equal(delta.counts.newMessages, 1);
+    assert.equal(delta.counts.configurationMutations, 16);
+    assert.deepEqual(delta.configuration.counts, {
+      label: { insert: 2, update: 2, delete: 2 },
+      message_label: { insert: 1, update: 1, delete: 1 },
+      mail_rule: { insert: 2, update: 2, delete: 2 },
+      user_preference: { insert: 0, update: 1, delete: 0 },
+    });
+    const target = new DatabaseSync(join(root, 'configuration-target.sqlite'));
+    try {
+      target.exec('PRAGMA foreign_keys = ON;');
+      for (const name of (await readdir('migrations')).filter((item) => item.endsWith('.sql')).sort()) {
+        target.exec(await readFile(`migrations/${name}`, 'utf8'));
+      }
+      provision(target, baseline.mapping);
+      applySqlStage(target, baselineStage, baselineManifest);
+      applySqlStage(target, deltaStage, delta);
+      applySqlStage(target, deltaStage, delta);
+      assert.deepEqual(configurationCounts(target), {
+        labels: 4, messageLabels: 2, rules: 4, ruleLabels: 4, preferences: 1,
+      });
+      assert.equal(target.prepare(`
+        SELECT COUNT(*) AS count FROM mailbox_labels WHERE name = 'Remove'
+      `).get().count, 0);
+      assert.equal(target.prepare(`
+        SELECT COUNT(*) AS count FROM mailbox_labels WHERE name = 'Keep' AND color = '#334455'
+      `).get().count, 2);
+      const preference = target.prepare(`
+        SELECT p.page_size, p.compact_layout, a.address AS default_address
+        FROM user_preferences AS p
+        JOIN mailbox_addresses AS a ON a.mailbox_id = p.default_mailbox_id
+        WHERE p.user_id = 'owner-1' AND a.kind = 'primary'
+      `).get();
+      assert.deepEqual({ ...preference }, {
+        page_size: 50, compact_layout: 1, default_address: 'second@example.com',
+      });
+      assert.equal(target.prepare(`
+        SELECT COUNT(*) AS count FROM legacy_migration_delta_sources
+        WHERE delta_id = ? AND source_kind IN ('label', 'message_label', 'mail_rule', 'user_preference')
+      `).get(delta.deltaId).count, 16);
+      const audit = auditLegacyDeltaTarget(delta, {
+        local: true, remote: false, database: 'cf-webmail', config: 'apps/web/wrangler.jsonc',
+      }, sqliteQueryRunner(target));
+      assert.equal(audit.configurationMutations, 16);
+      assert.equal(audit.newMessages, 1);
+    } finally {
+      target.close();
+    }
+  });
 });
 
 async function legacySource(name, messages, options = {}) {
   const sql = join(root, `${name}.sql`);
   const database = join(root, `${name}.sqlite`);
-  await writeFile(sql, safeSql(messages));
+  await writeFile(sql, safeSql(messages, options.configuration));
   await importLegacySafeSql({ sql, database, now: 1000 });
   const mapping = createLegacyMappingTemplate(createLegacyInventory(database));
   const objectRoot = join(root, `${name}-r2`);
@@ -198,13 +294,13 @@ function rawEmail(subject, messageId) {
 
 function legacyMessage(id, account, rawKey, raw, changes = {}) {
   return {
-    id, account, rawKey, raw, read: changes.read ?? 0, starred: 0, archived: 0,
+    id, account, rawKey, raw, read: changes.read ?? 0, starred: changes.starred ?? 0, archived: 0,
     deleted: changes.deleted ?? 0, deletedAt: changes.deletedAt ?? null,
     subject: changes.subject ?? `Legacy ${id}`,
   };
 }
 
-function safeSql(messages) {
+function safeSql(messages, configuration) {
   const accounts = [...new Set(messages.map((message) => message.account))];
   return `-- CF Webmail Starter safe logical backup
 PRAGMA foreign_keys=OFF;
@@ -218,8 +314,96 @@ ${messages.map((message, index) => `INSERT INTO "messages" (${MESSAGE_COLUMNS.ma
 DELETE FROM "blobs";
 -- table: attachments
 DELETE FROM "attachments";
+${configuration === undefined ? '' : configurationSql(configuration)}
 PRAGMA foreign_keys=ON;
 `;
+}
+
+function configurationSql(configuration) {
+  return `-- table: labels
+DELETE FROM "labels";
+${configuration.labels.map((item) => `INSERT INTO "labels" ("id", "name", "color", "description", "created_at", "updated_at") VALUES (${sqlValue(item.id)}, ${sqlValue(item.name)}, ${sqlValue(item.color)}, '', ${item.createdAt}, ${item.updatedAt});`).join('\n')}
+-- table: message_labels
+DELETE FROM "message_labels";
+${configuration.messageLabels.map((item) => `INSERT INTO "message_labels" ("message_id", "label_id", "source_rule_id", "created_at") VALUES (${sqlValue(item.messageId)}, ${sqlValue(item.labelId)}, ${sqlValue(item.sourceRuleId)}, ${item.createdAt});`).join('\n')}
+-- table: mail_rules
+DELETE FROM "mail_rules";
+${configuration.rules.map((item) => `INSERT INTO "mail_rules" ("id", "name", "enabled", "priority", "match_json", "action_json", "apply_existing", "apply_incoming", "last_preview_count", "last_preview_at", "last_run_at", "created_at", "updated_at") VALUES (${sqlValue(item.id)}, ${sqlValue(item.name)}, ${item.enabled}, ${item.priority}, ${sqlValue(JSON.stringify(item.match))}, ${sqlValue(JSON.stringify(item.action))}, 1, 1, 0, NULL, NULL, ${item.createdAt}, ${item.updatedAt});`).join('\n')}
+-- table: app_settings
+DELETE FROM "app_settings";
+${configuration.preferences.map((item) => `INSERT INTO "app_settings" ("key", "value", "updated_at") VALUES (${sqlValue(`user_pref:${item.email}`)}, ${sqlValue(JSON.stringify(item.value))}, ${item.updatedAt});`).join('\n')}
+`;
+}
+
+function baselineConfiguration() {
+  return {
+    labels: [label(1, 'Keep', '#112233'), label(2, 'Remove', '#223344')],
+    rules: [
+      rule('rule-1', 'Keep rule', 'Keep', 1, 10),
+      rule('rule-2', 'Remove rule', 'Remove', 1, 20),
+    ],
+    messageLabels: [
+      { messageId: 'config-1', labelId: 2, sourceRuleId: 'rule-2', createdAt: 2600 },
+      { messageId: 'config-2', labelId: 1, sourceRuleId: 'rule-1', createdAt: 2700 },
+    ],
+    preferences: [{
+      email: 'owner@example.com',
+      value: { default_account: 'first@example.com', page_size: 25, dense_list: false },
+      updatedAt: 2800,
+    }],
+  };
+}
+
+function finalConfiguration() {
+  return {
+    labels: [label(1, 'Keep', '#334455', 3100), label(3, 'New', '#445566', 3200)],
+    rules: [
+      rule('rule-1', 'Keep rule changed', 'New', 0, 10, 3300),
+      rule('rule-3', 'New rule', 'Keep', 1, 30, 3400),
+    ],
+    messageLabels: [
+      { messageId: 'config-2', labelId: 1, sourceRuleId: 'rule-3', createdAt: 3500 },
+      { messageId: 'config-3', labelId: 3, sourceRuleId: 'rule-1', createdAt: 3600 },
+    ],
+    preferences: [{
+      email: 'owner@example.com',
+      value: { default_account: 'second@example.com', page_size: 50, dense_list: true },
+      updatedAt: 3700,
+    }],
+  };
+}
+
+function label(id, name, color, updatedAt = 2500) {
+  return { id, name, color, createdAt: 2400, updatedAt };
+}
+
+function rule(id, name, actionLabel, enabled, priority, updatedAt = 2500) {
+  return {
+    id, name, enabled, priority, match: { subject: name },
+    action: { star: true, label: actionLabel }, createdAt: 2400, updatedAt,
+  };
+}
+
+function configurationCounts(database) {
+  const count = (table) => database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get().count;
+  return {
+    labels: count('mailbox_labels'), messageLabels: count('message_labels'),
+    rules: count('mail_rules'), ruleLabels: count('mail_rule_labels'),
+    preferences: count('user_preferences'),
+  };
+}
+
+function sqliteQueryRunner(database) {
+  return {
+    spawn(_command, args) {
+      const sql = args[args.indexOf('--command') + 1];
+      return {
+        status: 0,
+        stdout: JSON.stringify([{ results: database.prepare(sql).all() }]),
+        stderr: '',
+      };
+    },
+  };
 }
 
 const MESSAGE_COLUMNS = [

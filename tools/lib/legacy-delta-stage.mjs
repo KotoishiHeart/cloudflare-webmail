@@ -8,6 +8,8 @@ import { verifyMigrationStage } from './migration-stage.mjs';
 import { stageSha256 } from './legacy-bulk-stage.mjs';
 import { openLegacyStageSource } from './legacy-stage-source.mjs';
 import { collectLegacyMessageDelta } from './legacy-delta-messages.mjs';
+import { collectLegacyConfigurationDelta } from './legacy-delta-configuration.mjs';
+import { renderLegacyConfigurationDelta } from './legacy-delta-configuration-sql.mjs';
 import {
   renderLegacyDeltaFlagSql,
   renderLegacyDeltaHeaderSql,
@@ -35,6 +37,12 @@ export async function prepareLegacyDeltaStage(options) {
     const collected = await collectLegacyMessageDelta({
       baselineDatabase, source, mapping: options.mapping, stage,
     });
+    const configuration = collectLegacyConfigurationDelta({
+      baselineDatabase,
+      finalDatabase: source.database,
+      mapping: options.mapping,
+      createdAt,
+    });
     if (collected.baselineMessages !== baselineStage.manifest.counts.discovered) {
       throw new Error('baseline database message count differs from the baseline stage');
     }
@@ -49,6 +57,7 @@ export async function prepareLegacyDeltaStage(options) {
     const changes = [
       ...collected.messages.map((item) => item.change),
       ...collected.flagChanges,
+      ...configuration.changes,
     ].sort(compareChange);
     const changesContent = changes.map((change) => JSON.stringify(change)).join('\n')
       + (changes.length > 0 ? '\n' : '');
@@ -63,7 +72,7 @@ export async function prepareLegacyDeltaStage(options) {
       changeSetSha256,
       newMessages: collected.messages.length,
       flagUpdates: collected.flagChanges.length,
-      configurationMutations: 0,
+      configurationMutations: configuration.changes.length,
       objects: collected.objects.length,
       changes: changes.length,
       createdAt,
@@ -83,6 +92,7 @@ export async function prepareLegacyDeltaStage(options) {
         item.message, item.legacy, delta, item.change,
       )),
       ...collected.flagChanges.map((change) => renderLegacyDeltaFlagSql(change, delta)),
+      ...renderLegacyConfigurationDelta(configuration.operations, delta),
     ];
     const sqlFiles = [await writeLegacyStageSqlChunk(
       stage, 0, [renderLegacyDeltaHeaderSql(delta, messageBatch)],
@@ -96,6 +106,7 @@ export async function prepareLegacyDeltaStage(options) {
     const manifest = deltaManifest({
       delta, collected, baselineStage, mappings: options.mapping.mappings,
       exclusions: options.mapping.exclusions, sqlFiles, changesContent,
+      configuration: configuration.counts,
     });
     await writeFile(
       join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 },
@@ -167,13 +178,13 @@ function deltaManifest(input) {
     complete: true,
     mappings: input.mappings,
     exclusions: input.exclusions,
-    configuration: { mutations: 0 },
+    configuration: { mutations: delta.configurationMutations, counts: input.configuration },
     counts: {
       baselineMessages: collected.baselineMessages,
       finalMessages: collected.finalMessages,
       newMessages: delta.newMessages,
       flagUpdates: delta.flagUpdates,
-      configurationMutations: 0,
+      configurationMutations: delta.configurationMutations,
       changes: delta.changes,
       failed: 0,
       quarantined: collected.quarantined,

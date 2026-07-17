@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { copyFile, link, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, link, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import { verifyMigrationStage } from './migration-stage.mjs';
 
@@ -7,14 +7,16 @@ export async function materializeLegacyR2Tree(stageInput, outputInput) {
   const stage = resolve(stageInput);
   const output = resolve(outputInput);
   const verified = await verifyMigrationStage(stage);
-  if (![2, 3].includes(verified.manifest.version) || verified.manifest.complete !== true) {
+  if (![2, 3, 4].includes(verified.manifest.version) || verified.manifest.complete !== true) {
     throw new Error('bulk R2 materialization requires a complete legacy stage');
   }
-  await mkdir(output, { recursive: true });
+  await mkdir(output, { recursive: true, mode: 0o700 });
+  await chmod(output, 0o700);
   for (const object of verified.objects) {
     const source = resolveStageFile(stage, object.file);
     const destination = resolveObjectKey(output, object.key);
-    await mkdir(dirname(destination), { recursive: true });
+    await mkdir(dirname(destination), { recursive: true, mode: 0o700 });
+    await chmod(dirname(destination), 0o700);
     if (!await identicalFile(source, destination, object)) {
       try {
         await link(source, destination);
@@ -32,7 +34,8 @@ export async function materializeLegacyR2Tree(stageInput, outputInput) {
     objects: verified.objects.length,
     output,
   };
-  await writeFile(`${output}.json`, `${JSON.stringify(result, null, 2)}\n`);
+  await writeFile(`${output}.json`, `${JSON.stringify(result, null, 2)}\n`, { mode: 0o600 });
+  await chmod(`${output}.json`, 0o600);
   return { ...result, manifest: verified.manifest, descriptors: verified.objects };
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import { chmod, readFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { defaultRunner } from './backup-cloudflare.mjs';
 import { auditLegacyTarget } from './legacy-bulk-apply.mjs';
@@ -22,6 +22,7 @@ export async function auditLegacyStageBulk(stageInput, options, runner = default
     '--checkers', String(checkers), '--combined', report,
     ...rcloneConfigArgs(options),
   ]);
+  await chmod(report, 0o600);
   const reportInfo = await stat(report);
   const d1 = auditLegacyTarget(tree.manifest, options, runner);
   return {
