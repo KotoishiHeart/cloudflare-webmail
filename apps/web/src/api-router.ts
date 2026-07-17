@@ -36,7 +36,7 @@ import { routeAdminApi } from './admin-router.js';
 
 export async function routeApi(
   request: Request,
-  env: Pick<Env, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>,
+  env: Pick<WebEnv, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>,
   identity: AccessIdentity,
   now: number,
 ): Promise<Response> {
@@ -62,7 +62,7 @@ export async function routeApi(
 
 async function routeKnownApi(
   request: Request,
-  env: Pick<Env, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>,
+  env: Pick<WebEnv, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>,
   identity: AccessIdentity,
   now: number,
 ): Promise<Response> {

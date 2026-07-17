@@ -7,5 +7,11 @@
       "vitest/globals"
     ]
   },
-  "include": ["../apps/web/worker-configuration.d.ts", "../vitest.config.ts", "**/*.ts"]
+  "include": [
+    "../apps/web/worker-configuration.d.ts",
+    "../apps/ingest/worker-configuration.d.ts",
+    "../apps/jobs/worker-configuration.d.ts",
+    "../vitest.config.ts",
+    "**/*.ts"
+  ]
 }

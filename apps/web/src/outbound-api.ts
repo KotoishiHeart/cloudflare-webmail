@@ -22,7 +22,7 @@ import {
   prepareArchiveForStorage,
 } from './outbound-archive.js';
 
-type OutboundApiEnv = Pick<Env, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>;
+type OutboundApiEnv = Pick<WebEnv, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>;
 
 export async function createOutboundMessage(
   request: Request,

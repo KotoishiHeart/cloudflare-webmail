@@ -13,7 +13,7 @@ const JSON_HEADERS = {
 } as const;
 
 export type WebRequestDependencies = {
-  authenticate(request: Request, env: Env): Promise<AccessAuthResult>;
+  authenticate(request: Request, env: WebEnv): Promise<AccessAuthResult>;
   now?(): number;
 };
 
@@ -24,7 +24,7 @@ const DEFAULT_DEPENDENCIES: WebRequestDependencies = {
 
 export async function handleWebRequest(
   request: Request,
-  env: Env,
+  env: WebEnv,
   dependencies: WebRequestDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<Response> {
   const url = new URL(request.url);

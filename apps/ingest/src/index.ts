@@ -1,7 +1,7 @@
 import { handleInboundEmail } from './email-handler.js';
 
 export default {
-  async email(message: ForwardableEmailMessage, env: Env): Promise<void> {
+  async email(message: ForwardableEmailMessage, env: IngestEnv): Promise<void> {
     await handleInboundEmail(message, {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
@@ -13,4 +13,4 @@ export default {
       receivedAt: Date.now(),
     });
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<IngestEnv>;

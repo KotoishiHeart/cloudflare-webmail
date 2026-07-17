@@ -15,14 +15,6 @@ import { auditCanonicalStorage } from './storage-audit.js';
 import { processApprovedRetentionRuns } from './retention-runner.js';
 import { pruneExpiredEvents } from '@cf-webmail/database';
 
-type JobsEnv = {
-  DB: D1Database;
-  RAW_EMAILS: R2Bucket;
-  EMAIL?: SendEmail;
-  INBOUND_QUEUE?: Queue<unknown>;
-  OUTBOUND_QUEUE?: Queue<unknown>;
-};
-
 export default {
   async queue(batch: MessageBatch<unknown>, env: JobsEnv): Promise<void> {
     if (
@@ -41,10 +33,6 @@ export default {
       return;
     }
     if (batch.queue === OUTBOUND_QUEUE_NAME) {
-      if (env.EMAIL === undefined) {
-        batch.retryAll({ delaySeconds: 60 });
-        return;
-      }
       await handleOutboundBatch(batch.messages, {
         db: env.DB,
         rawEmails: env.RAW_EMAILS,
@@ -57,9 +45,6 @@ export default {
   },
 
   async scheduled(_controller: ScheduledController, env: JobsEnv): Promise<void> {
-    if (env.INBOUND_QUEUE === undefined || env.OUTBOUND_QUEUE === undefined) {
-      throw new Error('INBOUND_QUEUE and OUTBOUND_QUEUE bindings are required');
-    }
     const now = Date.now();
     const [inbound, deadLetters, outbound, staging, storage, retention, events] = await Promise.allSettled([
       recoverInboundHandoffs(env.DB, env.INBOUND_QUEUE, now),

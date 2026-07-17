@@ -1,7 +1,7 @@
 import { handleWebRequest } from './app.js';
 
 export default {
-  fetch(request: Request, env: Env): Promise<Response> {
+  fetch(request: Request, env: WebEnv): Promise<Response> {
     return handleWebRequest(request, env);
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<WebEnv>;

@@ -11,8 +11,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "types": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/web/worker-configuration.d.ts --config apps/web/wrangler.jsonc --include-runtime false && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/ingest/worker-configuration.d.ts --config apps/ingest/wrangler.jsonc --include-runtime false && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/jobs/worker-configuration.d.ts --config apps/jobs/wrangler.jsonc --include-runtime false",
-    "types:check": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/web/worker-configuration.d.ts --config apps/web/wrangler.jsonc --include-runtime false --check && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/ingest/worker-configuration.d.ts --config apps/ingest/wrangler.jsonc --include-runtime false --check && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/jobs/worker-configuration.d.ts --config apps/jobs/wrangler.jsonc --include-runtime false --check",
+    "types": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/web/worker-configuration.d.ts --config apps/web/wrangler.jsonc --env-interface WebEnv --include-runtime false && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/ingest/worker-configuration.d.ts --config apps/ingest/wrangler.jsonc --env-interface IngestEnv --include-runtime false && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/jobs/worker-configuration.d.ts --config apps/jobs/wrangler.jsonc --env-interface JobsEnv --include-runtime false",
+    "types:check": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/web/worker-configuration.d.ts --config apps/web/wrangler.jsonc --env-interface WebEnv --include-runtime false --check && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/ingest/worker-configuration.d.ts --config apps/ingest/wrangler.jsonc --env-interface IngestEnv --include-runtime false --check && WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log wrangler types apps/jobs/worker-configuration.d.ts --config apps/jobs/wrangler.jsonc --env-interface JobsEnv --include-runtime false --check",
     "typecheck": "npm run types:check && tsc -p packages/contracts/tsconfig.json --noEmit && tsc -p packages/database/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit && tsc -p apps/ingest/tsconfig.json --noEmit && tsc -p apps/jobs/tsconfig.json --noEmit && tsc -p tests/tsconfig.json --noEmit",
     "test": "npm run test:workers && npm run test:node",
     "test:workers": "WRANGLER_LOG_PATH=/tmp/cf-webmail-wrangler.log vitest run",
@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.5",
-    "@cloudflare/workers-types": "5.20260716.1",
+    "@cloudflare/workers-types": "5.20260717.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10",
     "wrangler": "^4.111.0"
