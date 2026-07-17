@@ -188,6 +188,9 @@ npm run migrate:legacy -- verify-snapshot \
 Preparation reads only the isolated database and verified raw snapshot. It
 preserves old flags, direction, received/created timestamps, Message-ID and
 thread headers, while rebuilding body and attachment objects from raw MIME.
+Malformed archived Date values that exceed the current 256-character message
+limit are replaced by the Date parsed from verified raw MIME; the bounded
+original value remains in migration provenance for audit.
 The generated stage directories and every MIME, SQL, manifest, failure, and
 apply-state file use owner-only permissions because they contain mail content
 or identifying metadata.

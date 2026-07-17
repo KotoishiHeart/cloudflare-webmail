@@ -76,6 +76,7 @@ export function normalizeLegacyMessage(row, mapping) {
   const createdAt = optionalPositive(row.created_at) ?? receivedAt;
   const direction = row.direction === 'in' ? 'in' : row.direction === 'sent' ? 'sent' : null;
   if (direction === null) throw new Error('legacy message direction is invalid');
+  const dateHeader = text(row.date_header, 8192, 'date_header');
   return {
     id: text(row.id, 128, 'id', true),
     accountEmail: mapping.sourceAddress,
@@ -106,7 +107,7 @@ export function normalizeLegacyMessage(row, mapping) {
       sender: text(row.sender, 2048, 'sender'),
       recipients: text(row.recipients, 8192, 'recipients'),
       cc: text(row.cc, 8192, 'cc'),
-      dateHeader: text(row.date_header, 256, 'date_header'),
+      dateHeader,
       textPreview: text(row.text_preview, 1024, 'text_preview'),
     },
     bcc: text(row.bcc, 8192, 'bcc'),
@@ -114,6 +115,7 @@ export function normalizeLegacyMessage(row, mapping) {
     composeMode: text(row.compose_mode, 64, 'compose_mode'),
     sendStatus: text(row.send_status, 64, 'send_status'),
     provider: text(row.provider, 64, 'provider'),
+    dateHeader,
   };
 }
 

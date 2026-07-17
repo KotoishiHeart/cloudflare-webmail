@@ -33,14 +33,14 @@ export function renderLegacyMessageSql(message, source, batchId, importedAt) {
       INSERT INTO message_migration_sources (
         batch_id, source_record_id, message_id, source_account, source_direction,
         source_raw_key, source_body_text_key, source_body_html_key, source_bcc,
-        source_thread_message_id, compose_mode, send_status, provider,
+        source_thread_message_id, compose_mode, send_status, provider, source_date_header,
         source_deleted_at, source_created_at, imported_at
       )
       SELECT ${values([
         batchId, source.id, message.id, source.accountEmail, source.direction,
         source.rawKey, source.bodyTextKey, source.bodyHtmlKey, source.bcc,
         source.sourceMessageId, source.composeMode, source.sendStatus, source.provider,
-        source.deletedAt, source.createdAt, importedAt,
+        source.dateHeader, source.deletedAt, source.createdAt, importedAt,
       ])}
       WHERE EXISTS (
         SELECT 1 FROM messages

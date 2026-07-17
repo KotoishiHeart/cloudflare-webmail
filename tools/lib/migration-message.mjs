@@ -66,7 +66,7 @@ export async function prepareMigratedMessage(raw, options) {
     recipients: clean(preferred(metadata.recipients, recipients), 8192),
     cc: clean(preferred(metadata.cc, formatAddresses(parsed?.cc)), 8192),
     replyTo: clean(formatAddresses(parsed?.replyTo), 4096),
-    dateHeader: clean(preferred(metadata.dateHeader, parsed?.date), 256),
+    dateHeader: boundedPreferred(metadata.dateHeader, parsed?.date, 256),
     receivedAt,
     textPreview: clean(preferred(metadata.textPreview, bodyText || textFromHtml(bodyHtml)), 1024),
     rawKey: `${prefix}/raw.eml`,
@@ -100,6 +100,14 @@ function preferred(value, fallback) {
   return typeof value === 'string' ? value : fallback ?? '';
 }
 
+function boundedPreferred(value, fallback, maximum) {
+  if (typeof value !== 'string') return clean(fallback ?? '', maximum);
+  const normalized = normalize(value);
+  if (normalized.length <= maximum) return normalized;
+  const normalizedFallback = normalize(fallback ?? '');
+  return (normalizedFallback === '' ? normalized : normalizedFallback).slice(0, maximum);
+}
+
 function positiveInteger(value) {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
@@ -111,7 +119,11 @@ function toBuffer(content) {
 }
 
 function clean(value, maximum) {
-  return String(value).replace(CONTROL, ' ').replace(/\s+/gu, ' ').trim().slice(0, maximum);
+  return normalize(value).slice(0, maximum);
+}
+
+function normalize(value) {
+  return String(value).replace(CONTROL, ' ').replace(/\s+/gu, ' ').trim();
 }
 
 function formatAddresses(addresses) {

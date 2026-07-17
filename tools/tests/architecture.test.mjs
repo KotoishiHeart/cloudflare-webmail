@@ -77,7 +77,7 @@ test('ordered migrations create the complete schema from an empty database', asy
   const migrationNames = (await readdir('migrations'))
     .filter((name) => name.endsWith('.sql'))
     .sort();
-  assert.equal(migrationNames.length, 15);
+  assert.equal(migrationNames.length, 16);
   migrationNames.forEach((name, index) => {
     assert.match(name, new RegExp(`^${String(index + 1).padStart(4, '0')}_`, 'u'));
   });

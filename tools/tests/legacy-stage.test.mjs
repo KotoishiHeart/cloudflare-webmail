@@ -112,11 +112,13 @@ describe('archived current-format stage', () => {
         target.exec(await readFile(join(stage, sqlFile.file), 'utf8'));
       }
       const inbound = target.prepare(`
-        SELECT subject, received_at, created_at, is_read, is_starred, is_archived, is_deleted
+        SELECT subject, date_header, received_at, created_at, is_read, is_starred,
+          is_archived, is_deleted
         FROM messages WHERE direction = 'inbound'
       `).get();
       assert.deepEqual({ ...inbound }, {
         subject: 'Legacy inbound subject',
+        date_header: '2026-07-17T00:00:00.000Z',
         received_at: 1111,
         created_at: 1222,
         is_read: 1,
@@ -142,6 +144,11 @@ describe('archived current-format stage', () => {
         source_deleted_at: 2444,
         source_created_at: 2333,
       });
+      const longDate = target.prepare(`
+        SELECT length(source_date_header) AS source_length
+        FROM message_migration_sources WHERE source_record_id = 'old-in'
+      `).get();
+      assert.deepEqual({ ...longDate }, { source_length: 278 });
       const batch = target.prepare(`
         SELECT expected_messages, source_objects, staged_objects FROM migration_batches
       `).get();
@@ -245,6 +252,7 @@ function safeSql(rawInbound, rawOutbound) {
     id: 'old-in', direction: 'in', account: 'first@example.com', rawKey: 'raw/in.eml.gz',
     raw: rawInbound, subject: 'Legacy inbound subject', receivedAt: 1111, createdAt: 1222,
     read: 1, starred: 1, archived: 1, deleted: 0, deletedAt: null,
+    dateHeader: 'x'.repeat(278),
   });
   const outbound = messageValues({
     id: 'old-out', direction: 'sent', account: 'second@example.com', rawKey: 'raw/out.eml.gz',
@@ -309,7 +317,8 @@ function messageValues(input) {
   return [
     input.id, input.direction, inbound ? '<inbound@example.net>' : '<outbound@example.net>',
     hash(input.raw), input.subject, inbound ? 'sender@example.net' : input.account,
-    inbound ? input.account : 'recipient@example.net', '', 'legacy date', input.receivedAt,
+    inbound ? input.account : 'recipient@example.net', '', input.dateHeader ?? 'legacy date',
+    input.receivedAt,
     'legacy preview', input.rawKey, '', '', input.raw.byteLength, inbound ? 1 : 0,
     input.archived, 1, input.createdAt, input.read, input.starred, input.deleted,
     input.deletedAt, input.account, input.bcc ?? '', inbound ? '' : '<inbound@example.net>',
