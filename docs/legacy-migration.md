@@ -188,6 +188,9 @@ npm run migrate:legacy -- verify-snapshot \
 Preparation reads only the isolated database and verified raw snapshot. It
 preserves old flags, direction, received/created timestamps, Message-ID and
 thread headers, while rebuilding body and attachment objects from raw MIME.
+The generated stage directories and every MIME, SQL, manifest, failure, and
+apply-state file use owner-only permissions because they contain mail content
+or identifying metadata.
 It also converts labels, message-label assignments, active rule definitions,
 and per-user page density/default-mailbox preferences. Archived labels and
 rules were global, so each is deterministically copied into every mapped

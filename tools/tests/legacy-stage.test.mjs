@@ -1,7 +1,7 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
@@ -71,6 +71,12 @@ describe('archived current-format stage', () => {
     });
     const verified = await verifyMigrationStage(stage);
     assert.equal(verified.objects.length, 5);
+    assert.equal((await stat(stage)).mode & 0o777, 0o700);
+    assert.equal((await stat(join(stage, 'objects'))).mode & 0o777, 0o700);
+    assert.equal((await stat(join(stage, 'd1'))).mode & 0o777, 0o700);
+    assert.equal((await stat(join(stage, 'manifest.json'))).mode & 0o777, 0o600);
+    assert.equal((await stat(join(stage, verified.objects[0].file))).mode & 0o777, 0o600);
+    assert.equal((await stat(join(stage, manifest.sqlFiles[0].file))).mode & 0o777, 0o600);
 
     const target = new DatabaseSync(join(root, 'target.sqlite'));
     try {

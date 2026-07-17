@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { discoverMessageFiles, maildirFlags, readMessageFile } from './migration-source.mjs';
@@ -17,8 +17,15 @@ export async function prepareMigrationStage(options) {
   await assertMissing(stage);
   const files = await discoverMessageFiles(source, options.format);
   if (files.length === 0) throw new Error('no importable messages were found');
-  await mkdir(join(stage, 'objects'), { recursive: true });
-  await mkdir(join(stage, 'd1'), { recursive: true });
+  const objectsRoot = join(stage, 'objects');
+  const d1Root = join(stage, 'd1');
+  await mkdir(objectsRoot, { recursive: true, mode: 0o700 });
+  await mkdir(d1Root, { recursive: true, mode: 0o700 });
+  await Promise.all([
+    chmod(stage, 0o700),
+    chmod(objectsRoot, 0o700),
+    chmod(d1Root, 0o700),
+  ]);
   const createdAt = options.now ?? Date.now();
   const seen = new Set();
   const objects = [];
@@ -69,10 +76,12 @@ export async function prepareMigrationStage(options) {
   await writeFile(
     join(stage, 'objects.jsonl'),
     objects.map((object) => JSON.stringify(object)).join('\n') + '\n',
+    { mode: 0o600 },
   );
   await writeFile(
     join(stage, 'failures.jsonl'),
     failures.map((failure) => JSON.stringify(failure)).join('\n') + (failures.length ? '\n' : ''),
+    { mode: 0o600 },
   );
   const manifest = {
     version: STAGE_VERSION,
@@ -85,7 +94,11 @@ export async function prepareMigrationStage(options) {
     counts: { discovered: files.length, prepared, duplicates, failed: failures.length, objects: objects.length },
     sqlFiles: sqlChunks,
   };
-  await writeFile(join(stage, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  await writeFile(
+    join(stage, 'manifest.json'),
+    JSON.stringify(manifest, null, 2) + '\n',
+    { mode: 0o600 },
+  );
   return manifest;
 }
 
@@ -163,15 +176,15 @@ export async function applyMigrationStage(stageInput, options, io = { spawn: spa
 async function addObject(stage, objects, key, value, contentType) {
   const content = typeof value === 'string' ? Buffer.from(value) : Buffer.from(value);
   const file = `objects/${String(objects.length).padStart(8, '0')}.bin`;
-  await mkdir(dirname(join(stage, file)), { recursive: true });
-  await writeFile(join(stage, file), content);
+  await mkdir(dirname(join(stage, file)), { recursive: true, mode: 0o700 });
+  await writeFile(join(stage, file), content, { mode: 0o600 });
   objects.push({ key, file, contentType, size: content.byteLength, sha256: sha256(content) });
 }
 
 async function writeSqlChunk(stage, index, statements) {
   const file = `d1/${String(index).padStart(6, '0')}.sql`;
   const content = Buffer.from(statements.join('\n\n') + '\n');
-  await writeFile(join(stage, file), content);
+  await writeFile(join(stage, file), content, { mode: 0o600 });
   return { file, size: content.byteLength, sha256: sha256(content) };
 }
 
@@ -195,7 +208,8 @@ async function readState(path, target) {
 }
 
 async function writeState(path, state) {
-  await writeFile(path, JSON.stringify(state, null, 2) + '\n');
+  await writeFile(path, JSON.stringify(state, null, 2) + '\n', { mode: 0o600 });
+  await chmod(path, 0o600);
 }
 
 function runWrangler(args, io) {

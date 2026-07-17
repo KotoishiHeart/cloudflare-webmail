@@ -1,6 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { gzipSync } from 'node:zlib';
@@ -49,6 +49,12 @@ describe('migration stage', () => {
     });
     const verified = await verifyMigrationStage(stage);
     assert.equal(verified.objects.length, 3);
+    assert.equal((await stat(stage)).mode & 0o777, 0o700);
+    assert.equal((await stat(join(stage, 'objects'))).mode & 0o777, 0o700);
+    assert.equal((await stat(join(stage, 'd1'))).mode & 0o777, 0o700);
+    assert.equal((await stat(join(stage, 'manifest.json'))).mode & 0o777, 0o600);
+    assert.equal((await stat(join(stage, verified.objects[0].file))).mode & 0o777, 0o600);
+    assert.equal((await stat(join(stage, manifest.sqlFiles[0].file))).mode & 0o777, 0o600);
     const sql = await readFile(join(stage, manifest.sqlFiles[0].file), 'utf8');
     assert.match(sql, /'inbound', 'ready'/u);
     assert.match(sql, /, 1, 1, 0, 0, 1234, 1234/u);
@@ -109,6 +115,9 @@ describe('migration stage', () => {
     assert.ok(d1Index > 0);
     assert.ok(calls.slice(0, d1Index).every((args) => args.includes('r2')));
     assert.equal(state.nextSql, 1);
+    const stateFile = (await readdir(stage)).find((name) => name.startsWith('apply-state.'));
+    assert.notEqual(stateFile, undefined);
+    assert.equal((await stat(join(stage, stateFile))).mode & 0o777, 0o600);
     const resumedCalls = [];
     await applyMigrationStage(stage, options, {
       spawn: (_command, args) => { resumedCalls.push(args); return { status: 0 }; },

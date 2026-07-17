@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { legacyMappingSha256 } from './legacy-inventory.mjs';
 import { prepareMigratedMessage, deterministicUuid, sha256 } from './migration-message.mjs';
@@ -23,8 +23,15 @@ const SQL_CHUNK_SIZE = 50;
 export async function prepareLegacyMigrationStage(options) {
   const stage = resolve(options.stage);
   await assertMissing(stage);
-  await mkdir(join(stage, 'objects'), { recursive: true });
-  await mkdir(join(stage, 'd1'), { recursive: true });
+  const objectsRoot = join(stage, 'objects');
+  const d1Root = join(stage, 'd1');
+  await mkdir(objectsRoot, { recursive: true, mode: 0o700 });
+  await mkdir(d1Root, { recursive: true, mode: 0o700 });
+  await Promise.all([
+    chmod(stage, 0o700),
+    chmod(objectsRoot, 0o700),
+    chmod(d1Root, 0o700),
+  ]);
   const createdAt = options.now ?? Date.now();
   const source = openLegacyStageSource(options);
   const mappingSha256 = legacyMappingSha256(options.mapping);
@@ -162,10 +169,12 @@ export async function prepareLegacyMigrationStage(options) {
   await writeFile(
     join(stage, 'objects.jsonl'),
     objects.map((object) => JSON.stringify(object)).join('\n') + '\n',
+    { mode: 0o600 },
   );
   await writeFile(
     join(stage, 'failures.jsonl'),
     failures.map((failure) => JSON.stringify(failure)).join('\n') + (failures.length > 0 ? '\n' : ''),
+    { mode: 0o600 },
   );
   const complete = failures.length === 0 && duplicates === 0 && prepared === discovered;
   const manifest = {
@@ -195,22 +204,26 @@ export async function prepareLegacyMigrationStage(options) {
     },
     sqlFiles,
   };
-  await writeFile(join(stage, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(
+    join(stage, 'manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+    { mode: 0o600 },
+  );
   return manifest;
 }
 
 async function addObject(stage, objects, key, value, contentType) {
   const content = typeof value === 'string' ? Buffer.from(value) : Buffer.from(value);
   const file = `objects/${String(objects.length).padStart(8, '0')}.bin`;
-  await mkdir(dirname(join(stage, file)), { recursive: true });
-  await writeFile(join(stage, file), content);
+  await mkdir(dirname(join(stage, file)), { recursive: true, mode: 0o700 });
+  await writeFile(join(stage, file), content, { mode: 0o600 });
   objects.push({ key, file, contentType, size: content.byteLength, sha256: sha256(content) });
 }
 
 async function writeSqlChunk(stage, index, statements) {
   const file = `d1/${String(index).padStart(6, '0')}.sql`;
   const content = Buffer.from(`${statements.join('\n\n')}\n`);
-  await writeFile(join(stage, file), content);
+  await writeFile(join(stage, file), content, { mode: 0o600 });
   return { file, size: content.byteLength, sha256: sha256(content) };
 }
 
