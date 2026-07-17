@@ -313,7 +313,10 @@ The delta inserts only new messages and their rebuilt objects. Existing
 messages receive guarded updates only for read, star, archive, delete, and
 legacy deletion-time state. Labels, message-label assignments, rules, and
 legacy user preferences are synchronized with explicit insert, update, or
-delete operations. A removed baseline message, changed raw MIME, changed
+delete operations. Baseline and final messages are compared by one ordered
+pass over each isolated database, so a production-sized final check does not
+depend on a legacy message-ID index or issue one lookup per message. A removed
+baseline message, changed raw MIME, changed
 headers/body metadata, or changed attachment metadata aborts preparation;
 these are not silently treated as a flag update. Every accepted change is
 hashed into `changes.jsonl`, recorded in the D1 delta audit tables, and checked

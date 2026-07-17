@@ -160,6 +160,51 @@ describe('archived baseline and final delta stage', () => {
     await assert.rejects(stat(stage), /ENOENT/u);
   });
 
+  it('merges source IDs in order when a new message sorts before the baseline', async () => {
+    const baseline = await legacySource('ordered-baseline', [
+      legacyMessage('z-baseline', 'first@example.com', 'raw/ordered-z.eml.gz', rawOne),
+    ]);
+    const baselineStage = join(root, 'ordered-baseline-stage');
+    await prepareLegacyMigrationStage({
+      database: baseline.database, mapping: baseline.mapping,
+      snapshot: baseline.snapshot, stage: baselineStage,
+    });
+    const final = await legacySource('ordered-final', [
+      legacyMessage('z-baseline', 'first@example.com', 'raw/ordered-z.eml.gz', rawOne),
+      legacyMessage('a-new', 'first@example.com', 'raw/ordered-a.eml.gz', rawTwo),
+    ], { seed: baseline });
+    const delta = await prepareLegacyDeltaStage({
+      baselineDatabase: baseline.database, baselineStage,
+      database: final.database, mapping: final.mapping, snapshot: final.snapshot,
+      stage: join(root, 'ordered-delta-stage'),
+    });
+    assert.equal(delta.counts.baselineMessages, 1);
+    assert.equal(delta.counts.finalMessages, 2);
+    assert.equal(delta.counts.newMessages, 1);
+  });
+
+  it('rejects a baseline message removed during the ordered merge', async () => {
+    const baseline = await legacySource('removed-baseline', [
+      legacyMessage('z-kept', 'first@example.com', 'raw/removed-z.eml.gz', rawTwo),
+      legacyMessage('a-removed', 'first@example.com', 'raw/removed-a.eml.gz', rawOne),
+    ]);
+    const baselineStage = join(root, 'removed-baseline-stage');
+    await prepareLegacyMigrationStage({
+      database: baseline.database, mapping: baseline.mapping,
+      snapshot: baseline.snapshot, stage: baselineStage,
+    });
+    const final = await legacySource('removed-final', [
+      legacyMessage('z-kept', 'first@example.com', 'raw/removed-z.eml.gz', rawTwo),
+    ], { seed: baseline });
+    const stage = join(root, 'removed-delta-stage');
+    await assert.rejects(prepareLegacyDeltaStage({
+      baselineDatabase: baseline.database, baselineStage,
+      database: final.database, mapping: final.mapping, snapshot: final.snapshot,
+      stage,
+    }), /removed 1 baseline message/u);
+    await assert.rejects(stat(stage), /ENOENT/u);
+  });
+
   it('creates a valid object-free delta when only flags changed', async () => {
     const baseline = await legacySource('flags-baseline', [
       legacyMessage('flags-1', 'first@example.com', 'raw/flags.eml.gz', rawOne),

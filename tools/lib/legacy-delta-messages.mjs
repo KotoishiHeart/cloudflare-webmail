@@ -5,7 +5,7 @@ import {
 import {
   loadLegacyRaw,
   normalizeLegacyMessage,
-  legacyMessageByIdStatement,
+  legacyMessagesByIdStatement,
   requireMatchingAttachments,
 } from './legacy-stage-source.mjs';
 import {
@@ -18,7 +18,6 @@ import {
 
 export async function collectLegacyMessageDelta(options) {
   const mappings = new Map(options.mapping.mappings.map((item) => [item.sourceAddress, item]));
-  const baselineById = legacyMessageByIdStatement(options.baselineDatabase);
   const baselineAttachments = readLegacyAttachmentFingerprints(options.baselineDatabase);
   const finalAttachments = readLegacyAttachmentFingerprints(options.source.database);
   const baselineRows = options.baselineDatabase.prepare(`
@@ -31,42 +30,49 @@ export async function collectLegacyMessageDelta(options) {
     if (targetDedupe.has(key)) throw new Error('baseline stage contains a duplicate target message');
     targetDedupe.add(key);
   }
-  const finalIds = new Set();
   const objects = [];
   const messages = [];
   const flagChanges = [];
   const sourceObjects = new Set();
   let finalMessages = 0;
   let quarantined = 0;
-  for (const row of options.source.messageStatement.iterate()) {
-    const mapping = mappings.get(String(row.account_email));
-    if (mapping === undefined) continue;
-    const sourceId = String(row.id);
-    finalIds.add(sourceId);
-    finalMessages += 1;
-    const candidate = baselineById.get(sourceId);
-    const baseline = candidate !== undefined
-      && mappings.has(String(candidate.account_email)) ? candidate : undefined;
-    if (baseline !== undefined) {
+  let removed = 0;
+  const baselineIterator = legacyMessagesByIdStatement(options.baselineDatabase)
+    .iterate()[Symbol.iterator]();
+  const finalIterator = options.source.messageByIdStatement.iterate()[Symbol.iterator]();
+  let baseline = nextMapped(baselineIterator, mappings);
+  let row = nextMapped(finalIterator, mappings);
+  while (baseline !== undefined || row !== undefined) {
+    const baselineId = baseline === undefined ? null : String(baseline.id);
+    const sourceId = row === undefined ? null : String(row.id);
+    if (row === undefined || (baseline !== undefined && baselineId < sourceId)) {
+      removed += 1;
+      baseline = nextMapped(baselineIterator, mappings);
+      continue;
+    }
+    if (baseline !== undefined && baselineId === sourceId) {
+      finalMessages += 1;
+      const mapping = mappings.get(String(row.account_email));
       requireUnchangedMessage(
         baseline, row, baselineAttachments.get(sourceId), finalAttachments.get(sourceId),
       );
       if (legacyFlagsChanged(baseline, row)) {
         const flags = legacyFlags(row);
-        const targetKey = deterministicUuid(`${mapping.mailboxId}\u0000${String(row.raw_sha256).toLowerCase()}`);
+        const targetKey = deterministicUuid(
+          `${mapping.mailboxId}\u0000${String(row.raw_sha256).toLowerCase()}`,
+        );
         flagChanges.push({
-          kind: 'message_flags',
-          action: 'update',
-          sourceKey: sourceId,
-          targetKey,
-          mailboxId: mapping.mailboxId,
-          rawSha256: String(row.raw_sha256).toLowerCase(),
-          flags,
+          kind: 'message_flags', action: 'update', sourceKey: sourceId, targetKey,
+          mailboxId: mapping.mailboxId, rawSha256: String(row.raw_sha256).toLowerCase(), flags,
           expectedSha256: legacyDeltaExpectedSha256({ targetKey, flags }),
         });
       }
+      baseline = nextMapped(baselineIterator, mappings);
+      row = nextMapped(finalIterator, mappings);
       continue;
     }
+    const mapping = mappings.get(String(row.account_email));
+    finalMessages += 1;
     const legacy = normalizeLegacyMessage(row, mapping);
     const dedupeKey = `${legacy.targetMailboxId}\u0000${legacy.rawSha256}`;
     if (targetDedupe.has(dedupeKey)) {
@@ -106,10 +112,10 @@ export async function collectLegacyMessageDelta(options) {
         }),
       },
     });
+    row = nextMapped(finalIterator, mappings);
   }
-  const removed = baselineRows.filter((row) => !finalIds.has(String(row.id)));
-  if (removed.length > 0) {
-    throw new Error(`final legacy database removed ${removed.length} baseline message(s)`);
+  if (removed > 0) {
+    throw new Error(`final legacy database removed ${removed} baseline message(s)`);
   }
   return {
     baselineMessages: baselineRows.length,
@@ -120,6 +126,13 @@ export async function collectLegacyMessageDelta(options) {
     objects,
     quarantined,
   };
+}
+
+function nextMapped(iterator, mappings) {
+  for (let item = iterator.next(); !item.done; item = iterator.next()) {
+    if (mappings.has(String(item.value.account_email))) return item.value;
+  }
+  return undefined;
 }
 
 function requireUnchangedMessage(baseline, final, baselineAttachments, finalAttachments) {

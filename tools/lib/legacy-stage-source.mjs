@@ -41,6 +41,7 @@ export function openLegacyStageSource(options) {
     const messageStatement = database.prepare(
       `${LEGACY_MESSAGE_SELECT} ORDER BY LOWER(account_email), received_at, id`,
     );
+    const messageByIdStatement = legacyMessagesByIdStatement(database);
     const snapshotStatement = snapshot.prepare(`
       SELECT source_key, file, compressed, expected_raw_sha256, expected_raw_size,
         stored_size, stored_sha256, status
@@ -58,6 +59,7 @@ export function openLegacyStageSource(options) {
       snapshotRoot,
       mappings,
       messageStatement,
+      messageByIdStatement,
       snapshotStatement,
       attachmentStatement,
       imported,
@@ -75,8 +77,8 @@ export function openLegacyStageSource(options) {
   }
 }
 
-export function legacyMessageByIdStatement(database) {
-  return database.prepare(`${LEGACY_MESSAGE_SELECT} WHERE id = ?`);
+export function legacyMessagesByIdStatement(database) {
+  return database.prepare(`${LEGACY_MESSAGE_SELECT} ORDER BY id`);
 }
 
 export function normalizeLegacyMessage(row, mapping) {
