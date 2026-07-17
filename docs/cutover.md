@@ -127,9 +127,9 @@ users in the new Access policy.
 ## 5. Observe and retire safely
 
 For at least the approved observation period, monitor delivery events, queue
-dead letters, inbound handoffs, storage issues, Email Routing activity, Email
-Sending results, and Access authentication. Create and offline-verify a new
-portable backup after the final import. Keep retention disabled until that
+dead letters, inbound handoffs, storage issues, Email Routing activity,
+SMTP2GO Activity/quota, and Access authentication. Create and offline-verify a
+new portable backup after the final import. Keep retention disabled until that
 backup and representative restores/downloads are verified.
 
 Remove archived Access only after the observation period. Keep the archived
@@ -141,8 +141,8 @@ Revoke or rotate every archived third-party and migration credential at the
 provider after the observation period, or earlier when the rebuild no longer
 needs it. Record provider-side evidence without recording the credential
 value. Deleting a plaintext value from a local file is not revocation and does
-not close this gate. The rebuild uses Cloudflare Email Service and must not
-retain an archived SMTP provider credential.
+not close this gate. The rebuild uses a new send-only SMTP2GO API key and must
+not retain or copy the archived provider credential.
 
 ## Abort and rollback
 

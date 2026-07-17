@@ -31,8 +31,10 @@ exports continue to work; the rationale is recorded in
 [`docs/adr/0007-portable-mail-search.md`](docs/adr/0007-portable-mail-search.md).
 
 Outbound compose requests are first persisted as D1/R2 outbox records and then
-sent by the jobs Worker through the Cloudflare Email Service binding. The
-outbound Queue is processed one message at a time, with D1 leases, delayed
+sent by the jobs Worker through a bounded SMTP2GO HTTPS adapter. Its API key is
+a required Jobs Worker Secret and is never placed in D1, R2, Queue messages, or
+the deployment manifest. The outbound Queue is processed one message at a
+time, with D1 leases, delayed
 retry, a persisted dead-letter workflow, and scheduled recovery scans. The compose
 surface sends text plus generated safe HTML and bounded attachments backed by
 R2 SHA-256 verification. Reply and forward actions record normalized source
@@ -92,12 +94,11 @@ npx wrangler queues create cf-webmail-v2-outbound
 npx wrangler queues create cf-webmail-v2-outbound-dlq
 ```
 
-Onboard every sender domain in **Compute > Email Service > Email Sending** and
-confirm its SPF/DKIM records before deploying the jobs Worker. The committed
-`EMAIL` binding has no static destination restriction because authorized D1
-mailboxes are dynamic; the application still restricts `From` to each active
-mailbox's primary address. Keep DMARC policy and monitoring under operational
-control.
+Verify every sender domain in SMTP2GO and confirm its SPF/DKIM records before
+deploying the jobs Worker. Create a new API key restricted to `/email/send`;
+do not copy the archived credential. The application restricts `From` to each
+active mailbox's primary address. Keep free-plan quota, DMARC policy, and
+delivery monitoring under operational control.
 
 Apply all D1 migrations and deploy the ingest and jobs Workers before enabling
 a production Email Routing rule. The primary consumers retry each message up

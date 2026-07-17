@@ -50,37 +50,28 @@ Jobs also disable public URLs.
 ## Remote preflight
 
 Authenticate Wrangler and create the shared D1, R2 bucket, and four Queues
-first. Configure the Access application, onboard every Email Sending domain,
-and enable Email Routing for every receiving domain.
+first. Configure the Access application, enable Email Routing for every
+receiving domain, and verify every declared sender domain in SMTP2GO.
 
 ```bash
 npm run deploy -- preflight --stage ops/deploy-production
 ```
 
 Preflight checks Wrangler authentication, the exact D1 UUID, R2, all Queues,
-Email Sending domain queries, Email Routing settings, the D1 table count, and
-three dry builds. The resulting `preflight.json` records check names but does
-not persist Wrangler output or account details.
+Email Routing settings, the D1 table count, and three dry builds. The resulting
+`preflight.json` records check names but does not persist Wrangler output or
+account details. `email.outboundProvider` must be `smtp2go`, and
+`email.senderDomains` declares the sender domains that provisioning is allowed
+to use.
 
-Email Sending is an evolving service whose subdomain-list API can return
-`Unauthorized [code: 2036]` to Wrangler OAuth even when the operator can review
-the account in the Dashboard. Do not use a Global API Key as a workaround. If
-and only if every sending domain is visibly onboarded and healthy in the
-Dashboard, add a review record to the ignored deployment manifest:
-
-```json
-"sendingVerification": {
-  "method": "dashboard",
-  "verifiedAt": "2026-07-17T10:00:00.000Z",
-  "evidenceReference": "change-ticket/email-sending-ready",
-  "confirmation": "EMAIL_SENDING_READY"
-}
-```
-
-Place this field inside `email`, regenerate the stage, and rerun preflight.
-The fallback is accepted only for error 2036 and only for 24 hours. Any other
-API failure remains fatal. The record does not replace SPF/DKIM/DMARC review
-or a real canary send.
+Preflight deliberately does not read an SMTP2GO key or call its API. Before
+deploying, manually confirm each sender domain under SMTP2GO **Sending >
+Verified Senders**, review the current free-plan quota, and create a new API key
+whose only endpoint permission is `/email/send`. SMTP2GO requires verified
+senders and recommends domain verification for SPF/DKIM alignment; its current
+API and plan behavior are documented in the
+[SMTP2GO API guide](https://developers.smtp2go.com/docs/getting-started) and
+[free-plan guide](https://support.smtp2go.com/hc/en-gb/articles/223087947-Free-Plan).
 
 For an initial deployment, each Queue must have zero producer and consumer
 bindings. For an upgrade, every existing binding must belong to the three
@@ -94,17 +85,40 @@ this repository:
   policy.
 - Email Routing rules target `cf-webmail-ingest` (or the manifest's Ingest
   Worker name).
-- SPF, DKIM, and DMARC status is healthy in the Email Service dashboard.
+- SMTP2GO shows every declared sender domain as verified, and its dedicated API
+  key is restricted to `/email/send`.
+- SPF, DKIM, and DMARC alignment is healthy for a real SMTP2GO canary.
 
 ## Apply migrations and deploy
 
 An initial deployment is accepted only when preflight observed an empty D1.
 Upgrade mode requires a complete, offline-verified backup from the same remote
-D1 and R2 target.
+D1 and R2 target. Create the ignored secret file with a local editor, never in
+shell history:
+
+```json
+{"SMTP2GO_API_KEY":"api-REPLACE_WITH_32_GENERATED_CHARACTERS"}
+```
+
+Save it as `ops/deployment-secrets.production.json`, set mode `0600`, and keep
+exactly that one key:
+
+```bash
+chmod 600 ops/deployment-secrets.production.json
+```
+
+The deploy command validates the file name set, key format, and permissions.
+It passes the file only to the Jobs `wrangler deploy --secrets-file` call; the
+value is not copied into the stage, generated configuration, report, D1, R2, or
+Queue. Cloudflare documents this code-and-secret upload flow in
+[Workers Secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
 
 ```bash
 # Initial empty target
-npm run deploy -- deploy --stage ops/deploy-production --yes
+npm run deploy -- deploy \
+  --stage ops/deploy-production \
+  --secrets-file ops/deployment-secrets.production.json \
+  --yes
 
 # Later upgrade
 npm run backup -- create \
@@ -114,6 +128,7 @@ npm run backup -- create \
 npm run backup -- verify --backup ops/backups/pre-deploy
 npm run deploy -- deploy \
   --stage ops/deploy-production \
+  --secrets-file ops/deployment-secrets.production.json \
   --backup ops/backups/pre-deploy \
   --yes
 ```
@@ -158,8 +173,7 @@ secrets:
 
 - `CLOUDFLARE_ACCOUNT_ID`: the exact account in the deployment manifest.
 - `CLOUDFLARE_API_TOKEN`: a dedicated token limited to the read permissions
-  needed for Workers deployments, D1, R2, Queues, Email Sending, and Email
-  Routing inspection.
+  needed for Workers, D1, R2, Queues, and Email Routing inspection.
 - `DEPLOYMENT_MANIFEST_JSON`: the complete non-placeholder deployment manifest.
 
 The workflow writes the manifest and generated stage below the ephemeral runner

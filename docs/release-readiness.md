@@ -31,9 +31,9 @@ tests, or a Wrangler dry build cannot substitute for it. The default-branch
 Create or identify the account-owned resources listed in
 [`operations.md`](operations.md): one D1 database, one private R2 bucket, four
 Queues, three Worker names, a Web Custom Domain, a Cloudflare Access
-self-hosted application, Email Routing domains, and verified Email Sending
-domains. Keep production routing pointed at the archived Worker during this
-gate.
+self-hosted application, Email Routing domains, verified SMTP2GO sender
+domains, and a new send-only SMTP2GO API key. Keep production routing pointed
+at the archived Worker during this gate.
 
 The four initial Queue names must be fresh and report no producers or
 consumers. Never reuse a Queue bound to the archived Worker.
@@ -55,15 +55,11 @@ npm run deploy -- preflight --stage ops/deploy-production
 ```
 
 Preflight must prove the authenticated account, exact D1 UUID, R2 bucket,
-Queues, Email Sending and Routing domains, D1 initial/upgrade state, and all
-three production dry builds. Manual review must separately confirm the Access
-Allow policy, Email Routing Worker target, and SPF/DKIM/DMARC state.
-
-When the Email Sending list API returns OAuth error 2036, a 24-hour Dashboard
-attestation bound into the ignored deployment manifest may replace only that
-list query. It requires the exact `EMAIL_SENDING_READY` confirmation and an
-external evidence reference. It never replaces domain onboarding, DNS review,
-or a real outbound canary, and other API errors cannot use the fallback.
+Queues, Email Routing domains, D1 initial/upgrade state, and all three
+production dry builds. Manual review must separately confirm the Access Allow
+policy, Email Routing Worker target, SMTP2GO sender-domain verification and
+send-only key permission, current free-plan quota, and SPF/DKIM/DMARC state.
+The read-only gate never loads the SMTP2GO key or claims real outbound delivery.
 
 ## 4. Data gate
 
@@ -101,7 +97,9 @@ Initial deployment requires an empty target D1. Every upgrade requires a fresh
 verified backup tied to the same generated Web configuration and D1/R2 target.
 Deployment applies migrations and uploads Jobs, Ingest, then Web. Upgrade mode
 writes `rollback-plan.json` before the first mutation and refuses split Worker
-traffic as an ambiguous rollback point.
+traffic as an ambiguous rollback point. Deployment requires an ignored,
+mode-`0600` JSON file containing only the new `SMTP2GO_API_KEY`; Wrangler
+uploads it with the Jobs code and no report persists its value.
 
 Run authenticated postflight with an Access service token held only in the
 operator environment. It must prove new active Worker versions, all 31 D1
@@ -142,7 +140,8 @@ The retirement plan must enumerate archived provider/API credentials and the
 temporary R2/Access credentials used for migration and canaries. Before final
 retirement, require provider-side revocation or rotation evidence for every
 credential no longer needed; never treat local deletion as revocation or copy
-an archived SMTP credential into the rebuild.
+an archived SMTP credential into the rebuild. The rebuild must use a newly
+created, send-only SMTP2GO key even when it uses the same provider account.
 
 ## Readiness interpretation
 

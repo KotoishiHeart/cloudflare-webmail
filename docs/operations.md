@@ -25,10 +25,11 @@ bindings owned by a Worker outside the reviewed three-Worker deployment.
 Put the returned D1 `database_id`, Cloudflare account ID, and resource names in
 an ignored deployment manifest as described in [`deployment.md`](deployment.md).
 The deployment tool generates all three production configurations, avoiding
-independent binding edits. Then onboard each sender domain in **Compute > Email
-Service > Email Sending** and confirm SPF/DKIM before enabling outbound
-delivery. Configure Cloudflare Access for the Web hostname and put its team
-domain and audience tag in the same deployment manifest.
+independent binding edits. Verify each sender domain in SMTP2GO, publish its
+SPF/DKIM records, and create a new API key restricted to `/email/send` before
+enabling outbound delivery. Do not reuse the archived key. Configure Cloudflare
+Access for the Web hostname and put its team domain and audience tag in the
+same deployment manifest.
 
 ## Migrations
 
@@ -138,7 +139,7 @@ npm run ops -- retry-outbound \
 ```
 
 Do not retry a message whose provider outcome was ambiguous without first
-checking Email Service logs, because a second delivery can be visible to the
+checking SMTP2GO Activity, because a second delivery can be visible to the
 recipient.
 
 The status output also includes unresolved inbound handoffs, staging cleanup

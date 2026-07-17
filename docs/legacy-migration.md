@@ -98,9 +98,9 @@ npm run migrate:legacy -- verify-provisioning \
 is present, every mapped owner and system administrator has an identity for the
 deployment's exact Access issuer, every active archived membership suggestion
 has the reviewed role, the archived default From is assigned to an authorized
-user, both Email Routing and Email Sending cover every mapped
-domain, and the source/mapping/review files still agree. It also records SHA-256
-digests for the exact provisioning, review, and deployment artifacts.
+user, and both Email Routing and the declared SMTP2GO sender domains cover every
+mapped domain, and the source/mapping/review files still agree. It also records
+SHA-256 digests for the exact provisioning, review, and deployment artifacts.
 
 The verifier deliberately blocks nonstandard archived account policies and
 external/forward/quarantine/log-only aliases. Those require separately

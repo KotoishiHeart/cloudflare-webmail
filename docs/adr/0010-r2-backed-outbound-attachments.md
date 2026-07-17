@@ -7,14 +7,14 @@ Accepted
 ## Context
 
 The archived application accepted up to eight attachments, with a 10 MiB
-per-file and 20 MiB aggregate limit. Copying its provider-specific base64 JSON
-payload would increase HTTP and Worker memory use, while the native Cloudflare
-Email Service Workers binding accepts binary `ArrayBuffer` content directly.
+per-file and 20 MiB aggregate limit. Carrying provider-specific base64 JSON
+through the browser, Queue, or D1 would increase memory use and couple durable
+contracts to one provider.
 
 A complete RFC 822 compose snapshot base64-encodes binary MIME parts. At the
 legacy 20 MiB attachment limit that representation can exceed the 25 MiB D1
-`raw_size` constraint even though the Email Service content remains below its
-25 MiB limit.
+`raw_size` constraint even though the outbound content remains below its
+provider safety limit.
 
 ## Decision
 
@@ -31,9 +31,10 @@ when attachments exist it is gzip-compressed for storage and transparently
 decompressed by the authorized raw-download endpoint.
 
 The jobs Worker reloads every attachment from R2 and verifies both size and
-SHA-256 before any external send. It passes binary content as `ArrayBuffer`
-with `disposition: attachment` to the native Email Service binding. Integrity
-failure is terminal and no provider request is made.
+SHA-256 before any external send. The provider-neutral boundary receives binary
+`ArrayBuffer` content; only the SMTP2GO adapter base64-encodes it immediately
+before creating the HTTPS request. Integrity failure is terminal and no
+provider request is made.
 
 ## Consequences
 
@@ -44,5 +45,5 @@ failure is terminal and no provider request is made.
   individual attachment sizes remain exact and independently auditable.
 - Inline/CID composition is intentionally excluded; received inline parts are
   still preserved by the inbound pipeline.
-- Binary `ArrayBuffer` attachment sending must be verified on a deployed
-  Worker because Email Service remote local development does not support it.
+- Adapter contract tests verify the exact base64 payload without using a real
+  key; a deployed canary must still prove provider acceptance and delivery.
