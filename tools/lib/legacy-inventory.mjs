@@ -4,8 +4,10 @@ import { readLegacyImportMetadata } from './legacy-sqlite.mjs';
 
 export {
   createLegacyMappingTemplate,
+  legacyMappingTopologySha256,
   legacyMappingSha256,
   loadAndValidateLegacyMapping,
+  validateLegacyMapping,
 } from './legacy-mapping.mjs';
 
 export function createLegacyInventory(databasePath, now = Date.now()) {

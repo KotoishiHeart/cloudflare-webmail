@@ -20,6 +20,10 @@ export function createLegacyMappingTemplate(inventory) {
 
 export async function loadAndValidateLegacyMapping(path, inventory) {
   const input = JSON.parse(await readFile(path, 'utf8'));
+  return validateLegacyMapping(input, inventory);
+}
+
+export function validateLegacyMapping(input, inventory) {
   if (!record(input) || input.version !== 1 || input.kind !== 'cf-webmail-legacy-mapping') {
     throw new Error('legacy mapping must be cf-webmail-legacy-mapping version 1');
   }
@@ -76,6 +80,15 @@ export async function loadAndValidateLegacyMapping(path, inventory) {
 
 export function legacyMappingSha256(mapping) {
   return createHash('sha256').update(JSON.stringify(mapping)).digest('hex');
+}
+
+export function legacyMappingTopologySha256(mapping) {
+  return createHash('sha256').update(JSON.stringify({
+    version: mapping.version,
+    kind: mapping.kind,
+    mappings: mapping.mappings,
+    exclusions: mapping.exclusions,
+  })).digest('hex');
 }
 
 function deterministicUuid(seed) {

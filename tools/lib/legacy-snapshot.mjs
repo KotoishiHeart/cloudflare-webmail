@@ -1,25 +1,29 @@
-import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, rename, rm } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
-import { gunzip } from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  MAX_LEGACY_RAW_BYTES,
   bindLegacySnapshotSource,
   initializeLegacySnapshot,
   legacySnapshotSummary,
   resolveLegacySnapshotFile,
   validateLegacySnapshotIdentity,
 } from './legacy-snapshot-state.mjs';
+import { seedLegacySnapshot } from './legacy-snapshot-seed.mjs';
+import { verifyStoredSnapshotObject } from './legacy-snapshot-object.mjs';
 
 const execFileAsync = promisify(execFile);
-const gunzipAsync = promisify(gunzip);
 export async function fetchLegacySnapshot(options) {
   const snapshot = resolve(options.snapshot);
   const statePath = resolve(snapshot, 'snapshot.sqlite');
   await initializeLegacySnapshot(snapshot, statePath, options);
+  const seed = options.seedSnapshot === undefined ? null : await seedLegacySnapshot({
+    snapshot,
+    seedSnapshot: options.seedSnapshot,
+    mapping: options.mapping,
+    seedMapping: options.seedMapping,
+  });
   const state = new DatabaseSync(statePath);
   try {
     validateLegacySnapshotIdentity(state, options);
@@ -33,7 +37,10 @@ export async function fetchLegacySnapshot(options) {
     await runPool(rows, concurrency, async (row) => {
       await fetchOne(snapshot, state, row, source, options.io);
     });
-    return legacySnapshotSummary(state);
+    return seed === null ? legacySnapshotSummary(state) : {
+      ...legacySnapshotSummary(state),
+      seed,
+    };
   } finally {
     state.close();
   }
@@ -55,7 +62,7 @@ export async function verifyLegacySnapshot(options) {
         continue;
       }
       try {
-        const verified = await verifyStoredObject(snapshot, row);
+        const verified = await verifyStoredSnapshotObject(snapshot, row);
         if (verified.storedSize !== Number(row.stored_size)
           || verified.storedSha256 !== String(row.stored_sha256)) {
           throw new Error('stored object metadata does not match the snapshot database');
@@ -89,7 +96,10 @@ async function fetchOne(snapshot, state, row, source, io) {
     } else {
       await downloadWithWrangler(source, row.source_key, temporary, io);
     }
-    const verified = await verifyStoredObject(snapshot, { ...row, file: relative(snapshot, temporary) });
+    const verified = await verifyStoredSnapshotObject(
+      snapshot,
+      { ...row, file: relative(snapshot, temporary) },
+    );
     await rename(temporary, destination);
     await chmod(destination, 0o600);
     state.prepare(`
@@ -105,23 +115,6 @@ async function fetchOne(snapshot, state, row, source, io) {
         error = ?, updated_at = ? WHERE source_key = ?
     `).run(status, message, Date.now(), row.source_key);
   }
-}
-
-async function verifyStoredObject(snapshot, row) {
-  const path = resolveLegacySnapshotFile(snapshot, row.file);
-  const info = await stat(path);
-  if (info.size < 1 || info.size > MAX_LEGACY_RAW_BYTES + 1024 * 1024) {
-    throw new Error('stored R2 object size is invalid');
-  }
-  const stored = await readFile(path);
-  const raw = Number(row.compressed) === 1 ? await gunzipAsync(stored) : stored;
-  if (raw.byteLength !== Number(row.expected_raw_size)) {
-    throw new Error('uncompressed raw size does not match legacy D1');
-  }
-  if (raw.byteLength > MAX_LEGACY_RAW_BYTES || sha256(raw) !== row.expected_raw_sha256) {
-    throw new Error('uncompressed raw SHA-256 does not match legacy D1');
-  }
-  return { storedSize: stored.byteLength, storedSha256: sha256(stored) };
 }
 
 async function downloadWithWrangler(source, key, destination, io) {
@@ -192,10 +185,6 @@ function integer(value, minimum, maximum, name) {
     throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
   }
   return parsed;
-}
-
-function sha256(value) {
-  return createHash('sha256').update(value).digest('hex');
 }
 
 function cleanError(error) {

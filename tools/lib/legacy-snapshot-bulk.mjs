@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
 import { fetchLegacySnapshot } from './legacy-snapshot.mjs';
+import { seedLegacySnapshot } from './legacy-snapshot-seed.mjs';
 import {
   bindLegacySnapshotSource,
   initializeLegacySnapshot,
@@ -21,6 +22,12 @@ export async function fetchLegacySnapshotBulk(options) {
   const checkers = integer(options.checkers ?? 32, 1, 128, 'checkers');
   const statePath = join(snapshot, 'snapshot.sqlite');
   await initializeLegacySnapshot(snapshot, statePath, options);
+  const seed = options.seedSnapshot === undefined ? null : await seedLegacySnapshot({
+    snapshot,
+    seedSnapshot: options.seedSnapshot,
+    mapping: options.mapping,
+    seedMapping: options.seedMapping,
+  });
   const sourceIdentity = { kind: 'rclone-bulk', source, config };
   const state = new DatabaseSync(statePath);
   let rows;
@@ -64,7 +71,7 @@ export async function fetchLegacySnapshotBulk(options) {
         sourceIdentity,
       });
       processed = true;
-      return withBulkEvidence(summary, source, rows.length, sourceList, allKeys, pending);
+      return withBulkEvidence(summary, source, rows.length, sourceList, allKeys, pending, seed);
     } finally {
       if (processed) {
         await Promise.all([
@@ -82,12 +89,13 @@ export async function fetchLegacySnapshotBulk(options) {
     concurrency: options.concurrency,
     sourceIdentity,
   });
-  return withBulkEvidence(summary, source, rows.length, sourceList, allKeys, 0);
+  return withBulkEvidence(summary, source, rows.length, sourceList, allKeys, 0, seed);
 }
 
-function withBulkEvidence(summary, source, sourceObjects, sourceList, listContent, copied) {
+function withBulkEvidence(summary, source, sourceObjects, sourceList, listContent, copied, seed) {
   return {
     ...summary,
+    ...(seed === null ? {} : { seed }),
     bulkSource: {
       source,
       sourceObjects,

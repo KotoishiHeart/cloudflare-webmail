@@ -17,6 +17,7 @@ let mapping;
 let objectRoot;
 const rawOne = rawEmail('One', '<one@example.net>');
 const rawTwo = rawEmail('Two', '<two@example.net>');
+const rawThree = rawEmail('Three', '<three@example.net>');
 
 before(async () => {
   root = await mkdtemp(join(tmpdir(), 'cf-webmail-legacy-snapshot-test-'));
@@ -68,6 +69,60 @@ describe('archived raw R2 snapshot', () => {
       verifyLegacySnapshot({ database, mapping, snapshot }),
       /verification failed for 1 object/u,
     );
+  });
+
+  it('reuses verified unchanged objects from a baseline snapshot', async () => {
+    await writeFile(join(objectRoot, 'raw', 'two.eml.gz'), gzipSync(rawTwo));
+    const baseline = join(root, 'snapshot-seed-baseline');
+    await fetchLegacySnapshot({ database, mapping, snapshot: baseline, objectRoot, concurrency: 2 });
+
+    const finalDatabase = join(root, 'legacy-final.sqlite');
+    const finalSql = join(root, 'safe-final.sql');
+    await writeFile(finalSql, safeSql([
+      legacyMessage('old-1', 'first@example.com', 'raw/one.eml.gz', rawOne),
+      legacyMessage('old-2', 'second@example.com', 'raw/two.eml.gz', rawTwo),
+      legacyMessage('old-3', 'first@example.com', 'raw/three.eml.gz', rawThree),
+    ]));
+    await importLegacySafeSql({ sql: finalSql, database: finalDatabase, now: 4567 });
+    const finalMapping = createLegacyMappingTemplate(createLegacyInventory(finalDatabase));
+    const deltaRoot = join(root, 'old-r2-delta');
+    await mkdir(join(deltaRoot, 'raw'), { recursive: true });
+    await writeFile(join(deltaRoot, 'raw', 'three.eml.gz'), gzipSync(rawThree));
+    const finalSnapshot = join(root, 'snapshot-seed-final');
+    const result = await fetchLegacySnapshot({
+      database: finalDatabase,
+      mapping: finalMapping,
+      snapshot: finalSnapshot,
+      objectRoot: deltaRoot,
+      seedSnapshot: baseline,
+      seedMapping: mapping,
+      concurrency: 2,
+    });
+    assert.equal(result.complete, true);
+    assert.equal(result.seed.reusableObjects, 2);
+    assert.equal(result.seed.linkedObjects, 2);
+    assert.match(result.seed.snapshotSha256, /^[0-9a-f]{64}$/u);
+    const baselineState = new DatabaseSync(join(baseline, 'snapshot.sqlite'), { readOnly: true });
+    const finalState = new DatabaseSync(join(finalSnapshot, 'snapshot.sqlite'), { readOnly: true });
+    const baselineFile = baselineState.prepare(`
+      SELECT file FROM snapshot_objects WHERE source_key = 'raw/one.eml.gz'
+    `).get().file;
+    const finalFile = finalState.prepare(`
+      SELECT file FROM snapshot_objects WHERE source_key = 'raw/one.eml.gz'
+    `).get().file;
+    baselineState.close();
+    finalState.close();
+    assert.equal((await stat(join(baseline, baselineFile))).ino, (await stat(join(finalSnapshot, finalFile))).ino);
+    assert.equal((await stat(join(finalSnapshot, finalFile))).mode & 0o777, 0o600);
+    const resumed = await fetchLegacySnapshot({
+      database: finalDatabase,
+      mapping: finalMapping,
+      snapshot: finalSnapshot,
+      objectRoot: deltaRoot,
+      seedSnapshot: baseline,
+      seedMapping: mapping,
+    });
+    assert.equal(resumed.seed.linkedObjects, 0);
   });
 
   it('downloads the fixed raw-key set with one resumable rclone copy', async () => {

@@ -134,16 +134,20 @@ export function validateLegacySnapshotIdentity(state, options) {
   } finally {
     sourceDatabase.close();
   }
-  if (
-    meta(state, 'format') !== LEGACY_SNAPSHOT_FORMAT
-    || Number(meta(state, 'version')) !== LEGACY_SNAPSHOT_VERSION
-  ) throw new Error('unsupported legacy snapshot');
+  validateLegacySnapshotFormat(state);
   if (meta(state, 'source_database_sha256') !== imported.sourceSha256) {
     throw new Error('legacy snapshot belongs to a different source database');
   }
   if (meta(state, 'mapping_sha256') !== legacyMappingSha256(options.mapping)) {
     throw new Error('legacy snapshot belongs to a different account mapping');
   }
+}
+
+export function validateLegacySnapshotFormat(state) {
+  if (
+    meta(state, 'format') !== LEGACY_SNAPSHOT_FORMAT
+    || Number(meta(state, 'version')) !== LEGACY_SNAPSHOT_VERSION
+  ) throw new Error('unsupported legacy snapshot');
 }
 
 export function bindLegacySnapshotSource(state, source) {

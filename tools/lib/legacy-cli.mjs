@@ -1,11 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { parseOptions } from './ops-cli.mjs';
-import {
-  createLegacyInventory,
-  createLegacyMappingTemplate,
-  legacyMappingSha256,
-  loadAndValidateLegacyMapping,
-} from './legacy-inventory.mjs';
+import { createLegacyInventory, createLegacyMappingTemplate, legacyMappingSha256,
+  loadAndValidateLegacyMapping } from './legacy-inventory.mjs';
+import { refreshLegacyMapping } from './legacy-mapping-refresh.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
 import { fetchLegacySnapshotBulk } from './legacy-snapshot-bulk.mjs';
@@ -17,7 +14,6 @@ import { createLegacyProvisioningDraft } from './legacy-provisioning.mjs';
 import { verifyLegacyProvisioningFiles } from './legacy-provisioning-verify.mjs';
 import { rehearseLegacyCapacity } from './legacy-capacity.mjs';
 import { legacyMigrationUsage, legacyStageCliSummary } from './legacy-cli-view.mjs';
-
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
 }) {
@@ -61,6 +57,16 @@ export async function runLegacyMigrationCli(argv, io = {
       mappedAccounts: mapping.mappings.length,
       excludedAccounts: mapping.exclusions.length,
     }, null, 2)}\n`);
+    return 0;
+  }
+  if (command === 'refresh-mapping') {
+    const result = await refreshLegacyMapping({
+      baselineDatabase: required(options, 'baseline-database'),
+      database: required(options, 'database'),
+      mapping: required(options, 'mapping'),
+      output: required(options, 'output'),
+    });
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
   if (command === 'provision-template') {
@@ -115,7 +121,13 @@ export async function runLegacyMigrationCli(argv, io = {
       required(options, 'mapping'),
       createLegacyInventory(database),
     );
-    const common = { database, mapping, snapshot: required(options, 'snapshot'), io };
+    const seedSnapshot = options['seed-snapshot'];
+    const seedMapping = seedSnapshot === undefined ? undefined : await loadAndValidateLegacyMapping(
+      required(options, 'seed-mapping'),
+      createLegacyInventory(required(options, 'seed-database')),
+    );
+    const common = { database, mapping, snapshot: required(options, 'snapshot'), io,
+      seedSnapshot, seedMapping };
     const result = command === 'bulk-fetch'
       ? await fetchLegacySnapshotBulk({
         ...common, rcloneSource: required(options, 'rclone-source'),

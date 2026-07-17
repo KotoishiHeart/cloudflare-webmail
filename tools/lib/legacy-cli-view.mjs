@@ -19,6 +19,8 @@ export function legacyMigrationUsage() {
     `  inventory --database legacy.sqlite --output inventory.json \\\n` +
     `    [--mapping-template mapping.json]\n` +
     `  validate-mapping --database legacy.sqlite --mapping mapping.json\n` +
+    `  refresh-mapping --baseline-database baseline.sqlite --database final.sqlite \\\n` +
+    `    --mapping baseline-mapping.json --output final-mapping.json\n` +
     `  provision-template --database legacy.sqlite --mapping mapping.json \\\n` +
     `    --owner-user-id UUID --owner-email EMAIL --access-issuer URL \\\n` +
     `    --access-subject SUBJECT [--system-admin] --output provision.json \\\n` +
@@ -27,9 +29,13 @@ export function legacyMigrationUsage() {
     `    --manifest provision.json --review provisioning-review.json \\\n` +
     `    --deployment deployment.json --output verification.json\n` +
     `  fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
-    `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
+    `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE) \\\n` +
+    `    [--seed-snapshot BASELINE_DIR --seed-database baseline.sqlite \\\n` +
+    `     --seed-mapping baseline-mapping.json]\n` +
     `  bulk-fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
-    `    --rclone-source REMOTE:BUCKET [--rclone-config FILE]\n` +
+    `    --rclone-source REMOTE:BUCKET [--rclone-config FILE] \\\n` +
+    `    [--seed-snapshot BASELINE_DIR --seed-database baseline.sqlite \\\n` +
+    `     --seed-mapping baseline-mapping.json]\n` +
     `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +
     `  prepare --database legacy.sqlite --mapping mapping.json --snapshot DIR --stage DIR\n` +
     `  verify-stage --stage DIR\n` +
