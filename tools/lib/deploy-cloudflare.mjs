@@ -39,14 +39,14 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
     queueTopologies.push({ role, ...verifyQueueTopology(output, role, plan.deployment) });
   }
   for (const domain of plan.deployment.email.sendingDomains) {
-    const output = check(
+    checkEmailSending(
       runner,
       ['email', 'sending', 'list', domain, '--config', jobsConfig],
       options,
       checks,
-      `email-sending:${domain}`,
+      domain,
+      plan.deployment.email.sendingVerification,
     );
-    assertEmailSendingReady(output, domain);
   }
   for (const domain of plan.deployment.email.routingDomains) {
     const output = check(
@@ -90,6 +90,33 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
       'SPF, DKIM, and DMARC dashboard status',
     ],
   };
+}
+
+function checkEmailSending(runner, args, options, checks, domain, verification) {
+  const result = spawn(runner, args, options, 'pipe');
+  if (result.status === 0) {
+    assertEmailSendingReady(String(result.stdout ?? ''), domain);
+    checks.push(`email-sending:${domain}`);
+    return;
+  }
+  const detail = `${String(result.stdout ?? '')}\n${String(result.stderr ?? '')}`;
+  if (!/Unauthorized[\s\S]*code:\s*2036/iu.test(detail)) {
+    throw failure(`email-sending:${domain}`, result);
+  }
+  assertRecentSendingVerification(verification);
+  checks.push(`email-sending-attested:${domain}`);
+}
+
+function assertRecentSendingVerification(verification) {
+  const timestamp = Date.parse(verification?.verifiedAt ?? '');
+  const age = Date.now() - timestamp;
+  if (
+    verification?.method !== 'dashboard'
+    || verification?.confirmation !== 'EMAIL_SENDING_READY'
+    || !Number.isFinite(timestamp)
+    || age < -5 * 60 * 1000
+    || age > 24 * 60 * 60 * 1000
+  ) throw new Error('Email Sending API is unauthorized and no recent dashboard verification exists');
 }
 
 export function runDeployApply(stage, plan, preflight, options = {}, runner = defaultRunner()) {

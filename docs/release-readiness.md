@@ -59,6 +59,12 @@ Queues, Email Sending and Routing domains, D1 initial/upgrade state, and all
 three production dry builds. Manual review must separately confirm the Access
 Allow policy, Email Routing Worker target, and SPF/DKIM/DMARC state.
 
+When the Email Sending list API returns OAuth error 2036, a 24-hour Dashboard
+attestation bound into the ignored deployment manifest may replace only that
+list query. It requires the exact `EMAIL_SENDING_READY` confirmation and an
+external evidence reference. It never replaces domain onboarding, DNS review,
+or a real outbound canary, and other API errors cannot use the fallback.
+
 ## 4. Data gate
 
 Provision identities, memberships, mailboxes, and aliases with the reviewed

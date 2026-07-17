@@ -138,6 +138,34 @@ describe('review-first deployment stage', () => {
     );
   });
 
+  it('accepts recent dashboard evidence only when Email Sending returns 2036', async () => {
+    const manifest = {
+      ...MANIFEST,
+      email: {
+        ...MANIFEST.email,
+        sendingVerification: {
+          method: 'dashboard',
+          verifiedAt: new Date().toISOString(),
+          evidenceReference: 'change-ticket/email-sending-ready',
+          confirmation: 'EMAIL_SENDING_READY',
+        },
+      },
+    };
+    const { stage, plan } = await stageFixture('sending-attestation', manifest);
+    const report = await runDeployPreflight(stage, plan, {}, emailUnauthorizedRunner([], 0));
+    assert.ok(report.checks.includes('email-sending-attested:example.com'));
+    assert.throws(
+      () => validateDeploymentManifest({
+        ...manifest,
+        email: {
+          ...manifest.email,
+          sendingVerification: { ...manifest.email.sendingVerification, confirmation: 'yes' },
+        },
+      }),
+      /EMAIL_SENDING_READY/u,
+    );
+  });
+
   it('fails closed on placeholder-like or misspelled manifest fields', () => {
     assert.throws(
       () => validateDeploymentManifest({ ...MANIFEST, accountId: 'REPLACE_WITH_ACCOUNT' }),
@@ -243,6 +271,19 @@ function fakeRunner(calls, tableCount) {
         return { status: 0, stdout: 'Email Routing for example.com:\n  Enabled:  true\n', stderr: '' };
       }
       return { status: 0, stdout: 'ok', stderr: '' };
+    },
+  };
+}
+
+function emailUnauthorizedRunner(calls, tableCount) {
+  const base = fakeRunner(calls, tableCount);
+  return {
+    spawn: (command, args, options) => {
+      if (args.includes('sending')) {
+        calls.push(args);
+        return { status: 1, stdout: '', stderr: 'Unauthorized [code: 2036]' };
+      }
+      return base.spawn(command, args, options);
     },
   };
 }

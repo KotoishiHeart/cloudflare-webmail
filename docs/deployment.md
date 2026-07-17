@@ -62,6 +62,26 @@ Email Sending domain queries, Email Routing settings, the D1 table count, and
 three dry builds. The resulting `preflight.json` records check names but does
 not persist Wrangler output or account details.
 
+Email Sending is an evolving service whose subdomain-list API can return
+`Unauthorized [code: 2036]` to Wrangler OAuth even when the operator can review
+the account in the Dashboard. Do not use a Global API Key as a workaround. If
+and only if every sending domain is visibly onboarded and healthy in the
+Dashboard, add a review record to the ignored deployment manifest:
+
+```json
+"sendingVerification": {
+  "method": "dashboard",
+  "verifiedAt": "2026-07-17T10:00:00.000Z",
+  "evidenceReference": "change-ticket/email-sending-ready",
+  "confirmation": "EMAIL_SENDING_READY"
+}
+```
+
+Place this field inside `email`, regenerate the stage, and rerun preflight.
+The fallback is accepted only for error 2036 and only for 24 hours. Any other
+API failure remains fatal. The record does not replace SPF/DKIM/DMARC review
+or a real canary send.
+
 For an initial deployment, each Queue must have zero producer and consumer
 bindings. For an upgrade, every existing binding must belong to the three
 Workers named by the manifest. This prevents a generic Queue name from joining
