@@ -3,7 +3,7 @@ import type { ComposeInput } from './compose-input.js';
 
 export const MAX_OUTBOUND_ARCHIVE_BYTES = 25 * 1024 * 1024;
 export const MAX_OUTBOUND_ARCHIVE_SOURCE_BYTES = 40 * 1024 * 1024;
-export const MAX_EMAIL_SERVICE_CONTENT_BYTES = 24 * 1024 * 1024;
+export const MAX_OUTBOUND_PROVIDER_CONTENT_BYTES = 24 * 1024 * 1024;
 
 export type OutboundArchive = {
   raw: Uint8Array;
@@ -76,7 +76,7 @@ export async function prepareArchiveForStorage(
   };
 }
 
-export function emailServiceContentBytes(input: ComposeInput, html: string): number {
+export function outboundProviderContentBytes(input: ComposeInput, html: string): number {
   const encoder = new TextEncoder();
   return input.attachments.reduce((total, attachment) => total + attachment.size, 0)
     + encoder.encode(input.text).byteLength

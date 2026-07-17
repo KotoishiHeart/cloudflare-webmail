@@ -15,10 +15,10 @@ import { apiData, apiError } from './api-response.js';
 import { readComposeInput } from './compose-input.js';
 import {
   buildOutboundArchive,
-  emailServiceContentBytes,
-  MAX_EMAIL_SERVICE_CONTENT_BYTES,
+  MAX_OUTBOUND_PROVIDER_CONTENT_BYTES,
   MAX_OUTBOUND_ARCHIVE_BYTES,
   MAX_OUTBOUND_ARCHIVE_SOURCE_BYTES,
+  outboundProviderContentBytes,
   prepareArchiveForStorage,
 } from './outbound-archive.js';
 
@@ -64,8 +64,8 @@ export async function createOutboundMessage(
   if (archive.raw.byteLength > MAX_OUTBOUND_ARCHIVE_SOURCE_BYTES) {
     throw new ApiInputError('composed MIME archive exceeds the source size limit');
   }
-  if (emailServiceContentBytes(input, archive.html) > MAX_EMAIL_SERVICE_CONTENT_BYTES) {
-    throw new ApiInputError('composed message exceeds the Email Service content limit');
+  if (outboundProviderContentBytes(input, archive.html) > MAX_OUTBOUND_PROVIDER_CONTENT_BYTES) {
+    throw new ApiInputError('composed message exceeds the outbound provider content limit');
   }
   const storedArchive = await prepareArchiveForStorage(archive, input.attachments.length > 0);
   if (storedArchive.body.byteLength > MAX_OUTBOUND_ARCHIVE_BYTES) {

@@ -1,14 +1,21 @@
 import type { OutboundDeliveryMessage } from '@cf-webmail/database';
 import { PermanentOutboundError } from './outbound-errors.js';
+import type { OutboundMailerAttachment } from './outbound-mailer.js';
 
 export async function loadOutboundAttachments(
   bucket: Pick<R2Bucket, 'get'>,
   attachments: OutboundDeliveryMessage['attachments'],
-): Promise<EmailAttachment[]> {
+): Promise<OutboundMailerAttachment[]> {
   return Promise.all(attachments.map(async (attachment) => {
     const object = await bucket.get(attachment.storageKey);
     if (object === null) {
       throw new Error(`outbound attachment object is missing: ${attachment.filename}`);
+    }
+    if (object.size !== attachment.size) {
+      throw new PermanentOutboundError(
+        'attachment_integrity_failed',
+        `outbound attachment integrity check failed: ${attachment.filename}`,
+      );
     }
     const content = await object.arrayBuffer();
     if (content.byteLength !== attachment.size || await sha256Hex(content) !== attachment.sha256) {

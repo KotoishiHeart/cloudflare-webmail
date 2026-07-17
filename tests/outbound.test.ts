@@ -9,7 +9,15 @@ import {
 import type { AccessIdentity } from '../apps/web/src/access-auth.js';
 import { handleWebRequest } from '../apps/web/src/app.js';
 import { handleOutboundBatch } from '../apps/jobs/src/outbound-consumer.js';
+import {
+  PermanentOutboundError,
+  RetryableOutboundError,
+} from '../apps/jobs/src/outbound-errors.js';
 import { recoverOutboundDeliveries } from '../apps/jobs/src/outbound-recovery.js';
+import type {
+  OutboundMailer,
+  OutboundMailerMessage,
+} from '../apps/jobs/src/outbound-mailer.js';
 
 const ORIGIN = 'https://webmail.example.com';
 const NOW = Date.UTC(2026, 6, 16, 16);
@@ -123,17 +131,17 @@ describe('outbound delivery', () => {
     });
   });
 
-  it('sends stored text and HTML through the binding and finishes once', async () => {
+  it('sends stored text and HTML through the provider and finishes once', async () => {
     const created = await compose('019c315c-1f20-7000-8000-000000000514', 'Successful message');
     const payload = await created.json<{ data: { messageId: string } }>();
-    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+    const send = vi.fn(async (_builder: OutboundMailerMessage) => ({
       messageId: '<provider-success@example.com>',
     }));
     const first = queueItem(payload.data.messageId);
     await handleOutboundBatch([first.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send } as SendEmail,
+      mailer: testMailer(send),
       now: () => NOW + 60_000,
     });
     expect(first.ack).toHaveBeenCalledOnce();
@@ -152,7 +160,7 @@ describe('outbound delivery', () => {
     await handleOutboundBatch([second.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send } as SendEmail,
+      mailer: testMailer(send),
       now: () => NOW + 120_000,
     });
     expect(second.ack).toHaveBeenCalledOnce();
@@ -197,14 +205,14 @@ describe('outbound delivery', () => {
     );
     await expect(raw?.text()).resolves.toContain('In-Reply-To: <original-message@example.net>');
 
-    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+    const send = vi.fn(async (_builder: OutboundMailerMessage) => ({
       messageId: '<provider-reply@example.com>',
     }));
     const queued = queueItem(payload.data.messageId);
     await handleOutboundBatch([queued.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send } as SendEmail,
+      mailer: testMailer(send),
       now: () => NOW + 90_000,
     });
     expect(send.mock.calls[0]?.[0]).toMatchObject({
@@ -299,14 +307,14 @@ describe('outbound delivery', () => {
     expect(rawText).toContain("filename*=UTF-8''report%20%E6%97%A5%E6%9C%AC%E8%AA%9E.txt");
     expect(rawText).toContain('YXR0YWNobWVudCBwYXlsb2Fk');
 
-    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+    const send = vi.fn(async (_builder: OutboundMailerMessage) => ({
       messageId: '<provider-attachments@example.com>',
     }));
     const queued = queueItem(payload.data.messageId);
     await handleOutboundBatch([queued.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send } as SendEmail,
+      mailer: testMailer(send),
       now: () => NOW + 100_000,
     });
     const sentAttachments = send.mock.calls[0]?.[0].attachments;
@@ -348,14 +356,14 @@ describe('outbound delivery', () => {
       SELECT storage_key FROM attachments WHERE message_id = ? AND ordinal = 0
     `).bind(payload.data.messageId).first<{ storage_key: string }>();
     await env.RAW_EMAILS.put(attachment!.storage_key, 'tampered');
-    const send = vi.fn(async (_builder: EmailMessageBuilder) => ({
+    const send = vi.fn(async (_builder: OutboundMailerMessage) => ({
       messageId: '<must-not-send@example.com>',
     }));
     const queued = queueItem(payload.data.messageId);
     await handleOutboundBatch([queued.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send } as SendEmail,
+      mailer: testMailer(send),
       now: () => NOW + 110_000,
     });
     expect(send).not.toHaveBeenCalled();
@@ -394,14 +402,15 @@ describe('outbound delivery', () => {
   it('records permanent provider errors without retrying the Queue message', async () => {
     const created = await compose('019c315c-1f20-7000-8000-000000000515', 'Permanent failure');
     const payload = await created.json<{ data: { messageId: string } }>();
-    const failure = Object.assign(new Error('sender domain is unavailable'), {
-      code: 'E_SENDER_DOMAIN_NOT_AVAILABLE',
-    });
+    const failure = new PermanentOutboundError(
+      'smtp2go_rejected',
+      'sender domain is unavailable',
+    );
     const queued = queueItem(payload.data.messageId);
     await handleOutboundBatch([queued.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send: vi.fn(async () => { throw failure; }) } as unknown as SendEmail,
+      mailer: testMailer(vi.fn(async () => { throw failure; })),
       now: () => NOW + 180_000,
     });
     expect(queued.ack).toHaveBeenCalledOnce();
@@ -411,19 +420,19 @@ describe('outbound delivery', () => {
     `).bind(payload.data.messageId).first<Record<string, string>>();
     expect(row).toEqual({
       status: 'failed',
-      last_error_code: 'E_SENDER_DOMAIN_NOT_AVAILABLE',
+      last_error_code: 'smtp2go_rejected',
     });
   });
 
   it('delays retryable provider errors and retains queued state', async () => {
     const created = await compose('019c315c-1f20-7000-8000-000000000517', 'Retry later');
     const payload = await created.json<{ data: { messageId: string } }>();
-    const failure = Object.assign(new Error('rate limited'), { code: 'E_RATE_LIMIT_EXCEEDED' });
+    const failure = new RetryableOutboundError('smtp2go_rate_limited', 'rate limited');
     const queued = queueItem(payload.data.messageId);
     await handleOutboundBatch([queued.item], {
       db: env.DB,
       rawEmails: env.RAW_EMAILS,
-      email: { send: vi.fn(async () => { throw failure; }) } as unknown as SendEmail,
+      mailer: testMailer(vi.fn(async () => { throw failure; })),
       now: () => NOW + 240_000,
     });
     expect(queued.ack).not.toHaveBeenCalled();
@@ -434,7 +443,7 @@ describe('outbound delivery', () => {
     `).bind(payload.data.messageId).first<Record<string, string | number>>();
     expect(row).toMatchObject({
       status: 'queued',
-      last_error_code: 'E_RATE_LIMIT_EXCEEDED',
+      last_error_code: 'smtp2go_rate_limited',
       next_attempt_at: NOW + 270_000,
     });
   });
@@ -508,6 +517,10 @@ function queueItem(messageId: string, attempts = 1) {
       retry,
     },
   };
+}
+
+function testMailer(send: OutboundMailer['send']): OutboundMailer {
+  return { provider: 'test-provider', send };
 }
 
 function composeMultipart(

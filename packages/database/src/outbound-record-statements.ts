@@ -125,7 +125,7 @@ export function validateOutboundRecord(record: OutboundMessageRecord): void {
   }
   if (record.sourceMessageId !== null) normalizeId(record.sourceMessageId, 'sourceMessageId');
   if (record.inReplyTo.length > 998 || record.referencesHeader.length > 2048) {
-    throw new DatabaseInputError('threadHeaders', 'exceed the Email Service header limit');
+    throw new DatabaseInputError('threadHeaders', 'exceed the outbound provider header limit');
   }
   if (record.rawSize < 0 || record.rawSize > 25 * 1024 * 1024) {
     throw new DatabaseInputError('rawSize', 'must not exceed 25 MiB');

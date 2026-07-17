@@ -17,11 +17,9 @@
       "bucket_name": "cf-webmail-raw"
     }
   ],
-  "send_email": [
-    {
-      "name": "EMAIL"
-    }
-  ],
+  "secrets": {
+    "required": ["SMTP2GO_API_KEY"]
+  },
   "queues": {
     "producers": [
       {

@@ -14,6 +14,7 @@ import { reconcileInboundStaging } from './staging-reconciliation.js';
 import { auditCanonicalStorage } from './storage-audit.js';
 import { processApprovedRetentionRuns } from './retention-runner.js';
 import { pruneExpiredEvents } from '@cf-webmail/database';
+import { createSmtp2goMailer } from './smtp2go-mailer.js';
 
 export default {
   async queue(batch: MessageBatch<unknown>, env: JobsEnv): Promise<void> {
@@ -36,7 +37,7 @@ export default {
       await handleOutboundBatch(batch.messages, {
         db: env.DB,
         rawEmails: env.RAW_EMAILS,
-        email: env.EMAIL,
+        mailer: createSmtp2goMailer(env.SMTP2GO_API_KEY),
         now: Date.now,
       });
       return;
