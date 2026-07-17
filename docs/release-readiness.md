@@ -82,6 +82,9 @@ deployment. Require:
 - a stage-bound capacity rehearsal that fits the current D1 per-database and
   R2 storage/operation limits, with daily D1 writes scheduled from the reported
   lower bound plus index overhead;
+- a production baseline fully applied and audited while Email Routing still
+  targets the archive, followed by a final seeded snapshot, version 4 delta,
+  and delta-capacity rehearsal that fit the same free-plan limits;
 - successful download-based R2 comparison;
 - matching per-account D1 message, direction, flag, attachment, and object
   reference counts;
@@ -105,7 +108,7 @@ mode-`0600` JSON file containing only the new `SMTP2GO_API_KEY`; Wrangler
 uploads it with the Jobs code and no report persists its value.
 
 Run authenticated postflight with an Access service token held only in the
-operator environment. It must prove new active Worker versions, all 31 D1
+operator environment. It must prove new active Worker versions, all 33 D1
 tables, `/healthz`, and no unresolved handoffs, outbound work, dead letters,
 storage issues, or retention runs. `cutoverReady: false` or exit status 2 is a
 hard stop.
@@ -130,9 +133,10 @@ or direct database insert is not real-service evidence.
 
 Follow [`cutover.md`](cutover.md) exactly: freeze archived Web mutations,
 drain archived outbound work, deploy without changing routing, switch the
-Email Routing Worker target, create the final archived snapshot, repeat the
-deterministic import, run a fresh bulk audit and postflight, repeat production
-canaries, then reopen Access.
+Email Routing Worker target, create the final archived snapshot from the
+verified baseline, apply the guarded final delta, run a fresh bulk audit and
+postflight, repeat production canaries, then reopen Access. Do not repeat the
+full baseline import during the production freeze.
 
 The Email Routing timestamp is the irreversible data boundary. Code rollback
 does not reverse D1 migrations, R2 writes, Queue messages, routing, Access, or

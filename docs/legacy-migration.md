@@ -241,6 +241,113 @@ the reviewed provisioning manifest also exercises archived user-preference
 prerequisites; omit it only when the stage contains no user preferences and a
 synthetic owner is sufficient for a preliminary estimate.
 
+## Free-plan baseline and final delta
+
+Do not wait for the production freeze to apply the full archive on Workers
+Free. D1 counts Wrangler imports and index maintenance against the daily rows
+written limit, so the baseline can require several quota windows. Apply the
+complete verified baseline while the archived Worker remains the production
+Email Routing target and the rebuilt Web application remains closed to normal
+users. `bulk-apply` records the next SQL file and safely resumes after the
+daily quota resets; a failed file is idempotent and remains the next file.
+
+At the final boundary, import a new archived safe backup under new paths. Its
+source hash differs by design, so bind the reviewed mailbox topology to the
+new backup without manually editing the hash:
+
+```bash
+npm run migrate:legacy -- import-sql \
+  --sql /srv/legacy/cf-webmail-final-safe.sql \
+  --database ops/legacy-final.sqlite
+
+npm run migrate:legacy -- refresh-mapping \
+  --baseline-database ops/legacy.sqlite \
+  --database ops/legacy-final.sqlite \
+  --mapping ops/legacy-mapping.json \
+  --output ops/legacy-final-mapping.json
+```
+
+`refresh-mapping` preserves every target mailbox and exclusion, validates the
+old mapping against the baseline, and then validates the same topology against
+the final inventory. A new or removed account that makes the topology
+ambiguous is a review blocker, not an automatically assigned mailbox.
+
+Seed the final raw snapshot from the verified baseline. Matching old R2 keys
+are revalidated against the final D1 hash and size and hard-linked locally
+(copied when hard links are unavailable); only pending new or changed keys are
+requested from the read-only archived bucket:
+
+```bash
+npm run migrate:legacy -- bulk-fetch \
+  --database ops/legacy-final.sqlite \
+  --mapping ops/legacy-final-mapping.json \
+  --snapshot ops/legacy-final-raw-snapshot \
+  --seed-snapshot ops/legacy-raw-snapshot \
+  --seed-database ops/legacy.sqlite \
+  --seed-mapping ops/legacy-mapping.json \
+  --rclone-source legacy-r2:cf-webmail-starter-mail-objects \
+  --rclone-config /secure/legacy-rclone.conf
+
+npm run migrate:legacy -- verify-snapshot \
+  --database ops/legacy-final.sqlite \
+  --mapping ops/legacy-final-mapping.json \
+  --snapshot ops/legacy-final-raw-snapshot
+```
+
+Build a version 4 delta stage instead of preparing and applying the full
+archive again:
+
+```bash
+npm run migrate:legacy -- prepare-delta \
+  --baseline-database ops/legacy.sqlite \
+  --baseline-stage ops/legacy-stage \
+  --database ops/legacy-final.sqlite \
+  --mapping ops/legacy-final-mapping.json \
+  --snapshot ops/legacy-final-raw-snapshot \
+  --stage ops/legacy-final-delta
+
+npm run migrate:legacy -- verify-stage --stage ops/legacy-final-delta
+```
+
+The delta inserts only new messages and their rebuilt objects. Existing
+messages receive guarded updates only for read, star, archive, delete, and
+legacy deletion-time state. Labels, message-label assignments, rules, and
+legacy user preferences are synchronized with explicit insert, update, or
+delete operations. A removed baseline message, changed raw MIME, changed
+headers/body metadata, or changed attachment metadata aborts preparation;
+these are not silently treated as a flag update. Every accepted change is
+hashed into `changes.jsonl`, recorded in the D1 delta audit tables, and checked
+again after application.
+
+Rehearse the delta against the baseline capacity database before touching
+remote D1. This copies the database, adds the delta audit schema when the older
+capacity artifact predates it, applies the exact delta SQL, and reports final
+D1/R2 size against the dated free limits:
+
+```bash
+npm run migrate:legacy -- delta-capacity-rehearsal \
+  --baseline-database ops/legacy-capacity.sqlite \
+  --baseline-stage ops/legacy-stage \
+  --stage ops/legacy-final-delta \
+  --database ops/legacy-final-capacity.sqlite \
+  --output ops/evidence/legacy-final-delta-capacity.json
+```
+
+`d1DatabaseFits`, `r2StorageFits`, and `r2DeltaWritesFit` must all be true.
+`minimumDeclaredWriteDays` remains a lower bound because D1 index writes are
+additional. Apply and audit the delta with the same `bulk-apply` and
+`bulk-audit` commands shown below, substituting
+`ops/legacy-final-delta` for the stage. An object-free flags/settings-only
+delta is valid. Do not accumulate incoming mail in Queues while a multi-day
+baseline runs: Workers Free Queue retention is only 24 hours, so production
+Email Routing must remain on the archived Worker until the final boundary.
+Recheck the current [D1 limits](https://developers.cloudflare.com/d1/platform/limits/),
+[D1 import accounting](https://developers.cloudflare.com/d1/best-practices/import-export-data/),
+[R2 pricing](https://developers.cloudflare.com/r2/pricing/), and
+[Queue limits](https://developers.cloudflare.com/queues/platform/limits/) when
+approving the window; the dated evidence is not a promise that limits cannot
+change.
+
 Attachment content hashes and sizes extracted from MIME must match the old D1
 attachment/blob rows. Any mismatch, duplicate target raw hash, unavailable raw
 object, or invalid metadata makes the stage incomplete. An incomplete archived
@@ -286,7 +393,7 @@ or inserting anything. Use new report and output paths for every attempt:
 
 ```bash
 npm run migrate:legacy -- bulk-audit \
-  --stage ops/legacy-final-stage \
+  --stage ops/legacy-final-delta \
   --tree ops/legacy-final-r2-upload \
   --rclone-destination cf-r2:cf-webmail-raw \
   --rclone-config /secure/rclone.conf \
@@ -296,11 +403,12 @@ npm run migrate:legacy -- bulk-audit \
   --output ops/evidence/final-legacy-audit.json
 ```
 
-This performs a fresh download-based `rclone check` of every staged object and
-rechecks the migration batch, source hashes, per-account direction and flag
-counts, attachment counts, object-reference count, and configuration
-provenance in D1. The JSON records the R2 report digest but no mail content or
-credential. Any mismatch exits without changing R2 or D1.
+For a version 4 stage this performs a fresh download-based `rclone check` of
+every new staged object and rechecks the delta header, source/mapping/snapshot
+hashes, new-message batch, object references, grouped change-source counts,
+and existence or absence of each changed target category in D1. The JSON
+records the R2 report digest but no mail content or credential. Any mismatch
+exits without changing R2 or D1.
 
 Keep the isolated database, inventory, mapping, original SQL, and later R2
 snapshot together as cutover evidence. Do not copy credentials or plaintext

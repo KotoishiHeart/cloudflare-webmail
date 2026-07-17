@@ -93,6 +93,6 @@ Worker entrypoint:
 Production TypeScript/JavaScript modules are limited to 250 physical lines.
 `tools/tests/architecture.test.mjs` enforces that boundary, the credential
 ignore policy, ordered migration filenames, empty-database migration success,
-the exact 31-table schema, and foreign-key integrity. Generated bundles,
+the exact 33-table schema, and foreign-key integrity. Generated bundles,
 binding declarations, SQL migrations, tests, and documentation are excluded
 from the module line budget.

@@ -2,7 +2,7 @@ import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { applyLegacyStageBulk } from '../lib/legacy-bulk-apply.mjs';
@@ -30,6 +30,8 @@ describe('legacy bulk apply', () => {
     const materialized = await materializeLegacyR2Tree(stage, treePath);
     assert.equal(materialized.objects, 1);
     assert.equal((await readFile(join(treePath, objectKey()), 'utf8')), 'raw message');
+    assert.equal((await stat(treePath)).mode & 0o777, 0o700);
+    assert.equal((await stat(`${treePath}.json`)).mode & 0o777, 0o600);
 
     const calls = [];
     const runner = { spawn(command, args) {
@@ -61,6 +63,9 @@ describe('legacy bulk apply', () => {
     assert.equal(state.nextSql, 1);
     assert.deepEqual(state.d1Audit, { batchId: BATCH_ID, messages: 1, objects: 1 });
     assert.match(state.r2Report.sha256, /^[0-9a-f]{64}$/u);
+    assert.equal((await stat(state.r2Report.file)).mode & 0o777, 0o600);
+    const stateFile = (await readdir(stage)).find((name) => name.startsWith('bulk-apply-state.'));
+    assert.equal((await stat(join(stage, stateFile))).mode & 0o777, 0o600);
     const checkIndex = calls.findIndex((call) => call.command === 'rclone' && call.args[0] === 'check');
     const d1FileIndex = calls.findIndex((call) => call.command === 'npx' && call.args.includes('--file'));
     assert.ok(checkIndex >= 0 && d1FileIndex > checkIndex);
@@ -88,6 +93,7 @@ describe('legacy bulk apply', () => {
     } });
     assert.equal(audit.kind, 'cf-webmail-legacy-cutover-audit');
     assert.equal(audit.r2.objects, 1);
+    assert.equal((await stat(audit.r2.report)).mode & 0o777, 0o600);
     assert.deepEqual(audit.d1, { batchId: BATCH_ID, messages: 1, objects: 1 });
     assert.ok(auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'check'));
     assert.ok(!auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'copy'));

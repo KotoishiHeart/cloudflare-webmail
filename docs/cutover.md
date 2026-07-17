@@ -68,6 +68,14 @@ thread headers, attachment hash, and SPF/DKIM/DMARC alignment. Test reader,
 operator, owner, and system-administrator denial boundaries with real Access
 identities. Resolve every postflight blocker before approving the window.
 
+Separately apply the approved production baseline to the new production D1/R2
+over as many Workers Free quota windows as required. Keep production Email
+Routing on the archived Worker and keep normal users out of the rebuilt Web UI
+throughout this baseline. Complete its capacity rehearsal, bulk audit, and
+portable target backup before scheduling the final window. Queue backlog is
+not a substitute for this baseline; Free Queue retention is shorter than a
+multi-day D1 import.
+
 ## 3. Start the production window
 
 1. Save screenshots or an API export of the current Access, Email Routing, and
@@ -95,17 +103,26 @@ records: both implementations use Cloudflare Email Routing, and the Worker
 target is the controlled boundary.
 
 Immediately after that rule change, the archived store is frozen for inbound
-mail. Create a final archived safe D1 export and R2 snapshot, using new paths.
-Repeat import, inventory, mapping validation, snapshot verification, stage
-preparation, stage verification, and `bulk-apply`. A full second snapshot is
-allowed: deterministic message IDs make existing mail idempotent, while the
-new migration batch supplies a complete final count comparison.
+mail. Create a final archived safe D1 export using new paths, refresh the
+reviewed mapping hash, and seed a new verified raw snapshot from the baseline
+snapshot. Fetch only the new or changed archived R2 keys. Prepare and verify a
+version 4 final delta against the exact baseline database and stage, then run
+`delta-capacity-rehearsal`. Do not prepare or apply a second full stage: it
+would add full-archive provenance writes and can turn the production freeze
+into another multi-day D1 Free import.
+
+Apply the final delta. It must contain only new messages, mutable flag changes,
+and explicit configuration insert/update/delete operations. Any immutable
+message or attachment change, missing baseline message, stage mismatch, or
+failed capacity gate is an abort while both Web UIs remain closed. The exact
+commands and evidence are in the “Free-plan baseline and final delta” section
+of [`legacy-migration.md`](legacy-migration.md).
 
 Run a fresh read-only final audit:
 
 ```bash
 npm run migrate:legacy -- bulk-audit \
-  --stage ops/legacy-final-stage \
+  --stage ops/legacy-final-delta \
   --tree ops/legacy-final-r2-upload \
   --rclone-destination cf-r2:cf-webmail-raw \
   --rclone-config /secure/rclone.conf \
@@ -117,10 +134,10 @@ npm run migrate:legacy -- bulk-audit \
 npm run deploy -- postflight --stage ops/deploy-production --force
 ```
 
-Require `cutoverReady: true`, matching D1 per-account and migrated
-configuration counts, a successful download-based R2 comparison, and zero
-unexplained migration failures. Confirm the expected labels, default mailbox,
-and one migrated incoming rule with an owner identity. Repeat the
+Require `cutoverReady: true`, an exact delta header/change-source audit,
+matching new-message/object counts, a successful download-based R2 comparison,
+and zero unexplained migration failures. Confirm the expected labels, default
+mailbox, and one migrated incoming rule with an owner identity. Repeat the
 inbound/outbound canaries through the production addresses. Then enable normal
 users in the new Access policy.
 

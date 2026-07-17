@@ -41,6 +41,9 @@ export function legacyMigrationUsage() {
     `  prepare-delta --baseline-database baseline.sqlite --baseline-stage BASELINE_DIR \\\n` +
     `    --database final.sqlite --mapping final-mapping.json --snapshot FINAL_DIR \\\n` +
     `    --stage DELTA_DIR\n` +
+    `  delta-capacity-rehearsal --baseline-database BASELINE_CAPACITY.sqlite \\\n` +
+    `    --baseline-stage BASELINE_DIR --stage DELTA_DIR --database FINAL.sqlite \\\n` +
+    `    --output delta-capacity.json\n` +
     `  verify-stage --stage DIR\n` +
     `  capacity-rehearsal --stage DIR --database FILE --output FILE \\\n` +
     `    [--provisioning provision.json]\n` +

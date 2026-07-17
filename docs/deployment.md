@@ -145,7 +145,7 @@ export CF_ACCESS_CLIENT_SECRET='...access service token secret...'
 npm run deploy -- postflight --stage ops/deploy-production
 ```
 
-Postflight checks the three active Worker versions, all 31 application tables,
+Postflight checks the three active Worker versions, all 33 application tables,
 and `GET /healthz`. It also reports unresolved inbound handoffs, outbound
 deliveries, dead letters, storage issues, and active or failed retention runs.
 When any durable work remains it still writes `postflight.json`, sets

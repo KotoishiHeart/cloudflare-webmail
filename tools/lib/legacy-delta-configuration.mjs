@@ -144,7 +144,7 @@ function add(output, kind, action, sourceKey, targetKey, mailboxId, values) {
 }
 
 function labelValue(value) {
-  return pick(value, ['name', 'color', 'description', 'createdAt', 'updatedAt']);
+  return pick(value, ['name', 'color', 'description', 'sourceKeys', 'createdAt', 'updatedAt']);
 }
 
 function ruleValue(value) {
@@ -160,7 +160,7 @@ function preferenceValue(value) {
 }
 
 function associationValue(value) {
-  return pick(value, ['messageId', 'labelId', 'ruleId', 'createdAt']);
+  return pick(value, ['sourceKey', 'messageId', 'labelId', 'ruleId', 'createdAt']);
 }
 
 function pick(value, keys) {

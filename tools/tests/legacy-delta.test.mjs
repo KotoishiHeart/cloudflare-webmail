@@ -14,6 +14,7 @@ import { prepareLegacyMigrationStage } from '../lib/legacy-stage.mjs';
 import { prepareLegacyDeltaStage } from '../lib/legacy-delta-stage.mjs';
 import { verifyMigrationStage } from '../lib/migration-stage.mjs';
 import { auditLegacyDeltaTarget } from '../lib/legacy-delta-bulk-audit.mjs';
+import { rehearseLegacyDeltaCapacity } from '../lib/legacy-delta-capacity.mjs';
 
 let root;
 const rawOne = rawEmail('One', '<one@example.net>');
@@ -77,6 +78,26 @@ describe('archived baseline and final delta stage', () => {
     assert.equal(verified.changes.length, 2);
     assert.equal((await stat(deltaStage)).mode & 0o777, 0o700);
     assert.equal((await stat(join(deltaStage, 'changes.jsonl'))).mode & 0o777, 0o600);
+
+    const capacityBaseline = new DatabaseSync(join(root, 'capacity-baseline.sqlite'));
+    capacityBaseline.exec('PRAGMA foreign_keys = ON;');
+    for (const name of (await readdir('migrations')).filter((item) => item.endsWith('.sql')).sort()) {
+      capacityBaseline.exec(await readFile(`migrations/${name}`, 'utf8'));
+    }
+    provision(capacityBaseline, baseline.mapping);
+    applySqlStage(capacityBaseline, baselineStage, baselineManifest);
+    capacityBaseline.close();
+    const capacityDatabase = join(root, 'capacity-final.sqlite');
+    const capacity = await rehearseLegacyDeltaCapacity({
+      baselineDatabase: join(root, 'capacity-baseline.sqlite'),
+      baselineStage,
+      stage: deltaStage,
+      database: capacityDatabase,
+      now: 5500,
+    });
+    assert.equal(capacity.counts.finalTableRows.messages, 3);
+    assert.equal(capacity.freePlan.d1DatabaseFits, true);
+    assert.equal((await stat(capacityDatabase)).mode & 0o777, 0o600);
 
     const target = new DatabaseSync(join(root, 'target.sqlite'));
     try {
@@ -185,12 +206,12 @@ describe('archived baseline and final delta stage', () => {
       stage: deltaStage, now: 7000,
     });
     assert.equal(delta.counts.newMessages, 1);
-    assert.equal(delta.counts.configurationMutations, 16);
+    assert.equal(delta.counts.configurationMutations, 18);
     assert.deepEqual(delta.configuration.counts, {
       label: { insert: 2, update: 2, delete: 2 },
       message_label: { insert: 1, update: 1, delete: 1 },
       mail_rule: { insert: 2, update: 2, delete: 2 },
-      user_preference: { insert: 0, update: 1, delete: 0 },
+      user_preference: { insert: 1, update: 1, delete: 1 },
     });
     const target = new DatabaseSync(join(root, 'configuration-target.sqlite'));
     try {
@@ -203,7 +224,7 @@ describe('archived baseline and final delta stage', () => {
       applySqlStage(target, deltaStage, delta);
       applySqlStage(target, deltaStage, delta);
       assert.deepEqual(configurationCounts(target), {
-        labels: 4, messageLabels: 2, rules: 4, ruleLabels: 4, preferences: 1,
+        labels: 4, messageLabels: 2, rules: 4, ruleLabels: 4, preferences: 2,
       });
       assert.equal(target.prepare(`
         SELECT COUNT(*) AS count FROM mailbox_labels WHERE name = 'Remove'
@@ -223,11 +244,11 @@ describe('archived baseline and final delta stage', () => {
       assert.equal(target.prepare(`
         SELECT COUNT(*) AS count FROM legacy_migration_delta_sources
         WHERE delta_id = ? AND source_kind IN ('label', 'message_label', 'mail_rule', 'user_preference')
-      `).get(delta.deltaId).count, 16);
+      `).get(delta.deltaId).count, 18);
       const audit = auditLegacyDeltaTarget(delta, {
         local: true, remote: false, database: 'cf-webmail', config: 'apps/web/wrangler.jsonc',
       }, sqliteQueryRunner(target));
-      assert.equal(audit.configurationMutations, 16);
+      assert.equal(audit.configurationMutations, 18);
       assert.equal(audit.newMessages, 1);
     } finally {
       target.close();
@@ -268,6 +289,12 @@ function provision(database, mapping) {
   database.prepare(`
     INSERT INTO users (id, email, created_at, updated_at) VALUES ('owner-1', 'owner@example.com', 1, 1)
   `).run();
+  database.prepare(`
+    INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, 1, 1)
+  `).run('preference-remove', 'remove@example.com');
+  database.prepare(`
+    INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, 1, 1)
+  `).run('preference-new', 'new@example.com');
   for (const item of mapping.mappings) {
     database.prepare(`
       INSERT INTO mailboxes (id, display_name, status, created_at, updated_at)
@@ -277,6 +304,14 @@ function provision(database, mapping) {
       INSERT INTO mailbox_memberships (mailbox_id, user_id, role, created_at, updated_at)
       VALUES (?, 'owner-1', 'owner', 1, 1)
     `).run(item.mailboxId);
+    database.prepare(`
+      INSERT INTO mailbox_memberships (mailbox_id, user_id, role, created_at, updated_at)
+      VALUES (?, ?, 'viewer', 1, 1)
+    `).run(item.mailboxId, 'preference-remove');
+    database.prepare(`
+      INSERT INTO mailbox_memberships (mailbox_id, user_id, role, created_at, updated_at)
+      VALUES (?, ?, 'viewer', 1, 1)
+    `).run(item.mailboxId, 'preference-new');
     database.prepare(`
       INSERT INTO mailbox_addresses (address, mailbox_id, kind, status, created_at, updated_at)
       VALUES (?, ?, 'primary', 'active', 1, 1)
@@ -346,11 +381,18 @@ function baselineConfiguration() {
       { messageId: 'config-1', labelId: 2, sourceRuleId: 'rule-2', createdAt: 2600 },
       { messageId: 'config-2', labelId: 1, sourceRuleId: 'rule-1', createdAt: 2700 },
     ],
-    preferences: [{
-      email: 'owner@example.com',
-      value: { default_account: 'first@example.com', page_size: 25, dense_list: false },
-      updatedAt: 2800,
-    }],
+    preferences: [
+      {
+        email: 'owner@example.com',
+        value: { default_account: 'first@example.com', page_size: 25, dense_list: false },
+        updatedAt: 2800,
+      },
+      {
+        email: 'remove@example.com',
+        value: { default_account: 'first@example.com', page_size: 25, dense_list: false },
+        updatedAt: 2850,
+      },
+    ],
   };
 }
 
@@ -365,11 +407,18 @@ function finalConfiguration() {
       { messageId: 'config-2', labelId: 1, sourceRuleId: 'rule-3', createdAt: 3500 },
       { messageId: 'config-3', labelId: 3, sourceRuleId: 'rule-1', createdAt: 3600 },
     ],
-    preferences: [{
-      email: 'owner@example.com',
-      value: { default_account: 'second@example.com', page_size: 50, dense_list: true },
-      updatedAt: 3700,
-    }],
+    preferences: [
+      {
+        email: 'owner@example.com',
+        value: { default_account: 'second@example.com', page_size: 50, dense_list: true },
+        updatedAt: 3700,
+      },
+      {
+        email: 'new@example.com',
+        value: { default_account: 'first@example.com', page_size: 25, dense_list: false },
+        updatedAt: 3750,
+      },
+    ],
   };
 }
 

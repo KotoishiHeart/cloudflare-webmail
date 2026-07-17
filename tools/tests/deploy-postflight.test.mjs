@@ -11,7 +11,8 @@ const COMMIT = 'd'.repeat(40);
 const VERSION = '99999999-9999-4999-8999-999999999999';
 const TABLES = [
   'access_identities', 'attachments', 'audit_events', 'delivery_events',
-  'inbound_handoffs', 'mail_rule_labels', 'mail_rule_run_matches', 'mail_rule_runs',
+  'inbound_handoffs', 'legacy_migration_delta_sources', 'legacy_migration_deltas',
+  'mail_rule_labels', 'mail_rule_run_matches', 'mail_rule_runs',
   'mail_rules', 'mailbox_addresses', 'mailbox_labels', 'mailbox_memberships',
   'mailboxes', 'maintenance_cursors', 'message_labels', 'message_migration_sources',
   'message_search_documents', 'messages', 'migration_batches',
@@ -65,7 +66,7 @@ describe('production postflight', () => {
     );
     assert.equal(report.cutoverReady, true);
     assert.equal(report.activeVersions.length, 3);
-    assert.equal(report.requiredTableCount, 31);
+    assert.equal(report.requiredTableCount, 33);
     assert.deepEqual(report.blockers, []);
     assert.ok(calls.some((args) => args.includes('execute')));
     assert.ok(calls.some((args) => args[0] === 'fetch'));

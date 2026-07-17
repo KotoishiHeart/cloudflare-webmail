@@ -3,7 +3,7 @@ import { parseOptions } from './ops-cli.mjs';
 import { createLegacyInventory, createLegacyMappingTemplate, legacyMappingSha256,
   loadAndValidateLegacyMapping } from './legacy-inventory.mjs';
 import { refreshLegacyMappingFromCli } from './legacy-mapping-refresh.mjs';
-import { prepareLegacyDeltaFromCli } from './legacy-delta-cli.mjs';
+import { runLegacyDeltaCli } from './legacy-delta-cli.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
 import { fetchLegacySnapshotBulk } from './legacy-snapshot-bulk.mjs';
@@ -23,6 +23,9 @@ export async function runLegacyMigrationCli(argv, io = {
   if (command === 'help' || options.help) {
     io.stdout(legacyMigrationUsage());
     return 0;
+  }
+  if (command === 'prepare-delta' || command === 'delta-capacity-rehearsal') {
+    return runLegacyDeltaCli(command, options, io);
   }
   if (command === 'import-sql') {
     const result = await importLegacySafeSql({
@@ -167,11 +170,6 @@ export async function runLegacyMigrationCli(argv, io = {
       snapshot: required(options, 'snapshot'),
       stage: required(options, 'stage'),
     });
-    io.stdout(`${JSON.stringify(legacyStageCliSummary(result), null, 2)}\n`);
-    return result.complete ? 0 : 2;
-  }
-  if (command === 'prepare-delta') {
-    const result = await prepareLegacyDeltaFromCli(options);
     io.stdout(`${JSON.stringify(legacyStageCliSummary(result), null, 2)}\n`);
     return result.complete ? 0 : 2;
   }
