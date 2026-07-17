@@ -16,7 +16,7 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
   const jobsConfig = configPath(stage, plan, 'jobs');
   const ingestConfig = configPath(stage, plan, 'ingest');
   const checks = [];
-  check(runner, ['whoami'], options, checks, 'wrangler-auth');
+  check(runner, ['whoami'], { ...options, profile: undefined }, checks, 'wrangler-auth');
 
   const d1Output = check(runner, [
     'd1', 'info', plan.deployment.resources.d1.name, '--json', '--config', webConfig,

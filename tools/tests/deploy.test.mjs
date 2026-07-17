@@ -88,11 +88,20 @@ describe('review-first deployment stage', () => {
   it('runs read-only checks before migrations and deploys in dependency order', async () => {
     const { stage, plan } = await stageFixture('preflight');
     const calls = [];
-    const report = await runDeployPreflight(stage, plan, {}, fakeRunner(calls, 0));
+    const report = await runDeployPreflight(
+      stage,
+      plan,
+      { profile: 'fixture-profile' },
+      fakeRunner(calls, 0),
+    );
     assert.equal(report.databaseEmpty, true);
     assert.equal(report.queueTopologies.length, 4);
     assert.ok(report.checks.includes('outbound-provider:smtp2go'));
     assert.ok(calls.some((args) => args.includes('--dry-run')));
+    const whoami = calls.find((args) => args.includes('whoami'));
+    const d1Info = calls.find((args) => args.includes('d1') && args.includes('info'));
+    assert.equal(whoami.includes('--profile'), false);
+    assert.deepEqual(d1Info.slice(-2), ['--profile', 'fixture-profile']);
 
     const mutationCalls = [];
     const result = runDeployApply(
