@@ -78,6 +78,39 @@ describe('archived current-format stage', () => {
     ], { stdout: (value) => verifyOutput.push(value) }), 0);
     assert.doesNotMatch(verifyOutput.join(''), /first@example\.com/u);
     assert.match(verifyOutput.join(''), /"mappedAccounts": 2/u);
+    const capacityDatabase = join(root, 'capacity.sqlite');
+    const capacityEvidence = join(root, 'capacity.json');
+    const capacityProvisioning = join(root, 'capacity-provisioning.json');
+    const capacityOwner = '019c6f3c-6260-7000-8000-000000000001';
+    await writeFile(capacityProvisioning, `${JSON.stringify({
+      version: 1,
+      users: [{
+        id: capacityOwner,
+        email: 'owner@example.com',
+        identities: [{ issuer: 'https://example.cloudflareaccess.com', subject: 'capacity-owner' }],
+      }],
+      mailboxes: mapping.mappings.map((item) => ({
+        id: item.mailboxId,
+        address: item.address,
+        ownerUserId: capacityOwner,
+        aliases: [],
+        members: [],
+      })),
+    }, null, 2)}\n`);
+    const capacityOutput = [];
+    assert.equal(await runLegacyMigrationCli([
+      'capacity-rehearsal', '--stage', stage, '--database', capacityDatabase,
+      '--output', capacityEvidence, '--provisioning', capacityProvisioning,
+    ], { stdout: (value) => capacityOutput.push(value) }), 0);
+    assert.doesNotMatch(capacityOutput.join(''), /first@example\.com/u);
+    const capacity = JSON.parse(await readFile(capacityEvidence, 'utf8'));
+    assert.equal(capacity.counts.messages, 2);
+    assert.equal(capacity.counts.r2Objects, 5);
+    assert.equal(capacity.freePlan.d1DatabaseFits, true);
+    assert.equal(capacity.freePlan.r2StorageFits, true);
+    assert.match(capacity.stageSha256, /^[0-9a-f]{64}$/u);
+    assert.equal((await stat(capacityDatabase)).mode & 0o777, 0o600);
+    assert.equal((await stat(capacityEvidence)).mode & 0o777, 0o600);
     assert.equal((await stat(stage)).mode & 0o777, 0o700);
     assert.equal((await stat(join(stage, 'objects'))).mode & 0o777, 0o700);
     assert.equal((await stat(join(stage, 'd1'))).mode & 0o777, 0o700);

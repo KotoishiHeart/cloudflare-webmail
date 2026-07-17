@@ -220,6 +220,27 @@ npm run migrate:legacy -- prepare \
 npm run migrate:legacy -- verify-stage --stage ops/legacy-stage
 ```
 
+Before remote apply on Workers Free, materialize the exact current schema in a
+local SQLite database and record its final size and lower-bound row count:
+
+```bash
+npm run migrate:legacy -- capacity-rehearsal \
+  --stage ops/legacy-stage \
+  --database ops/legacy-capacity.sqlite \
+  --provisioning ops/provision.legacy.json \
+  --output ops/evidence/legacy-capacity.json
+```
+
+The evidence binds the stage digest to the resulting SQLite page count, base
+table rows, R2 bytes, and R2 object count. It compares them with the dated
+Workers Free limits. Index maintenance adds more D1 rows written, so
+`minimumBaseRowWriteDays` is a lower bound rather than permission to schedule
+that many exact days. A database above the per-database limit blocks the
+single-D1 design even when total account storage is still available. Supplying
+the reviewed provisioning manifest also exercises archived user-preference
+prerequisites; omit it only when the stage contains no user preferences and a
+synthetic owner is sufficient for a preliminary estimate.
+
 Attachment content hashes and sizes extracted from MIME must match the old D1
 attachment/blob rows. Any mismatch, duplicate target raw hash, unavailable raw
 object, or invalid metadata makes the stage incomplete. An incomplete archived

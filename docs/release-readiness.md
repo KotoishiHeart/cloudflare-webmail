@@ -79,6 +79,9 @@ deployment. Require:
 - the frozen bulk source-key list matches the mapped archive and read-only
   rclone acquisition completes without per-object process fan-out;
 - a fully verified archived raw snapshot and complete conversion stage;
+- a stage-bound capacity rehearsal that fits the current D1 per-database and
+  R2 storage/operation limits, with daily D1 writes scheduled from the reported
+  lower bound plus index overhead;
 - successful download-based R2 comparison;
 - matching per-account D1 message, direction, flag, attachment, and object
   reference counts;

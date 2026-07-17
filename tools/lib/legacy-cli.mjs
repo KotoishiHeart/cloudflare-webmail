@@ -15,6 +15,8 @@ import { applyLegacyStageBulk } from './legacy-bulk-apply.mjs';
 import { auditLegacyStageBulk } from './legacy-bulk-audit.mjs';
 import { createLegacyProvisioningDraft } from './legacy-provisioning.mjs';
 import { verifyLegacyProvisioningFiles } from './legacy-provisioning-verify.mjs';
+import { rehearseLegacyCapacity } from './legacy-capacity.mjs';
+import { legacyMigrationUsage, legacyStageCliSummary } from './legacy-cli-view.mjs';
 
 export async function runLegacyMigrationCli(argv, io = {
   stdout: (value) => process.stdout.write(value),
@@ -22,7 +24,7 @@ export async function runLegacyMigrationCli(argv, io = {
   const [command = 'help', ...args] = argv;
   const options = parseOptions(args);
   if (command === 'help' || options.help) {
-    io.stdout(usage());
+    io.stdout(legacyMigrationUsage());
     return 0;
   }
   if (command === 'import-sql') {
@@ -157,13 +159,27 @@ export async function runLegacyMigrationCli(argv, io = {
       snapshot: required(options, 'snapshot'),
       stage: required(options, 'stage'),
     });
-    io.stdout(`${JSON.stringify(stageCliSummary(result), null, 2)}\n`);
+    io.stdout(`${JSON.stringify(legacyStageCliSummary(result), null, 2)}\n`);
     return result.complete ? 0 : 2;
   }
   if (command === 'verify-stage') {
     const result = await verifyMigrationStage(required(options, 'stage'));
-    io.stdout(`${JSON.stringify(stageCliSummary(result.manifest), null, 2)}\n`);
+    io.stdout(`${JSON.stringify(legacyStageCliSummary(result.manifest), null, 2)}\n`);
     return result.manifest.complete === false ? 2 : 0;
+  }
+  if (command === 'capacity-rehearsal') {
+    const output = required(options, 'output');
+    await requireMissing(output);
+    const result = await rehearseLegacyCapacity(
+      required(options, 'stage'),
+      required(options, 'database'),
+      typeof options.provisioning === 'string' ? { provisioning: options.provisioning } : {},
+    );
+    await writeExclusive(output, result);
+    io.stdout(`${JSON.stringify(result, null, 2)}\n`);
+    return result.freePlan.d1DatabaseFits
+      && result.freePlan.r2StorageFits
+      && result.freePlan.r2InitialWritesFit ? 0 : 2;
   }
   if (command === 'bulk-apply') {
     const result = await applyLegacyStageBulk(required(options, 'stage'), {
@@ -219,45 +235,4 @@ function required(options, key) {
   const value = options[key];
   if (typeof value !== 'string' || value === '') throw new Error(`--${key} is required`);
   return value;
-}
-
-function stageCliSummary(manifest) {
-  return {
-    version: manifest.version,
-    kind: manifest.kind,
-    sourceFormat: manifest.sourceFormat,
-    ...(typeof manifest.complete === 'boolean' ? { complete: manifest.complete } : {}),
-    ...(typeof manifest.batchId === 'string' ? { batchId: manifest.batchId } : {}),
-    counts: manifest.counts,
-    ...(manifest.configuration === undefined ? {} : { configuration: manifest.configuration }),
-    mappedAccounts: Array.isArray(manifest.mappings) ? manifest.mappings.length : undefined,
-    excludedAccounts: Array.isArray(manifest.exclusions) ? manifest.exclusions.length : undefined,
-    sqlFiles: Array.isArray(manifest.sqlFiles) ? manifest.sqlFiles.length : 0,
-  };
-}
-
-function usage() {
-  return `Cloudflare Webmail archived migration\n\n` +
-    `  import-sql --sql OLD_SAFE_BACKUP.sql --database legacy.sqlite\n` +
-    `  inventory --database legacy.sqlite --output inventory.json \\\n` +
-    `    [--mapping-template mapping.json]\n` +
-    `  validate-mapping --database legacy.sqlite --mapping mapping.json\n` +
-    `  provision-template --database legacy.sqlite --mapping mapping.json \\\n` +
-    `    --owner-user-id UUID --owner-email EMAIL --access-issuer URL \\\n` +
-    `    --access-subject SUBJECT [--system-admin] --output provision.json \\\n` +
-    `    --report provisioning-review.json\n` +
-    `  verify-provisioning --database legacy.sqlite --mapping mapping.json \\\n` +
-    `    --manifest provision.json --review provisioning-review.json \\\n` +
-    `    --deployment deployment.json --output verification.json\n` +
-    `  fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
-    `    (--object-root DIR | --bucket NAME (--local|--remote) --config FILE)\n` +
-    `  bulk-fetch --database legacy.sqlite --mapping mapping.json --snapshot DIR \\\n` +
-    `    --rclone-source REMOTE:BUCKET [--rclone-config FILE]\n` +
-    `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +
-    `  prepare --database legacy.sqlite --mapping mapping.json --snapshot DIR --stage DIR\n` +
-    `  verify-stage --stage DIR\n` +
-    `  bulk-apply --stage DIR --rclone-destination REMOTE:BUCKET \\\n` +
-    `    (--local|--remote) --yes [--rclone-config FILE] [--tree DIR]\n` +
-    `  bulk-audit --stage DIR --tree DIR --rclone-destination REMOTE:BUCKET\n` +
-    `    --report FILE --output FILE (--local|--remote) [--rclone-config FILE]\n`;
 }
