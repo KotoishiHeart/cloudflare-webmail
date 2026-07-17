@@ -38,6 +38,9 @@ export function legacyMigrationUsage() {
     `     --seed-mapping baseline-mapping.json]\n` +
     `  verify-snapshot --database legacy.sqlite --mapping mapping.json --snapshot DIR\n` +
     `  prepare --database legacy.sqlite --mapping mapping.json --snapshot DIR --stage DIR\n` +
+    `  prepare-delta --baseline-database baseline.sqlite --baseline-stage BASELINE_DIR \\\n` +
+    `    --database final.sqlite --mapping final-mapping.json --snapshot FINAL_DIR \\\n` +
+    `    --stage DELTA_DIR\n` +
     `  verify-stage --stage DIR\n` +
     `  capacity-rehearsal --stage DIR --database FILE --output FILE \\\n` +
     `    [--provisioning provision.json]\n` +

@@ -2,7 +2,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { parseOptions } from './ops-cli.mjs';
 import { createLegacyInventory, createLegacyMappingTemplate, legacyMappingSha256,
   loadAndValidateLegacyMapping } from './legacy-inventory.mjs';
-import { refreshLegacyMapping } from './legacy-mapping-refresh.mjs';
+import { refreshLegacyMappingFromCli } from './legacy-mapping-refresh.mjs';
+import { prepareLegacyDeltaFromCli } from './legacy-delta-cli.mjs';
 import { importLegacySafeSql } from './legacy-sqlite.mjs';
 import { fetchLegacySnapshot, verifyLegacySnapshot } from './legacy-snapshot.mjs';
 import { fetchLegacySnapshotBulk } from './legacy-snapshot-bulk.mjs';
@@ -60,12 +61,7 @@ export async function runLegacyMigrationCli(argv, io = {
     return 0;
   }
   if (command === 'refresh-mapping') {
-    const result = await refreshLegacyMapping({
-      baselineDatabase: required(options, 'baseline-database'),
-      database: required(options, 'database'),
-      mapping: required(options, 'mapping'),
-      output: required(options, 'output'),
-    });
+    const result = await refreshLegacyMappingFromCli(options);
     io.stdout(`${JSON.stringify(result, null, 2)}\n`);
     return 0;
   }
@@ -174,6 +170,11 @@ export async function runLegacyMigrationCli(argv, io = {
     io.stdout(`${JSON.stringify(legacyStageCliSummary(result), null, 2)}\n`);
     return result.complete ? 0 : 2;
   }
+  if (command === 'prepare-delta') {
+    const result = await prepareLegacyDeltaFromCli(options);
+    io.stdout(`${JSON.stringify(legacyStageCliSummary(result), null, 2)}\n`);
+    return result.complete ? 0 : 2;
+  }
   if (command === 'verify-stage') {
     const result = await verifyMigrationStage(required(options, 'stage'));
     io.stdout(`${JSON.stringify(legacyStageCliSummary(result.manifest), null, 2)}\n`);
@@ -235,7 +236,6 @@ export async function runLegacyMigrationCli(argv, io = {
 async function writeExclusive(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
 }
-
 async function requireMissing(path) {
   await readFile(path).then(
     () => { throw new Error(`output already exists: ${path}`); },

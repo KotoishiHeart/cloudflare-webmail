@@ -5,12 +5,11 @@ import { discoverMessageFiles, maildirFlags, readMessageFile } from './migration
 import { prepareMigratedMessage, sha256 } from './migration-message.mjs';
 import { renderMigratedMessageSql } from './migration-sql.mjs';
 import { validateStageManifest } from './migration-stage-validation.mjs';
-
 const STAGE_VERSION = 1;
 const LEGACY_STAGE_VERSION = 2;
 const LEGACY_CONFIGURATION_STAGE_VERSION = 3;
+const LEGACY_DELTA_STAGE_VERSION = 4;
 const SQL_CHUNK_SIZE = 50;
-
 export async function prepareMigrationStage(options) {
   const source = resolve(options.source);
   const stage = resolve(options.stage);
@@ -106,7 +105,10 @@ export async function verifyMigrationStage(stageInput) {
   const stage = resolve(stageInput);
   const manifest = JSON.parse(await readFile(join(stage, 'manifest.json'), 'utf8'));
   if (
-    ![STAGE_VERSION, LEGACY_STAGE_VERSION, LEGACY_CONFIGURATION_STAGE_VERSION]
+    ![
+      STAGE_VERSION, LEGACY_STAGE_VERSION, LEGACY_CONFIGURATION_STAGE_VERSION,
+      LEGACY_DELTA_STAGE_VERSION,
+    ]
       .includes(manifest.version)
     || manifest.kind !== 'cf-webmail-migration-stage'
   ) {
@@ -116,7 +118,9 @@ export async function verifyMigrationStage(stageInput) {
   if (objects.length !== manifest.counts.objects) throw new Error('object count does not match manifest');
   const failures = await readJsonLines(join(stage, 'failures.jsonl'));
   if (failures.length !== manifest.counts.failed) throw new Error('failure count does not match manifest');
-  validateStageManifest(manifest, objects);
+  const changes = manifest.version === LEGACY_DELTA_STAGE_VERSION
+    ? await readJsonLines(join(stage, 'changes.jsonl')) : [];
+  validateStageManifest(manifest, objects, changes);
   for (const object of objects) {
     const content = await readFile(join(stage, object.file));
     if (content.byteLength !== object.size || sha256(content) !== object.sha256) {
@@ -129,9 +133,15 @@ export async function verifyMigrationStage(stageInput) {
       throw new Error(`SQL verification failed: ${sqlFile.file}`);
     }
   }
-  return { manifest, objects };
+  if (manifest.version === LEGACY_DELTA_STAGE_VERSION) {
+    const content = await readFile(join(stage, manifest.changesFile.file));
+    if (
+      content.byteLength !== manifest.changesFile.size
+      || sha256(content) !== manifest.changesFile.sha256
+    ) throw new Error('legacy delta change set verification failed');
+  }
+  return { manifest, objects, changes };
 }
-
 export async function applyMigrationStage(stageInput, options, io = { spawn: spawnSync }) {
   const stage = resolve(stageInput);
   const verified = await verifyMigrationStage(stage);
@@ -187,7 +197,6 @@ async function writeSqlChunk(stage, index, statements) {
   await writeFile(join(stage, file), content, { mode: 0o600 });
   return { file, size: content.byteLength, sha256: sha256(content) };
 }
-
 async function readJsonLines(path) {
   const text = await readFile(path, 'utf8');
   return text.split(/\r?\n/u).filter(Boolean).map((line) => JSON.parse(line));

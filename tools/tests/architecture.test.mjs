@@ -77,7 +77,7 @@ test('ordered migrations create the complete schema from an empty database', asy
   const migrationNames = (await readdir('migrations'))
     .filter((name) => name.endsWith('.sql'))
     .sort();
-  assert.equal(migrationNames.length, 16);
+  assert.equal(migrationNames.length, 17);
   migrationNames.forEach((name, index) => {
     assert.match(name, new RegExp(`^${String(index + 1).padStart(4, '0')}_`, 'u'));
   });
@@ -143,6 +143,8 @@ const EXPECTED_TABLES = [
   'audit_events',
   'delivery_events',
   'inbound_handoffs',
+  'legacy_migration_delta_sources',
+  'legacy_migration_deltas',
   'mail_rule_labels',
   'mail_rule_run_matches',
   'mail_rule_runs',

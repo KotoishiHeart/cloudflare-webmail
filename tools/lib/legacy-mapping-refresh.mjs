@@ -26,3 +26,18 @@ export async function refreshLegacyMapping(options) {
     excludedAccounts: refreshed.exclusions.length,
   };
 }
+
+export async function refreshLegacyMappingFromCli(options) {
+  return refreshLegacyMapping({
+    baselineDatabase: required(options, 'baseline-database'),
+    database: required(options, 'database'),
+    mapping: required(options, 'mapping'),
+    output: required(options, 'output'),
+  });
+}
+
+function required(options, key) {
+  const value = options[key];
+  if (typeof value !== 'string' || value === '') throw new Error(`--${key} is required`);
+  return value;
+}

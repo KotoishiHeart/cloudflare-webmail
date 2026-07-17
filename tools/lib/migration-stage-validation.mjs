@@ -1,11 +1,13 @@
 const STAGE_VERSION = 1;
 const LEGACY_STAGE_VERSION = 2;
 
-export function validateStageManifest(manifest, objects) {
+export function validateStageManifest(manifest, objects, changes = []) {
   if (!Array.isArray(manifest.sqlFiles)) throw new Error('stage SQL file list is invalid');
   const mailboxIds = manifest.version === STAGE_VERSION
     ? validateSingleMailboxManifest(manifest)
-    : validateLegacyManifest(manifest);
+    : manifest.version === 4
+      ? validateLegacyDeltaManifest(manifest, changes)
+      : validateLegacyManifest(manifest);
   const objectKeys = new Set();
   const objectFiles = new Set();
   for (const object of objects) {
@@ -47,6 +49,82 @@ export function validateStageManifest(manifest, objects) {
     }
     if (!hash(sqlFile.sha256)) throw new Error('stage SQL hash is invalid');
   }
+}
+
+function validateLegacyDeltaManifest(manifest, changes) {
+  if (
+    manifest.sourceFormat !== 'cloudflare-webmail-archived-d1-r2-delta'
+    || !uuid(manifest.batchId)
+    || manifest.deltaId !== manifest.batchId
+    || !uuid(manifest.baselineBatchId)
+    || (manifest.messageBatchId !== null && !uuid(manifest.messageBatchId))
+    || !hash(manifest.baselineStageSha256)
+    || !hash(manifest.sourceDatabaseSha256)
+    || !hash(manifest.mappingSha256)
+    || !hash(manifest.snapshotSha256)
+    || !hash(manifest.changeSetSha256)
+    || manifest.complete !== true
+    || !Array.isArray(manifest.mappings)
+    || manifest.mappings.length < 1
+    || manifest.mappings.length > 1000
+    || !Array.isArray(manifest.exclusions)
+  ) throw new Error('legacy delta stage manifest is invalid');
+  const mailboxIds = new Set();
+  for (const mapping of manifest.mappings) {
+    if (
+      typeof mapping?.sourceAddress !== 'string'
+      || typeof mapping.address !== 'string'
+      || !uuid(mapping.mailboxId)
+      || mailboxIds.has(mapping.mailboxId)
+    ) throw new Error('legacy delta stage mapping is invalid');
+    mailboxIds.add(mapping.mailboxId);
+  }
+  const counts = manifest.counts;
+  if (
+    !positiveCount(counts?.baselineMessages)
+    || !positiveCount(counts.finalMessages)
+    || !count(counts.newMessages)
+    || !count(counts.flagUpdates)
+    || !count(counts.configurationMutations)
+    || !count(counts.changes)
+    || counts.failed !== 0
+    || !count(counts.quarantined)
+    || !count(counts.sourceObjects)
+    || !count(counts.objects)
+    || counts.finalMessages !== counts.baselineMessages + counts.newMessages
+    || counts.changes !== counts.newMessages + counts.flagUpdates
+      + counts.configurationMutations
+    || counts.quarantined > counts.newMessages
+    || (counts.newMessages === 0) !== (manifest.messageBatchId === null)
+    || (counts.newMessages === 0) !== (counts.objects === 0)
+    || (counts.newMessages === 0) !== (counts.sourceObjects === 0)
+  ) throw new Error('legacy delta stage counts are inconsistent');
+  if (
+    manifest.configuration?.mutations !== counts.configurationMutations
+    || manifest.changesFile?.file !== 'changes.jsonl'
+    || manifest.changesFile.count !== counts.changes
+    || !count(manifest.changesFile.size)
+    || manifest.changesFile.sha256 !== manifest.changeSetSha256
+    || changes.length !== counts.changes
+  ) throw new Error('legacy delta change set is inconsistent');
+  const unique = new Set();
+  for (const change of changes) {
+    const key = `${change.kind}\u0000${change.sourceKey}\u0000${change.targetKey}\u0000${change.action}`;
+    if (
+      !['message', 'message_flags', 'label', 'message_label', 'mail_rule', 'user_preference']
+        .includes(change.kind)
+      || !['insert', 'update', 'delete'].includes(change.action)
+      || typeof change.sourceKey !== 'string' || change.sourceKey.length < 1
+      || change.sourceKey.length > 512
+      || typeof change.targetKey !== 'string' || change.targetKey.length < 1
+      || change.targetKey.length > 512
+      || !hash(change.expectedSha256)
+      || (change.mailboxId !== null && !mailboxIds.has(change.mailboxId))
+      || unique.has(key)
+    ) throw new Error('legacy delta change is invalid');
+    unique.add(key);
+  }
+  return mailboxIds;
 }
 
 function validateSingleMailboxManifest(manifest) {

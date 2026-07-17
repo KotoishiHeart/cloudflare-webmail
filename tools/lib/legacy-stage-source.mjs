@@ -14,6 +14,19 @@ import {
 } from './legacy-snapshot-state.mjs';
 
 const gunzipAsync = promisify(gunzip);
+const LEGACY_MESSAGE_SELECT = `
+  SELECT id, direction, message_id, raw_sha256, subject, sender, recipients, cc,
+    date_header, CAST(received_at AS INTEGER) AS received_at, text_preview,
+    raw_key, body_text_key, body_html_key, CAST(size AS INTEGER) AS raw_size,
+    CAST(has_attachments AS INTEGER) AS has_attachments,
+    CAST(archived AS INTEGER) AS archived, CAST(compressed AS INTEGER) AS compressed,
+    CAST(created_at AS INTEGER) AS created_at, CAST(is_read AS INTEGER) AS is_read,
+    CAST(starred AS INTEGER) AS starred, CAST(deleted AS INTEGER) AS deleted,
+    CAST(deleted_at AS INTEGER) AS deleted_at, LOWER(account_email) AS account_email,
+    bcc, in_reply_to, references_header, source_message_id, compose_mode,
+    send_status, provider
+  FROM messages
+`;
 
 export function openLegacyStageSource(options) {
   const database = new DatabaseSync(resolve(options.database), { readOnly: true });
@@ -25,18 +38,9 @@ export function openLegacyStageSource(options) {
     if (!summary.complete) throw new Error('legacy raw snapshot is incomplete');
     const imported = readLegacyImportMetadata(database);
     const mappings = new Map(options.mapping.mappings.map((mapping) => [mapping.sourceAddress, mapping]));
-    const messageStatement = database.prepare(`
-      SELECT id, direction, message_id, raw_sha256, subject, sender, recipients, cc,
-        date_header, CAST(received_at AS INTEGER) AS received_at, text_preview,
-        raw_key, body_text_key, body_html_key, CAST(size AS INTEGER) AS raw_size,
-        CAST(archived AS INTEGER) AS archived, CAST(compressed AS INTEGER) AS compressed,
-        CAST(created_at AS INTEGER) AS created_at, CAST(is_read AS INTEGER) AS is_read,
-        CAST(starred AS INTEGER) AS starred, CAST(deleted AS INTEGER) AS deleted,
-        CAST(deleted_at AS INTEGER) AS deleted_at, LOWER(account_email) AS account_email,
-        bcc, in_reply_to, references_header, source_message_id, compose_mode,
-        send_status, provider
-      FROM messages ORDER BY LOWER(account_email), received_at, id
-    `);
+    const messageStatement = database.prepare(
+      `${LEGACY_MESSAGE_SELECT} ORDER BY LOWER(account_email), received_at, id`,
+    );
     const snapshotStatement = snapshot.prepare(`
       SELECT source_key, file, compressed, expected_raw_sha256, expected_raw_size,
         stored_size, stored_sha256, status
@@ -69,6 +73,10 @@ export function openLegacyStageSource(options) {
     database.close();
     throw error;
   }
+}
+
+export function legacyMessageByIdStatement(database) {
+  return database.prepare(`${LEGACY_MESSAGE_SELECT} WHERE id = ?`);
 }
 
 export function normalizeLegacyMessage(row, mapping) {

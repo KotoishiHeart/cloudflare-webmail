@@ -50,7 +50,7 @@ export async function prepareLegacyMigrationStage(options) {
     configuration, options.mapping.mappings, batchId, createdAt,
   );
   for (let index = 0; index < configurationPlan.statements.length; index += SQL_CHUNK_SIZE) {
-    sqlChunks.push(await writeSqlChunk(
+    sqlChunks.push(await writeLegacyStageSqlChunk(
       stage,
       sqlChunks.length + 1,
       configurationPlan.statements.slice(index, index + SQL_CHUNK_SIZE),
@@ -104,15 +104,15 @@ export async function prepareLegacyMigrationStage(options) {
           throw new Error('target mailbox contains a duplicate raw MIME record');
         }
         seen.add(dedupeKey);
-        await addObject(stage, objects, message.rawKey, message.raw, 'message/rfc822');
+        await addLegacyStageObject(stage, objects, message.rawKey, message.raw, 'message/rfc822');
         if (message.bodyTextKey !== null) {
-          await addObject(stage, objects, message.bodyTextKey, message.bodyText, 'text/plain; charset=utf-8');
+          await addLegacyStageObject(stage, objects, message.bodyTextKey, message.bodyText, 'text/plain; charset=utf-8');
         }
         if (message.bodyHtmlKey !== null) {
-          await addObject(stage, objects, message.bodyHtmlKey, message.bodyHtml, 'text/html; charset=utf-8');
+          await addLegacyStageObject(stage, objects, message.bodyHtmlKey, message.bodyHtml, 'text/html; charset=utf-8');
         }
         for (const attachment of message.attachments) {
-          await addObject(stage, objects, attachment.key, attachment.content, attachment.contentType);
+          await addLegacyStageObject(stage, objects, attachment.key, attachment.content, attachment.contentType);
         }
         const labelSql = legacyMessageLabels(
           configuration, legacy.id, legacy.targetMailboxId,
@@ -134,7 +134,7 @@ export async function prepareLegacyMigrationStage(options) {
         account.deleted += message.flags.isDeleted ? 1 : 0;
         account.attachments += message.attachments.length;
         if (currentSql.length >= SQL_CHUNK_SIZE) {
-          sqlChunks.push(await writeSqlChunk(stage, sqlChunks.length + 1, currentSql));
+          sqlChunks.push(await writeLegacyStageSqlChunk(stage, sqlChunks.length + 1, currentSql));
           currentSql = [];
         }
       } catch (error) {
@@ -148,7 +148,7 @@ export async function prepareLegacyMigrationStage(options) {
       }
     }
     if (currentSql.length > 0) {
-      sqlChunks.push(await writeSqlChunk(stage, sqlChunks.length + 1, currentSql));
+      sqlChunks.push(await writeLegacyStageSqlChunk(stage, sqlChunks.length + 1, currentSql));
     }
   } finally {
     source.close();
@@ -164,7 +164,7 @@ export async function prepareLegacyMigrationStage(options) {
     stagedObjects: objects.length,
     createdAt,
   };
-  const batchSql = await writeSqlChunk(stage, 0, [renderLegacyBatchSql(batch)]);
+  const batchSql = await writeLegacyStageSqlChunk(stage, 0, [renderLegacyBatchSql(batch)]);
   const sqlFiles = [batchSql, ...sqlChunks];
   await writeFile(
     join(stage, 'objects.jsonl'),
@@ -212,7 +212,7 @@ export async function prepareLegacyMigrationStage(options) {
   return manifest;
 }
 
-async function addObject(stage, objects, key, value, contentType) {
+export async function addLegacyStageObject(stage, objects, key, value, contentType) {
   const content = typeof value === 'string' ? Buffer.from(value) : Buffer.from(value);
   const file = `objects/${String(objects.length).padStart(8, '0')}.bin`;
   await mkdir(dirname(join(stage, file)), { recursive: true, mode: 0o700 });
@@ -220,7 +220,7 @@ async function addObject(stage, objects, key, value, contentType) {
   objects.push({ key, file, contentType, size: content.byteLength, sha256: sha256(content) });
 }
 
-async function writeSqlChunk(stage, index, statements) {
+export async function writeLegacyStageSqlChunk(stage, index, statements) {
   const file = `d1/${String(index).padStart(6, '0')}.sql`;
   const content = Buffer.from(`${statements.join('\n\n')}\n`);
   await writeFile(join(stage, file), content, { mode: 0o600 });
