@@ -62,6 +62,11 @@ Email Sending domain queries, Email Routing settings, the D1 table count, and
 three dry builds. The resulting `preflight.json` records check names but does
 not persist Wrangler output or account details.
 
+For an initial deployment, each Queue must have zero producer and consumer
+bindings. For an upgrade, every existing binding must belong to the three
+Workers named by the manifest. This prevents a generic Queue name from joining
+the rebuilt deployment to the archived Worker.
+
 The following checks remain manual because their policy content is not owned by
 this repository:
 

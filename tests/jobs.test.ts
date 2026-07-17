@@ -173,7 +173,7 @@ async function dispatchQueue(
   queueId: string,
   attempts = 1,
 ) {
-  const batch = createMessageBatch('cf-webmail-inbound', [{
+  const batch = createMessageBatch('cf-webmail-v2-inbound', [{
     id: queueId,
     timestamp: new Date(NOW),
     attempts,

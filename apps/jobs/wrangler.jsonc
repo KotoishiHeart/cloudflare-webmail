@@ -26,39 +26,39 @@
     "producers": [
       {
         "binding": "INBOUND_QUEUE",
-        "queue": "cf-webmail-inbound"
+        "queue": "cf-webmail-v2-inbound"
       },
       {
         "binding": "OUTBOUND_QUEUE",
-        "queue": "cf-webmail-outbound"
+        "queue": "cf-webmail-v2-outbound"
       }
     ],
     "consumers": [
       {
-        "queue": "cf-webmail-inbound",
+        "queue": "cf-webmail-v2-inbound",
         "max_batch_size": 1,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "cf-webmail-inbound-dlq",
+        "dead_letter_queue": "cf-webmail-v2-inbound-dlq",
         "max_concurrency": 1
       },
       {
-        "queue": "cf-webmail-outbound",
+        "queue": "cf-webmail-v2-outbound",
         "max_batch_size": 1,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "cf-webmail-outbound-dlq",
+        "dead_letter_queue": "cf-webmail-v2-outbound-dlq",
         "max_concurrency": 1
       },
       {
-        "queue": "cf-webmail-inbound-dlq",
+        "queue": "cf-webmail-v2-inbound-dlq",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 100,
         "max_concurrency": 1
       },
       {
-        "queue": "cf-webmail-outbound-dlq",
+        "queue": "cf-webmail-v2-outbound-dlq",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 100,

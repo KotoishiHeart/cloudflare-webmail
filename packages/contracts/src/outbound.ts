@@ -1,6 +1,6 @@
 export const OUTBOUND_QUEUE_SCHEMA_VERSION = 1 as const;
-export const OUTBOUND_QUEUE_NAME = 'cf-webmail-outbound' as const;
-export const OUTBOUND_DEAD_LETTER_QUEUE_NAME = 'cf-webmail-outbound-dlq' as const;
+export const OUTBOUND_QUEUE_NAME = 'cf-webmail-v2-outbound' as const;
+export const OUTBOUND_DEAD_LETTER_QUEUE_NAME = 'cf-webmail-v2-outbound-dlq' as const;
 
 export type OutboundQueueMessageV1 = {
   schemaVersion: typeof OUTBOUND_QUEUE_SCHEMA_VERSION;

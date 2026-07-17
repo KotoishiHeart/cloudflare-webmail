@@ -29,8 +29,8 @@ const MANIFEST = {
     d1: { name: 'cf-webmail', id: '11111111-1111-4111-8111-111111111111' },
     r2: { bucket: 'cf-webmail-raw' },
     queues: {
-      inbound: 'cf-webmail-inbound', inboundDlq: 'cf-webmail-inbound-dlq',
-      outbound: 'cf-webmail-outbound', outboundDlq: 'cf-webmail-outbound-dlq',
+      inbound: 'cf-webmail-v2-inbound', inboundDlq: 'cf-webmail-v2-inbound-dlq',
+      outbound: 'cf-webmail-v2-outbound', outboundDlq: 'cf-webmail-v2-outbound-dlq',
     },
   },
   email: { sendingDomains: ['example.com'], routingDomains: ['example.com'] },

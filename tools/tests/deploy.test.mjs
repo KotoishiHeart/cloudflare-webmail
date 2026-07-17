@@ -36,10 +36,10 @@ const MANIFEST = {
     d1: { name: 'cf-webmail', id: D1_ID },
     r2: { bucket: 'cf-webmail-raw' },
     queues: {
-      inbound: 'cf-webmail-inbound',
-      inboundDlq: 'cf-webmail-inbound-dlq',
-      outbound: 'cf-webmail-outbound',
-      outboundDlq: 'cf-webmail-outbound-dlq',
+      inbound: 'cf-webmail-v2-inbound',
+      inboundDlq: 'cf-webmail-v2-inbound-dlq',
+      outbound: 'cf-webmail-v2-outbound',
+      outboundDlq: 'cf-webmail-v2-outbound-dlq',
     },
   },
   email: {
@@ -71,11 +71,11 @@ describe('review-first deployment stage', () => {
     assert.equal(web.d1_databases[0].database_id, D1_ID);
     assert.equal(web.vars.ACCESS_AUD, 'b'.repeat(64));
     assert.equal(jobs.queues.consumers[0].max_concurrency, 1);
-    assert.equal(jobs.queues.consumers[1].dead_letter_queue, 'cf-webmail-outbound-dlq');
-    assert.equal(jobs.queues.consumers[2].queue, 'cf-webmail-inbound-dlq');
+    assert.equal(jobs.queues.consumers[1].dead_letter_queue, 'cf-webmail-v2-outbound-dlq');
+    assert.equal(jobs.queues.consumers[2].queue, 'cf-webmail-v2-inbound-dlq');
     assert.equal(jobs.queues.consumers[2].dead_letter_queue, undefined);
-    assert.equal(jobs.queues.consumers[3].queue, 'cf-webmail-outbound-dlq');
-    assert.equal(jobs.queues.producers[0].queue, 'cf-webmail-inbound');
+    assert.equal(jobs.queues.consumers[3].queue, 'cf-webmail-v2-outbound-dlq');
+    assert.equal(jobs.queues.producers[0].queue, 'cf-webmail-v2-inbound');
   });
 
   it('runs read-only checks before migrations and deploys in dependency order', async () => {
@@ -127,7 +127,7 @@ describe('review-first deployment stage', () => {
   });
 
   it('rejects Queue bindings owned by the archived Worker', () => {
-    const output = queueInfo('cf-webmail-inbound', ['cf-webmail-starter'], ['cf-webmail-starter']);
+    const output = queueInfo('cf-webmail-v2-inbound', ['cf-webmail-starter'], ['cf-webmail-starter']);
     assert.throws(
       () => verifyQueueTopology(output, 'inbound', MANIFEST),
       /already bound/u,

@@ -86,10 +86,10 @@ deployment:
 
 ```bash
 npx wrangler r2 bucket create cf-webmail-raw
-npx wrangler queues create cf-webmail-inbound
-npx wrangler queues create cf-webmail-inbound-dlq
-npx wrangler queues create cf-webmail-outbound
-npx wrangler queues create cf-webmail-outbound-dlq
+npx wrangler queues create cf-webmail-v2-inbound
+npx wrangler queues create cf-webmail-v2-inbound-dlq
+npx wrangler queues create cf-webmail-v2-outbound
+npx wrangler queues create cf-webmail-v2-outbound-dlq
 ```
 
 Onboard every sender domain in **Compute > Email Service > Email Sending** and

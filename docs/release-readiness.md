@@ -35,6 +35,9 @@ self-hosted application, Email Routing domains, and verified Email Sending
 domains. Keep production routing pointed at the archived Worker during this
 gate.
 
+The four initial Queue names must be fresh and report no producers or
+consumers. Never reuse a Queue bound to the archived Worker.
+
 Copy the deployment and provisioning examples into ignored `ops/` paths.
 Replace every placeholder, keep identifiers stable, and never place API,
 Access, R2, or email secrets in either manifest.

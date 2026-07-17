@@ -1,6 +1,6 @@
 export const INBOUND_QUEUE_SCHEMA_VERSION = 2 as const;
-export const INBOUND_QUEUE_NAME = 'cf-webmail-inbound' as const;
-export const INBOUND_DEAD_LETTER_QUEUE_NAME = 'cf-webmail-inbound-dlq' as const;
+export const INBOUND_QUEUE_NAME = 'cf-webmail-v2-inbound' as const;
+export const INBOUND_DEAD_LETTER_QUEUE_NAME = 'cf-webmail-v2-inbound-dlq' as const;
 export const MAX_INBOUND_MESSAGE_BYTES = 25 * 1024 * 1024;
 
 export type InboundRoutingAction = 'store' | 'quarantine';

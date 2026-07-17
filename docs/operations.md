@@ -11,11 +11,16 @@ Create the resources declared by the committed Worker configurations:
 ```bash
 npx wrangler d1 create cf-webmail
 npx wrangler r2 bucket create cf-webmail-raw
-npx wrangler queues create cf-webmail-inbound
-npx wrangler queues create cf-webmail-inbound-dlq
-npx wrangler queues create cf-webmail-outbound
-npx wrangler queues create cf-webmail-outbound-dlq
+npx wrangler queues create cf-webmail-v2-inbound
+npx wrangler queues create cf-webmail-v2-inbound-dlq
+npx wrangler queues create cf-webmail-v2-outbound
+npx wrangler queues create cf-webmail-v2-outbound-dlq
 ```
+
+All four Queue names must be new and unbound. Do not reuse a Queue attached to
+the archived Worker, even when its name looks generic. Initial deployment
+preflight rejects any producer or consumer binding; upgrade preflight rejects
+bindings owned by a Worker outside the reviewed three-Worker deployment.
 
 Put the returned D1 `database_id`, Cloudflare account ID, and resource names in
 an ignored deployment manifest as described in [`deployment.md`](deployment.md).

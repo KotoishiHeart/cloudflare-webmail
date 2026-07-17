@@ -21,7 +21,7 @@
     "producers": [
       {
         "binding": "INBOUND_QUEUE",
-        "queue": "cf-webmail-inbound"
+        "queue": "cf-webmail-v2-inbound"
       }
     ]
   },
