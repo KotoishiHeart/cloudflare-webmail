@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, readFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { validateProvisionManifest } from '../lib/ops-manifest.mjs';
 import { runOpsCli } from '../lib/ops-cli.mjs';
@@ -91,6 +93,37 @@ describe('operations manifest', () => {
         ownerUserId: USER_ID,
       }],
     }), /defaultMailboxId does not reference/u);
+  });
+
+  it('keeps generated provisioning SQL owner-only across forced rewrites', async (context) => {
+    const directory = await mkdtemp(join(tmpdir(), 'cf-webmail-ops-'));
+    context.after(() => rm(directory, { recursive: true, force: true }));
+    const manifestPath = join(directory, 'provision.json');
+    const outputPath = join(directory, 'provision.sql');
+    await writeFile(manifestPath, JSON.stringify({
+      version: 1,
+      users: [{
+        id: USER_ID,
+        email: 'owner@example.com',
+        identities: [{ issuer: 'https://team.cloudflareaccess.com', subject: 'subject' }],
+      }],
+      mailboxes: [{
+        id: MAILBOX_ID,
+        address: 'mail@example.com',
+        ownerUserId: USER_ID,
+      }],
+    }));
+
+    await runOpsCli([
+      'plan', '--manifest', manifestPath, '--output', outputPath,
+    ], fakeIo());
+    assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
+
+    await chmod(outputPath, 0o644);
+    await runOpsCli([
+      'plan', '--manifest', manifestPath, '--output', outputPath, '--force',
+    ], fakeIo());
+    assert.equal((await stat(outputPath)).mode & 0o777, 0o600);
   });
 });
 

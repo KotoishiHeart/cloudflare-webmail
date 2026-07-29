@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { validateProvisionManifest } from './ops-manifest.mjs';
@@ -50,8 +50,15 @@ export async function runOpsCli(argv, io = defaultIo()) {
     const outputPath = required(options, 'output');
     const manifest = validateProvisionManifest(JSON.parse(await readFile(resolve(manifestPath), 'utf8')));
     const output = resolve(outputPath);
-    if (!options.force && await exists(output)) throw new Error(`output already exists: ${output}`);
-    await writeFile(output, renderProvisionSql(manifest), { encoding: 'utf8', flag: options.force ? 'w' : 'wx' });
+    const outputExists = await exists(output);
+    if (!options.force && outputExists) throw new Error(`output already exists: ${output}`);
+    if (outputExists) await chmod(output, 0o600);
+    await writeFile(output, renderProvisionSql(manifest), {
+      encoding: 'utf8',
+      flag: options.force ? 'w' : 'wx',
+      mode: 0o600,
+    });
+    await chmod(output, 0o600);
     io.stdout(`Provision SQL written: ${output}\n`);
     return 0;
   }
