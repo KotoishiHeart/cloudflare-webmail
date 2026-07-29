@@ -74,5 +74,9 @@ describe('authenticated Static Assets', () => {
     expect(worker.headers.get('cache-control')).toContain('no-cache');
     const source = await worker.text();
     expect(source).toContain("url.pathname.startsWith('/api/')");
+    expect(source).toContain("const CACHE = 'cf-webmail-shell-v4'");
+    expect(source).toContain("cache: 'no-cache'");
+    expect(source).toContain("cache: 'reload'");
+    expect(source).not.toContain('caches.match(');
   });
 });

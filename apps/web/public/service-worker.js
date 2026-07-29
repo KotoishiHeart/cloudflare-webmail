@@ -1,4 +1,4 @@
-const CACHE = 'cf-webmail-shell-v3';
+const CACHE = 'cf-webmail-shell-v4';
 const SHELL = [
   '/',
   '/index.html',
@@ -39,7 +39,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+  event.waitUntil(cacheShell());
   self.skipWaiting();
 });
 
@@ -62,29 +62,31 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirst(request, url.pathname === '/admin.html' ? '/admin.html' : '/index.html'));
     return;
   }
-  if (SHELL.includes(url.pathname)) event.respondWith(cacheFirst(request));
+  if (SHELL.includes(url.pathname)) event.respondWith(networkFirst(request, url.pathname));
 });
 
 async function networkFirst(request, fallback) {
+  const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(request);
+    const response = await fetch(new Request(request, { cache: 'no-cache' }));
     if (response.ok) {
-      const cache = await caches.open(CACHE);
       await cache.put(fallback, response.clone());
     }
     return response;
   } catch {
-    return (await caches.match(fallback)) || Response.error();
+    return (await cache.match(fallback)) || Response.error();
   }
 }
 
-async function cacheFirst(request) {
-  const cached = await caches.match(request);
-  if (cached) return cached;
-  const response = await fetch(request);
-  if (response.ok) {
-    const cache = await caches.open(CACHE);
-    await cache.put(request, response.clone());
-  }
-  return response;
+async function cacheShell() {
+  const cache = await caches.open(CACHE);
+  await Promise.all(SHELL.map(async (path) => {
+    const request = new Request(new URL(path, self.location.origin), {
+      cache: 'reload',
+      credentials: 'same-origin',
+    });
+    const response = await fetch(request);
+    if (!response.ok) throw new Error(`Could not cache ${path}: ${response.status}`);
+    await cache.put(path, response);
+  }));
 }
