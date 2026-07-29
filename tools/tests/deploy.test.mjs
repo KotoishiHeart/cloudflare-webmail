@@ -106,9 +106,9 @@ describe('review-first deployment stage', () => {
     assert.ok(report.checks.includes('access-boundary'));
     assert.ok(report.checks.includes('outbound-provider:smtp2go'));
     assert.ok(calls.some((args) => args.includes('--dry-run')));
-    const whoami = calls.find((args) => args.includes('whoami'));
+    const auth = calls.find((args) => args.includes('auth') && args.includes('token'));
     const d1Info = calls.find((args) => args.includes('d1') && args.includes('info'));
-    assert.equal(whoami.includes('--profile'), false);
+    assert.deepEqual(auth.slice(-2), ['--profile', 'fixture-profile']);
     assert.deepEqual(d1Info.slice(-2), ['--profile', 'fixture-profile']);
 
     const mutationCalls = [];
@@ -132,8 +132,11 @@ describe('review-first deployment stage', () => {
 
   it('rejects nonempty initial targets, altered stages, and wrong backups', async () => {
     const { stage, plan } = await stageFixture('guards');
-    const report = await runDeployPreflight(stage, plan, {}, fakeRunner([], 2));
+    const guardCalls = [];
+    const report = await runDeployPreflight(stage, plan, {}, fakeRunner(guardCalls, 2));
     assert.equal(report.databaseEmpty, false);
+    const whoami = guardCalls.find((args) => args.includes('whoami'));
+    assert.equal(whoami.includes('--profile'), false);
     assert.throws(
       () => runDeployApply(stage, plan, report, { secretsFile }, fakeRunner([], 0)),
       /empty D1/u,

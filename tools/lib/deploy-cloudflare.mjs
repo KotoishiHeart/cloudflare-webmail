@@ -17,7 +17,7 @@ export async function runDeployPreflight(stage, plan, options = {}, runner = def
   const jobsConfig = configPath(stage, plan, 'jobs');
   const ingestConfig = configPath(stage, plan, 'ingest');
   const checks = [];
-  check(runner, ['whoami'], { ...options, profile: undefined }, checks, 'wrangler-auth');
+  checkWranglerAuth(runner, options, checks);
   const accessBoundary = await verifyAccessBoundary(
     plan.deployment,
     runner.fetch ?? globalThis.fetch,
@@ -181,6 +181,15 @@ function check(runner, args, options, checks, name) {
   return String(result.stdout ?? '');
 }
 
+function checkWranglerAuth(runner, options, checks) {
+  const namedProfile = typeof options.profile === 'string' && options.profile !== '';
+  const args = namedProfile ? ['auth', 'token', '--json'] : ['whoami'];
+  const stdio = namedProfile ? ['ignore', 'ignore', 'pipe'] : 'pipe';
+  const result = spawn(runner, args, options, stdio);
+  if (result.status !== 0) throw failure('wrangler-auth', result);
+  checks.push('wrangler-auth');
+}
+
 function mutate(runner, args, options, checks, name) {
   const result = spawn(runner, args, options, 'inherit');
   if (result.status !== 0) throw failure(name, result);
@@ -191,7 +200,7 @@ function spawn(runner, args, options, stdio) {
   const profile = options.profile ? ['--profile', options.profile] : [];
   const result = runner.spawn('npx', ['--no-install', 'wrangler', ...args, ...profile], {
     cwd: process.cwd(),
-    encoding: stdio === 'pipe' ? 'utf8' : undefined,
+    encoding: stdio === 'inherit' ? undefined : 'utf8',
     stdio,
     shell: false,
     env: { ...process.env, WRANGLER_LOG_PATH: '/tmp/cf-webmail-wrangler.log' },

@@ -57,7 +57,8 @@ receiving domain, and verify every declared sender domain in SMTP2GO.
 npm run deploy -- preflight --stage ops/deploy-production
 ```
 
-Preflight checks Wrangler authentication, the public Access redirect and its
+Preflight checks the exact Wrangler auth profile selected with `--profile`
+(discarding token output), the public Access redirect and its
 exact team domain/application audience, the exact D1 UUID, R2, all Queues,
 Email Routing settings, the D1 table count, and three dry builds. It sends no
 Access cookie and follows no redirect. The resulting `preflight.json` records
