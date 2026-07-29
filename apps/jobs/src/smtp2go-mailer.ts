@@ -22,7 +22,9 @@ export function createSmtp2goMailer(
       try {
         response = await fetcher(SMTP2GO_SEND_URL, {
           method: 'POST',
-          redirect: 'error',
+          // Workers does not implement redirect: 'error'. Manual mode also prevents
+          // the API key header from being forwarded to a redirect destination.
+          redirect: 'manual',
           signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MILLISECONDS),
           headers: {
             accept: 'application/json',
@@ -125,6 +127,12 @@ async function readBoundedResponse(response: Response): Promise<string> {
 
 function responseError(status: number, body: string): PermanentOutboundError | RetryableOutboundError {
   const detail = providerErrorMessage(body);
+  if (status >= 300 && status < 400) {
+    return new RetryableOutboundError(
+      'smtp2go_redirected',
+      'SMTP2GO returned an unexpected redirect',
+    );
+  }
   if (status === 429) {
     return new RetryableOutboundError('smtp2go_rate_limited', detail ?? 'SMTP2GO rate limit exceeded');
   }

@@ -22,7 +22,7 @@ describe('SMTP2GO outbound adapter', () => {
     const [url, init] = fetcher.mock.calls[0] ?? [];
     expect(url).toBe('https://api.smtp2go.com/v3/email/send');
     expect(init?.method).toBe('POST');
-    expect(init?.redirect).toBe('error');
+    expect(init?.redirect).toBe('manual');
     expect(new Headers(init?.headers).get('x-smtp2go-api-key')).toBe(API_KEY);
     const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
     expect(body).toMatchObject({
@@ -68,6 +68,14 @@ describe('SMTP2GO outbound adapter', () => {
   });
 
   it('maps rate limits, server failures, and network failures to retryable errors', async () => {
+    const redirected = createSmtp2goMailer(API_KEY, vi.fn(async () => (
+      new Response('', { status: 307, headers: { location: 'https://example.net/' } })
+    )) as typeof fetch);
+    await expect(redirected.send(message())).rejects.toMatchObject({
+      name: 'RetryableOutboundError',
+      code: 'smtp2go_redirected',
+    });
+
     const rateLimited = createSmtp2goMailer(API_KEY, vi.fn(async () => (
       new Response(JSON.stringify({ error: 'API key ratelimit exceeded' }), { status: 429 })
     )) as typeof fetch);
