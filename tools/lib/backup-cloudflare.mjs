@@ -68,7 +68,7 @@ export function defaultRunner() {
 export function queryD1(sql, options, runner) {
   const output = capture(runner, [
     'd1', 'execute', options.database, targetFlag(options), '--command', sql,
-    '--json', ...persistenceArgs(options), '--config', options.config,
+    '--json', ...persistenceArgs(options), '--config', options.config, ...profileArgs(options),
   ]);
   const payload = parseJsonOutput(output);
   return Array.isArray(payload)
@@ -118,4 +118,8 @@ function targetFlag(options) {
 
 function persistenceArgs(options) {
   return options.persistTo ? ['--persist-to', options.persistTo] : [];
+}
+
+function profileArgs(options) {
+  return options.profile ? ['--profile', options.profile] : [];
 }

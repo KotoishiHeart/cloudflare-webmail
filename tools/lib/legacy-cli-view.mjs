@@ -48,7 +48,7 @@ export function legacyMigrationUsage() {
     `  capacity-rehearsal --stage DIR --database FILE --output FILE \\\n` +
     `    [--provisioning provision.json]\n` +
     `  bulk-apply --stage DIR --rclone-destination REMOTE:BUCKET \\\n` +
-    `    (--local|--remote) --yes [--rclone-config FILE] [--tree DIR]\n` +
+    `    (--local|--remote) --yes [--rclone-config FILE] [--tree DIR] [--profile NAME]\n` +
     `  bulk-audit --stage DIR --tree DIR --rclone-destination REMOTE:BUCKET\n` +
-    `    --report FILE --output FILE (--local|--remote) [--rclone-config FILE]\n`;
+    `    --report FILE --output FILE (--local|--remote) [--rclone-config FILE] [--profile NAME]\n`;
 }

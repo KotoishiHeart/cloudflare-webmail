@@ -52,6 +52,7 @@ describe('legacy bulk apply', () => {
       remote: false,
       database: 'cf-webmail',
       config: 'apps/web/wrangler.jsonc',
+      profile: 'production-profile',
       tree: treePath,
       rcloneDestination: 'test-r2:cf-webmail-raw',
       transfers: 4,
@@ -69,6 +70,11 @@ describe('legacy bulk apply', () => {
     const checkIndex = calls.findIndex((call) => call.command === 'rclone' && call.args[0] === 'check');
     const d1FileIndex = calls.findIndex((call) => call.command === 'npx' && call.args.includes('--file'));
     assert.ok(checkIndex >= 0 && d1FileIndex > checkIndex);
+    assert.ok(calls.filter((call) => call.command === 'npx').every((call) => {
+      const index = call.args.indexOf('--profile');
+      return index >= 0 && call.args[index + 1] === 'production-profile';
+    }));
+    assert.equal(state.target.profile, 'production-profile');
 
     const callCount = calls.length;
     const resumed = await applyLegacyStageBulk(stage, options, runner);
@@ -98,6 +104,11 @@ describe('legacy bulk apply', () => {
     assert.ok(auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'check'));
     assert.ok(!auditCalls.some((call) => call.command === 'rclone' && call.args[0] === 'copy'));
     assert.ok(!auditCalls.some((call) => call.command === 'npx' && call.args.includes('--file')));
+    assert.ok(auditCalls.filter((call) => call.command === 'npx').every((call) => {
+      const index = call.args.indexOf('--profile');
+      return index >= 0 && call.args[index + 1] === 'production-profile';
+    }));
+    assert.equal(audit.target.profile, 'production-profile');
   });
 
   it('audits every migrated configuration source against its target row', () => {

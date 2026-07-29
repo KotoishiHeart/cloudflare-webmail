@@ -378,6 +378,7 @@ npm run migrate:legacy -- bulk-apply \
   --rclone-config /secure/rclone.conf \
   --database cf-webmail --remote --yes \
   --config ops/deploy-production/configs/web.wrangler.json \
+  --profile cf-webmail-production \
   --transfers 16 --checkers 32
 ```
 
@@ -402,6 +403,7 @@ npm run migrate:legacy -- bulk-audit \
   --rclone-config /secure/rclone.conf \
   --database cf-webmail --remote \
   --config ops/deploy-production/configs/web.wrangler.json \
+  --profile cf-webmail-production \
   --report ops/evidence/final-r2-check.txt \
   --output ops/evidence/final-legacy-audit.json
 ```

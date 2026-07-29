@@ -34,6 +34,7 @@ export async function auditLegacyStageBulk(stageInput, options, runner = default
     target: {
       mode: options.local ? 'local' : 'remote',
       database: options.database,
+      profile: options.profile ?? null,
       rcloneDestination: destination,
     },
     r2: {

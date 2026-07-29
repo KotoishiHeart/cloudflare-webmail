@@ -21,6 +21,7 @@ export async function applyLegacyStageBulk(stageInput, options, runner = default
     mode: options.local ? 'local' : 'remote',
     database: options.database,
     config: resolve(options.config),
+    profile: options.profile ?? null,
     persistTo: options.persistTo === undefined ? null : resolve(options.persistTo),
     rcloneDestination: destination,
     rcloneConfig: options.rcloneConfig === undefined ? null : resolve(options.rcloneConfig),
@@ -67,7 +68,7 @@ export async function applyLegacyStageBulk(stageInput, options, runner = default
     run(runner, 'npx', [
       '--no-install', 'wrangler', 'd1', 'execute', options.database, targetFlag(options),
       ...persistenceArgs(options), '--file', join(stage, sqlFile.file),
-      '--yes', '--config', options.config,
+      '--yes', '--config', options.config, ...profileArgs(options),
     ]);
     state.nextSql = index + 1;
     await writeState(statePath, state);
@@ -217,6 +218,10 @@ function targetFlag(options) {
 
 function persistenceArgs(options) {
   return options.persistTo ? ['--persist-to', options.persistTo] : [];
+}
+
+function profileArgs(options) {
+  return options.profile ? ['--profile', options.profile] : [];
 }
 
 function integer(value, minimum, maximum, name) {
