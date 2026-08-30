@@ -132,6 +132,9 @@ function renderActions(message, handlers) {
   }
   addCallbackAction('返信', handlers.onReply);
   addCallbackAction('転送', handlers.onForward);
+  if (message.direction === 'outbound' && message.status === 'failed') {
+    addCallbackAction('再送', handlers.onRetry);
+  }
   addPatchAction(message.isRead ? '未読にする' : '既読にする', { isRead: !message.isRead }, handlers.onPatch);
   addPatchAction(message.isStarred ? 'スター解除' : 'スター', { isStarred: !message.isStarred }, handlers.onPatch);
   if (!message.isDeleted) {

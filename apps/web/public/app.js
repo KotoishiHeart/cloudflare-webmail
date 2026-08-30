@@ -44,6 +44,7 @@ import {
 import { bindShell, renderFolder, renderSession, showStatus } from './ui/shell.js';
 import { registerServiceWorker } from './ui/pwa.js';
 import { createMailboxSettingsController } from './ui/mailbox-settings-controller.js';
+import { retryFailedMessage } from './ui/outbound-retry.js';
 
 const settings = createMailboxSettingsController({
   loadMessages,
@@ -195,6 +196,7 @@ async function openMessage(messageId) {
       onPatch: (patch) => messageActions.apply(messageId, patch, detail.message),
       onReply: () => openReplyCompose(selectedMailbox(), detail, body),
       onForward: () => openForwardCompose(selectedMailbox(), detail, body),
+      onRetry: () => retryFailedMessage(messageId, loadMessages, openMessage, handleError),
       onLabels: (labelIds) => settings.saveMessageLabels(messageId, labelIds),
       availableLabels: state.labels,
       showHtmlByDefault: state.preferences.showHtmlByDefault,

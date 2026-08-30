@@ -30,6 +30,7 @@ import {
   undoRuleRun,
 } from './rule-api.js';
 import { createOutboundMessage, OutboundQueueUnavailableError } from './outbound-api.js';
+import { routeOutboundRetry } from './outbound-retry-api.js';
 import { ComposeMediaTypeError } from './compose-input.js';
 import { BulkMessageMediaTypeError } from './bulk-message-input.js';
 import { routeAdminApi } from './admin-router.js';
@@ -216,7 +217,6 @@ async function routeKnownApi(
       )
       : apiError('method_not_allowed', 405, 'GET');
   }
-
   const object = pathname.match(/^\/api\/messages\/([^/]+)\/(body|raw)$/u);
   if (object !== null) {
     if (request.method !== 'GET') return apiError('method_not_allowed', 405, 'GET');
@@ -235,9 +235,9 @@ async function routeKnownApi(
     }
     return downloadRawMessage(env.RAW_EMAILS, env.DB, identity, object[1] ?? '');
   }
-
-  const message = pathname.match(/^\/api\/messages\/([^/]+)$/u);
+  const message = pathname.match(/^\/api\/messages\/([^/]+)(?:\/(retry))?$/u);
   if (message !== null) {
+    if (message[2] === 'retry') return routeOutboundRetry(request, env, identity, message[1] ?? '', now);
     if (request.method === 'GET') {
       return getMessageDetail(env.DB, identity, message[1] ?? '');
     }

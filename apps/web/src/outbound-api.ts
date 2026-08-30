@@ -22,7 +22,7 @@ import {
   prepareArchiveForStorage,
 } from './outbound-archive.js';
 
-type OutboundApiEnv = Pick<WebEnv, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>;
+export type OutboundApiEnv = Pick<WebEnv, 'DB' | 'RAW_EMAILS' | 'OUTBOUND_QUEUE'>;
 
 export async function createOutboundMessage(
   request: Request,
@@ -163,9 +163,9 @@ function recipients(input: Awaited<ReturnType<typeof readComposeInput>>): Outbou
   );
 }
 
-async function enqueue(
+export async function enqueue(
   queue: Queue<unknown>,
-  request: StoredOutboundRequest,
+  request: Pick<StoredOutboundRequest, 'messageId' | 'mailboxId'>,
 ): Promise<void> {
   try {
     await queue.send(createOutboundQueueMessage(request.messageId, request.mailboxId), {

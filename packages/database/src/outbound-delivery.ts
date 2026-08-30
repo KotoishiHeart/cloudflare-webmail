@@ -104,6 +104,38 @@ export async function failOutboundDelivery(
   return Number(results[1]?.meta.changes ?? 0) === 1;
 }
 
+export async function retryOutboundDelivery(
+  db: D1Database,
+  messageIdInput: string,
+  mailboxIdInput: string,
+  nowInput: number,
+): Promise<boolean> {
+  const messageId = normalizeId(messageIdInput, 'messageId');
+  const mailboxId = normalizeId(mailboxIdInput, 'mailboxId');
+  const now = requireTimestamp(nowInput);
+  const results = await db.batch([
+    db.prepare(`
+      UPDATE outbound_deliveries
+      SET status = 'queued', attempt_count = 0, enqueued_at = 1,
+        next_attempt_at = ?, lease_expires_at = 0, lease_token = '',
+        provider_message_id = '', sent_at = NULL,
+        last_error_code = '', last_error_message = '', updated_at = ?
+      WHERE message_id = ? AND mailbox_id = ? AND status = 'failed'
+    `).bind(now, now, messageId, mailboxId),
+    db.prepare(`
+      UPDATE messages
+      SET status = 'queued', processing_error = '', updated_at = ?
+      WHERE id = ? AND mailbox_id = ? AND direction = 'outbound'
+        AND EXISTS (
+          SELECT 1 FROM outbound_deliveries
+          WHERE message_id = ? AND mailbox_id = ? AND status = 'queued'
+        )
+    `).bind(now, messageId, mailboxId, messageId, mailboxId),
+  ]);
+  return Number(results[0]?.meta.changes ?? 0) === 1
+    && Number(results[1]?.meta.changes ?? 0) === 1;
+}
+
 export async function exhaustOutboundDelivery(
   db: D1Database,
   messageIdInput: string,

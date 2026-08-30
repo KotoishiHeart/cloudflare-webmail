@@ -441,6 +441,57 @@ describe('outbound delivery', () => {
     });
   });
 
+  it('requeues a failed outbound message for an authorized resend', async () => {
+    const created = await compose(crypto.randomUUID(), 'Resend failure');
+    const payload = await created.json<{ data: { messageId: string } }>();
+    const queued = queueItem(payload.data.messageId);
+    await handleOutboundBatch([queued.item], {
+      db: env.DB,
+      rawEmails: env.RAW_EMAILS,
+      mailer: testMailer(vi.fn(async () => {
+        throw new PermanentOutboundError('smtp2go_rejected', 'invalid payload');
+      })),
+      now: () => NOW + 300_000,
+    });
+    const retry = await handleWebRequest(new Request(
+      `${ORIGIN}/api/messages/${payload.data.messageId}/retry`,
+      { method: 'POST', headers: { origin: ORIGIN } },
+    ), env, {
+      authenticate: async () => ({ ok: true, identity: IDENTITY }),
+      now: () => NOW + 301_000,
+    });
+    expect(retry.status).toBe(202);
+    await expect(retry.json()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        messageId: payload.data.messageId,
+        mailboxId: MAILBOX_ID,
+        status: 'queued',
+      },
+    });
+    const row = await env.DB.prepare(`
+      SELECT od.status, od.attempt_count, od.last_error_code,
+        m.status AS message_status
+      FROM outbound_deliveries AS od JOIN messages AS m ON m.id = od.message_id
+      WHERE od.message_id = ?
+    `).bind(payload.data.messageId).first<Record<string, string | number>>();
+    expect(row).toEqual({
+      status: 'queued',
+      attempt_count: 0,
+      last_error_code: '',
+      message_status: 'queued',
+    });
+
+    const duplicateRetry = await handleWebRequest(new Request(
+      `${ORIGIN}/api/messages/${payload.data.messageId}/retry`,
+      { method: 'POST', headers: { origin: ORIGIN } },
+    ), env, {
+      authenticate: async () => ({ ok: true, identity: IDENTITY }),
+      now: () => NOW + 302_000,
+    });
+    expect(duplicateRetry.status).toBe(409);
+  });
+
   it('delays retryable provider errors and retains queued state', async () => {
     const created = await compose('019c315c-1f20-7000-8000-000000000517', 'Retry later');
     const payload = await created.json<{ data: { messageId: string } }>();

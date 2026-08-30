@@ -163,6 +163,12 @@ export async function patchMessage(messageId, patch) {
   });
 }
 
+export async function retryMessage(messageId) {
+  return requestJson(`/api/messages/${encodeURIComponent(messageId)}/retry`, {
+    method: 'POST',
+  });
+}
+
 export async function patchMessages(mailboxId, messageIds, patch) {
   return requestJson(`/api/mailboxes/${encodeURIComponent(mailboxId)}/messages`, {
     method: 'PATCH',
