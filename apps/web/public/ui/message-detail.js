@@ -16,6 +16,9 @@ export function showMessageDetail(detail, body, handlers) {
   panel.classList.add('open');
   setText('#detail-date', fullDate(message.receivedAt));
   setText('#detail-state', statusLabel(message, body.source));
+  const detailError = document.querySelector('#detail-error');
+  detailError.hidden = !message.processingErrorMessage;
+  setText('#detail-error-message', message.processingErrorMessage);
   setText('#detail-subject', message.subject || '（件名なし）');
   setText('#detail-sender', message.sender || '差出人不明');
   setText('#detail-recipients', message.recipients || message.deliveredTo);
@@ -35,6 +38,8 @@ export function showDetailLoading() {
   content.hidden = false;
   panel.classList.add('open');
   setText('#detail-state', '読み込み中');
+  document.querySelector('#detail-error').hidden = true;
+  setText('#detail-error-message', '');
   setText('#detail-subject', 'メッセージを読み込んでいます…');
   setText('#detail-body', '');
   clearHtmlBody();

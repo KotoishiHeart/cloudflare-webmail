@@ -33,6 +33,7 @@ export type WebMessageSummary = {
 export type WebMessageDetail = WebMessageSummary & {
   role: MailboxRole;
   processingError: string;
+  processingErrorMessage: string;
   envelopeFrom: string;
   deliveredTo: string;
   rfcMessageId: string;

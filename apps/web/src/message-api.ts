@@ -130,6 +130,7 @@ function publicMessage(message: WebMessageDetail) {
     direction: message.direction,
     status: message.status,
     processingError: message.processingError,
+    processingErrorMessage: message.processingErrorMessage,
     subject: message.subject,
     sender: message.sender,
     recipients: message.recipients,

@@ -416,11 +416,28 @@ describe('outbound delivery', () => {
     expect(queued.ack).toHaveBeenCalledOnce();
     expect(queued.retry).not.toHaveBeenCalled();
     const row = await env.DB.prepare(`
-      SELECT status, last_error_code FROM outbound_deliveries WHERE message_id = ?
+      SELECT status, last_error_code, last_error_message
+      FROM outbound_deliveries WHERE message_id = ?
     `).bind(payload.data.messageId).first<Record<string, string>>();
     expect(row).toEqual({
       status: 'failed',
       last_error_code: 'smtp2go_rejected',
+      last_error_message: 'sender domain is unavailable',
+    });
+
+    const detail = await handleWebRequest(new Request(
+      `${ORIGIN}/api/messages/${payload.data.messageId}`,
+    ), env, {
+      authenticate: async () => ({ ok: true, identity: IDENTITY }),
+      now: () => NOW + 180_000,
+    });
+    await expect(detail.json()).resolves.toMatchObject({
+      data: {
+        message: {
+          processingError: 'smtp2go_rejected',
+          processingErrorMessage: 'sender domain is unavailable',
+        },
+      },
     });
   });
 

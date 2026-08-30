@@ -67,6 +67,23 @@ describe('SMTP2GO outbound adapter', () => {
     });
   });
 
+  it('keeps nested SMTP2GO error details from HTTP 400 responses', async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      request_id: 'request-400',
+      data: {
+        error_code: 'E_ApiResponseCodes.INVALID_PARAMETER',
+        error: 'The message is too large',
+      },
+    }), { status: 400 }));
+    const mailer = createSmtp2goMailer(API_KEY, fetcher as typeof fetch);
+
+    await expect(mailer.send(message())).rejects.toMatchObject({
+      name: 'PermanentOutboundError',
+      code: 'smtp2go_rejected',
+      message: 'E_ApiResponseCodes.INVALID_PARAMETER: The message is too large',
+    });
+  });
+
   it('maps rate limits, server failures, and network failures to retryable errors', async () => {
     const redirected = createSmtp2goMailer(API_KEY, vi.fn(async () => (
       new Response('', { status: 307, headers: { location: 'https://example.net/' } })

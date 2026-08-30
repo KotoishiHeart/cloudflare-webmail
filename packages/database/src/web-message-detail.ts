@@ -26,7 +26,14 @@ export async function getAuthorizedWebMessage(
       m.id, m.mailbox_id, m.direction, m.status, m.subject, m.sender,
       m.recipients, m.received_at, m.text_preview, m.raw_size,
       m.attachment_count, m.is_read, m.is_starred, m.is_archived, m.is_deleted,
-      m.processing_error, m.envelope_from, m.delivered_to, m.rfc_message_id,
+      m.processing_error,
+      COALESCE((
+        SELECT od.last_error_message
+        FROM outbound_deliveries AS od
+        WHERE od.message_id = m.id
+        LIMIT 1
+      ), '') AS processing_error_message,
+      m.envelope_from, m.delivered_to, m.rfc_message_id,
       m.in_reply_to, m.references_header, m.cc, m.reply_to, m.date_header,
       m.raw_key, m.body_text_key, m.body_html_key, mm.role
     FROM access_identities AS ai

@@ -167,7 +167,15 @@ function explicitRejection(response: Record<string, unknown> | null): string | n
   const failures = Array.isArray(data.failures) ? data.failures : [];
   const failed = typeof data.failed === 'number' ? data.failed : 0;
   const succeeded = typeof data.succeeded === 'number' ? data.succeeded : 1;
-  if (failed < 1 && succeeded !== 0 && failures.length === 0 && response.error === undefined) {
+  const hasProviderError = [
+    response.error,
+    response.message,
+    response.error_code,
+    data.error,
+    data.message,
+    data.error_code,
+  ].some((value) => value !== undefined);
+  if (failed < 1 && succeeded !== 0 && failures.length === 0 && !hasProviderError) {
     return null;
   }
   return providerErrorMessage(JSON.stringify(response)) ?? 'SMTP2GO rejected the message';
@@ -186,18 +194,42 @@ function providerErrorMessage(body: string): string | null {
   try {
     const value: unknown = JSON.parse(body);
     if (!isRecord(value)) return null;
+    const data = isRecord(value.data) ? value.data : null;
+
+    // SMTP2GO puts HTTP 400 details under data.error_code and data.error.
+    // Include both values so the delivery record explains the provider rejection.
+    const nestedError = typeof data?.error === 'string' ? data.error.trim() : '';
+    const nestedCode = typeof data?.error_code === 'string' ? data.error_code.trim() : '';
+    if (nestedError !== '') {
+      return cleanMessage(nestedCode === '' ? nestedError : `${nestedCode}: ${nestedError}`);
+    }
+    if (nestedCode !== '') return cleanMessage(nestedCode);
+
     for (const candidate of [value.error, value.message, value.error_code]) {
       if (typeof candidate === 'string' && candidate.trim() !== '') {
         return cleanMessage(candidate);
       }
     }
-    const data = isRecord(value.data) ? value.data : null;
     const failures = Array.isArray(data?.failures) ? data.failures : [];
     const first = failures[0];
     if (typeof first === 'string' && first.trim() !== '') return cleanMessage(first);
     if (isRecord(first)) {
-      const detail = first.error ?? first.message;
+      const detail = first.error ?? first.message ?? first.error_code;
       if (typeof detail === 'string' && detail.trim() !== '') return cleanMessage(detail);
+    }
+
+    const fieldErrors = isRecord(data?.field_validation_errors)
+      ? data.field_validation_errors
+      : isRecord(value.field_validation_errors) ? value.field_validation_errors : null;
+    if (fieldErrors !== null) {
+      for (const [field, fieldError] of Object.entries(fieldErrors)) {
+        const detail = isRecord(fieldError)
+          ? fieldError.message ?? fieldError.error ?? fieldError.error_code
+          : fieldError;
+        if (typeof detail === 'string' && detail.trim() !== '') {
+          return cleanMessage(`${field}: ${detail}`);
+        }
+      }
     }
   } catch {
     return null;

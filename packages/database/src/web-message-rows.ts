@@ -58,6 +58,7 @@ export function toWebMessageDetail(
     ...toWebMessageSummary(row),
     role: row.role,
     processingError: row.processing_error,
+    processingErrorMessage: row.processing_error_message,
     envelopeFrom: row.envelope_from,
     deliveredTo: row.delivered_to,
     rfcMessageId: row.rfc_message_id,
@@ -75,6 +76,7 @@ export function toWebMessageDetail(
 export type WebMessageDetailRow = WebMessageRow & {
   role: string;
   processing_error: string;
+  processing_error_message: string;
   envelope_from: string;
   delivered_to: string;
   rfc_message_id: string;
