@@ -1,4 +1,5 @@
 import type { OutboundMailerMessage } from './outbound-mailer.js';
+import { createSmtp2goHeaders } from './smtp2go-payload.js';
 
 export type RequestSummary = {
   deliveryId: string;
@@ -10,6 +11,7 @@ export type RequestSummary = {
   bodies: { textBytes: number; htmlBytes: number };
   customHeaders: Array<{
     name: string;
+    originalValueChars: number;
     valueChars: number;
     valueBytes: number;
     hasControlCharacters: boolean;
@@ -23,6 +25,7 @@ export type RequestSummary = {
 export function summarizeRequest(message: OutboundMailerMessage, requestBody: string): RequestSummary {
   const recipients = [...(message.to ?? []), ...(message.cc ?? []), ...(message.bcc ?? [])];
   const attachments = message.attachments ?? [];
+  const providerHeaders = createSmtp2goHeaders(message.headers);
   return {
     deliveryId: message.deliveryId,
     requestJsonBytes: utf8ByteLength(requestBody),
@@ -41,8 +44,9 @@ export function summarizeRequest(message: OutboundMailerMessage, requestBody: st
       textBytes: utf8ByteLength(message.text),
       htmlBytes: utf8ByteLength(message.html),
     },
-    customHeaders: Object.entries(message.headers).map(([name, value]) => ({
+    customHeaders: providerHeaders.map(({ header: name, value }) => ({
       name,
+      originalValueChars: message.headers[name]?.length ?? value.length,
       valueChars: value.length,
       valueBytes: utf8ByteLength(value),
       hasControlCharacters: /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value),

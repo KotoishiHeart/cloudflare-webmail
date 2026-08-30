@@ -46,6 +46,35 @@ describe('SMTP2GO outbound adapter', () => {
     expect(JSON.stringify(body)).not.toContain(API_KEY);
   });
 
+  it('keeps a long References header within SMTP2GO custom header limits', async () => {
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(
+      JSON.stringify({ data: { succeeded: 1, failed: 0, failures: [] } }),
+      { status: 200 },
+    ));
+    const mailer = createSmtp2goMailer(API_KEY, fetcher as typeof fetch);
+    const references = [
+      'old',
+      'older',
+      'recent',
+      'latest',
+    ].map((label) => `<${label}-${'x'.repeat(70)}@example.com>`).join(' ');
+
+    await expect(mailer.send({
+      ...message(),
+      headers: { References: references },
+    })).resolves.toBeDefined();
+
+    const [, init] = fetcher.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as {
+      custom_headers: Array<{ header: string; value: string }>;
+    };
+    const referencesHeader = body.custom_headers.find(({ header }) => header === 'References');
+    expect(references.length).toBeGreaterThan(255);
+    expect(referencesHeader?.value.length).toBeLessThanOrEqual(255);
+    expect(referencesHeader?.value).toContain('<latest-');
+    expect(referencesHeader?.value).not.toContain('<old-');
+  });
+
   it('uses a local acceptance identifier when a successful response has no ID', async () => {
     const fetcher = vi.fn(async () => new Response('', { status: 200 }));
     const mailer = createSmtp2goMailer(API_KEY, fetcher as typeof fetch);
