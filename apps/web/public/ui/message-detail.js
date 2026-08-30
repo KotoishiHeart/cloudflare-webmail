@@ -133,7 +133,7 @@ function renderActions(message, handlers) {
   addCallbackAction('返信', handlers.onReply);
   addCallbackAction('転送', handlers.onForward);
   if (message.direction === 'outbound' && message.status === 'failed') {
-    addCallbackAction('再送', handlers.onRetry);
+    addRetryAction(handlers.onRetry);
   }
   addPatchAction(message.isRead ? '未読にする' : '既読にする', { isRead: !message.isRead }, handlers.onPatch);
   addPatchAction(message.isStarred ? 'スター解除' : 'スター', { isStarred: !message.isStarred }, handlers.onPatch);
@@ -157,6 +157,29 @@ function addCallbackAction(label, callback, className = '') {
   button.textContent = label;
   button.className = className;
   button.addEventListener('click', callback);
+  actions.append(button);
+}
+
+function addRetryAction(callback) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = '再送';
+  let running = false;
+  button.addEventListener('click', async () => {
+    if (running) return;
+    running = true;
+    button.disabled = true;
+    button.textContent = '再送中…';
+    try {
+      await callback();
+    } finally {
+      running = false;
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = '再送';
+      }
+    }
+  });
   actions.append(button);
 }
 
