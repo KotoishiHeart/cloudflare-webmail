@@ -1,4 +1,5 @@
 import { formatBytes, fullDate } from './format.js';
+import { shouldShowHtmlByDefault } from './body-display.js';
 
 const panel = document.querySelector('#detail-panel');
 const placeholder = document.querySelector('#detail-placeholder');
@@ -72,7 +73,7 @@ function renderBody(message, body, showHtmlByDefault) {
   };
   showHtml.onclick = selectHtml;
   showText.onclick = selectText;
-  if (body.html !== null && showHtmlByDefault) selectHtml();
+  if (shouldShowHtmlByDefault(body, showHtmlByDefault)) selectHtml();
   else selectText();
 }
 

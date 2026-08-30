@@ -15,6 +15,7 @@ const SHELL = [
   '/styles/responsive.css',
   '/styles/admin.css',
   '/ui/api.js',
+  '/ui/body-display.js',
   '/ui/admin-api.js',
   '/ui/admin-dom.js',
   '/ui/admin-events.js',
