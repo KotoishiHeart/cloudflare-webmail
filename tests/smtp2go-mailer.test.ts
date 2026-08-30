@@ -84,6 +84,52 @@ describe('SMTP2GO outbound adapter', () => {
     });
   });
 
+  it('logs safe request and provider validation diagnostics', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({
+      request_id: 'request-400',
+      data: {
+        error_code: 'E_ApiResponseCodes.NON_VALIDATING_IN_PAYLOAD',
+        error: 'The request payload is invalid',
+        field_validation_errors: {
+          fieldname: 'custom_headers',
+          message: 'The header value for recipient@example.net is invalid',
+        },
+      },
+    }), { status: 400, headers: { 'content-type': 'application/json' } }));
+    const mailer = createSmtp2goMailer(API_KEY, fetcher as typeof fetch);
+
+    await expect(mailer.send(message())).rejects.toMatchObject({
+      code: 'smtp2go_rejected',
+      message: 'E_ApiResponseCodes.NON_VALIDATING_IN_PAYLOAD: custom_headers: The header value for recipient@example.net is invalid',
+    });
+
+    const entry = JSON.parse(String(log.mock.calls[0]?.[0])) as Record<string, any>;
+    expect(entry).toMatchObject({
+      event: 'smtp2go.send_failed',
+      failureKind: 'http_error',
+      httpStatus: 400,
+      request: {
+        deliveryId: 'delivery-123',
+        recipientCounts: { to: 1, cc: 1, bcc: 1 },
+        subject: { chars: 13 },
+        bodies: { textBytes: 10, htmlBytes: 16 },
+        attachments: { count: 1, totalBytes: 4 },
+      },
+      response: {
+        format: 'json',
+        errorCode: 'E_ApiResponseCodes.NON_VALIDATING_IN_PAYLOAD',
+        fieldValidationErrors: [{
+          field: 'custom_headers',
+          message: 'The header value for [redacted-email] is invalid',
+        }],
+      },
+    });
+    expect(JSON.stringify(entry)).not.toContain(API_KEY);
+    expect(JSON.stringify(entry)).not.toContain('recipient@example.net');
+    log.mockRestore();
+  });
+
   it('maps rate limits, server failures, and network failures to retryable errors', async () => {
     const redirected = createSmtp2goMailer(API_KEY, vi.fn(async () => (
       new Response('', { status: 307, headers: { location: 'https://example.net/' } })

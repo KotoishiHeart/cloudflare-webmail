@@ -1,10 +1,11 @@
 import { PermanentOutboundError, RetryableOutboundError } from './outbound-errors.js';
-import type {
-  OutboundMailer,
-  OutboundMailerAttachment,
-  OutboundMailerMessage,
-} from './outbound-mailer.js';
-
+import type { OutboundMailer } from './outbound-mailer.js';
+import {
+  logSmtp2goFailure,
+  normalizedFieldValidationErrors,
+  summarizeRequest,
+} from './smtp2go-diagnostics.js';
+import { createSmtp2goPayload } from './smtp2go-payload.js';
 const SMTP2GO_SEND_URL = 'https://api.smtp2go.com/v3/email/send';
 const MAX_PROVIDER_RESPONSE_BYTES = 64 * 1024;
 const PROVIDER_TIMEOUT_MILLISECONDS = 30 * 1000;
@@ -18,6 +19,8 @@ export function createSmtp2goMailer(
   return {
     provider: PROVIDER,
     async send(message) {
+      const requestBody = JSON.stringify(createSmtp2goPayload(message));
+      const requestSummary = summarizeRequest(message, requestBody);
       let response: Response;
       try {
         response = await fetcher(SMTP2GO_SEND_URL, {
@@ -31,19 +34,49 @@ export function createSmtp2goMailer(
             'content-type': 'application/json',
             'x-smtp2go-api-key': apiKey,
           },
-          body: JSON.stringify(payload(message)),
+          body: requestBody,
         });
-      } catch {
+      } catch (error) {
+        logSmtp2goFailure({
+          kind: 'request_error',
+          request: requestSummary,
+          ...(error instanceof Error ? { error } : {}),
+        });
         throw new RetryableOutboundError(
           'smtp2go_network_error',
           'SMTP2GO API request failed before a response was received',
         );
       }
-      const body = await readBoundedResponse(response);
-      if (!response.ok) throw responseError(response.status, body);
+      let body: string;
+      try {
+        body = await readBoundedResponse(response);
+      } catch (error) {
+        logSmtp2goFailure({
+          kind: 'response_error',
+          request: requestSummary,
+          status: response.status,
+          ...(error instanceof Error ? { error } : {}),
+        });
+        throw error;
+      }
+      if (!response.ok) {
+        logSmtp2goFailure({
+          kind: 'http_error',
+          request: requestSummary,
+          status: response.status,
+          responseBody: body,
+        });
+        throw responseError(response.status, body);
+      }
       const parsed = parseResponse(body);
       const rejection = explicitRejection(parsed);
       if (rejection !== null) {
+        logSmtp2goFailure({
+          kind: 'provider_rejection',
+          request: requestSummary,
+          status: response.status,
+          responseBody: body,
+        });
         throw new PermanentOutboundError('smtp2go_rejected', rejection);
       }
       return {
@@ -51,44 +84,6 @@ export function createSmtp2goMailer(
       };
     },
   };
-}
-
-function payload(message: OutboundMailerMessage): Record<string, unknown> {
-  return {
-    sender: sender(message.from),
-    ...(message.to === undefined ? {} : { to: message.to }),
-    ...(message.cc === undefined ? {} : { cc: message.cc }),
-    ...(message.bcc === undefined ? {} : { bcc: message.bcc }),
-    subject: message.subject,
-    text_body: message.text,
-    html_body: message.html,
-    custom_headers: Object.entries(message.headers).map(([header, value]) => ({ header, value })),
-    ...(message.attachments === undefined
-      ? {}
-      : { attachments: message.attachments.map(providerAttachment) }),
-  };
-}
-
-function sender(from: OutboundMailerMessage['from']): string {
-  if (from.name === '') return from.email;
-  return `"${from.name.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}" <${from.email}>`;
-}
-
-function providerAttachment(attachment: OutboundMailerAttachment): Record<string, string> {
-  return {
-    filename: attachment.filename,
-    mimetype: attachment.type,
-    fileblob: arrayBufferToBase64(attachment.content),
-  };
-}
-
-function arrayBufferToBase64(value: ArrayBuffer): string {
-  const bytes = new Uint8Array(value);
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-  }
-  return btoa(binary);
 }
 
 async function readBoundedResponse(response: Response): Promise<string> {
@@ -174,7 +169,9 @@ function explicitRejection(response: Record<string, unknown> | null): string | n
     data.error,
     data.message,
     data.error_code,
-  ].some((value) => value !== undefined);
+  ].some((value) => value !== undefined) || normalizedFieldValidationErrors(
+    data.field_validation_errors ?? response.field_validation_errors,
+  ).length > 0;
   if (failed < 1 && succeeded !== 0 && failures.length === 0 && !hasProviderError) {
     return null;
   }
@@ -196,10 +193,20 @@ function providerErrorMessage(body: string): string | null {
     if (!isRecord(value)) return null;
     const data = isRecord(value.data) ? value.data : null;
 
+    const fieldErrors = normalizedFieldValidationErrors(
+      data?.field_validation_errors ?? value.field_validation_errors,
+    );
+    const nestedCode = typeof data?.error_code === 'string' ? data.error_code.trim() : '';
+    if (fieldErrors.length > 0) {
+      const detail = fieldErrors
+        .map(({ field, message }) => `${field}: ${message}`)
+        .join('; ');
+      return cleanMessage(nestedCode === '' ? detail : `${nestedCode}: ${detail}`);
+    }
+
     // SMTP2GO puts HTTP 400 details under data.error_code and data.error.
     // Include both values so the delivery record explains the provider rejection.
     const nestedError = typeof data?.error === 'string' ? data.error.trim() : '';
-    const nestedCode = typeof data?.error_code === 'string' ? data.error_code.trim() : '';
     if (nestedError !== '') {
       return cleanMessage(nestedCode === '' ? nestedError : `${nestedCode}: ${nestedError}`);
     }
@@ -216,20 +223,6 @@ function providerErrorMessage(body: string): string | null {
     if (isRecord(first)) {
       const detail = first.error ?? first.message ?? first.error_code;
       if (typeof detail === 'string' && detail.trim() !== '') return cleanMessage(detail);
-    }
-
-    const fieldErrors = isRecord(data?.field_validation_errors)
-      ? data.field_validation_errors
-      : isRecord(value.field_validation_errors) ? value.field_validation_errors : null;
-    if (fieldErrors !== null) {
-      for (const [field, fieldError] of Object.entries(fieldErrors)) {
-        const detail = isRecord(fieldError)
-          ? fieldError.message ?? fieldError.error ?? fieldError.error_code
-          : fieldError;
-        if (typeof detail === 'string' && detail.trim() !== '') {
-          return cleanMessage(`${field}: ${detail}`);
-        }
-      }
     }
   } catch {
     return null;
