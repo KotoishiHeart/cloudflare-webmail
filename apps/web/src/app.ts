@@ -50,9 +50,32 @@ export async function handleWebRequest(
     console.error(JSON.stringify({
       event: 'web.request_failed',
       path: url.pathname,
-      errorType: error instanceof Error ? error.name : typeof error,
+      ...errorLogDetails(error),
       cfRay: request.headers.get('cf-ray') ?? '',
     }));
     return apiError('internal_error', 500);
   }
+}
+
+function errorLogDetails(error: unknown): {
+  errorType: string;
+  errorMessage: string;
+  errorCause: string;
+} {
+  if (!(error instanceof Error)) {
+    return {
+      errorType: typeof error,
+      errorMessage: boundedLogText(String(error)),
+      errorCause: '',
+    };
+  }
+  return {
+    errorType: error.name,
+    errorMessage: boundedLogText(error.message),
+    errorCause: error.cause instanceof Error ? boundedLogText(error.cause.message) : '',
+  };
+}
+
+function boundedLogText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]/gu, ' ').slice(0, 1024);
 }
