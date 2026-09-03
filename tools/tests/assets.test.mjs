@@ -47,6 +47,19 @@ test('mail and administration shells expose accessible landmarks', async () => {
   assert.match(admin, /role="tabpanel"/u);
 });
 
+test('Access-protected shells fetch the PWA manifest with credentials', async () => {
+  const shells = await Promise.all([
+    readFile(resolve(PUBLIC, 'index.html'), 'utf8'),
+    readFile(resolve(PUBLIC, 'admin.html'), 'utf8'),
+  ]);
+  for (const shell of shells) {
+    assert.match(
+      shell,
+      /<link rel="manifest" href="\/manifest\.webmanifest" crossorigin="use-credentials">/u,
+    );
+  }
+});
+
 test('compose drafts stay device-local and never enter the service-worker cache', async () => {
   const [drafts, worker] = await Promise.all([
     readFile(resolve(PUBLIC, 'ui/compose-draft.js'), 'utf8'),
