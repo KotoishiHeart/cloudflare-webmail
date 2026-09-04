@@ -43,10 +43,13 @@ async function auditReferences(db: D1Database, bucket: R2Bucket, now: number) {
       await resolveStorageIssue(db, 'canonical_object_missing', reference.objectKey, now);
     }
   }
+  const messageIds = [...new Set(references.map((reference) => reference.messageId))];
   await saveMaintenanceCursor(
     db,
     REFERENCE_TASK,
-    references.length === 50 ? (references.at(-1)?.objectKey ?? '') : '',
+    messageIds.length === 50
+      ? (messageIds.at(-1) ?? '')
+      : '',
     now,
   );
   return { referencesScanned: references.length, missing };

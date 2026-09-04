@@ -6,6 +6,8 @@ import {
   type InboundQueueMessage,
 } from '@cf-webmail/contracts';
 import {
+  isStorageKeyReferenced,
+  listStorageReferences,
   persistInboundMessage,
   provisionMailboxWithOwner,
   provisionUserWithIdentity,
@@ -105,6 +107,7 @@ describe('R2 storage reconciliation', () => {
     const messageId = '019c315c-1f20-7000-8000-000000000806';
     const rawKey = `mailboxes/${MAILBOX_ID}/messages/${messageId}/raw.eml`;
     const bodyKey = `mailboxes/${MAILBOX_ID}/messages/${messageId}/body.txt`;
+    const attachmentKey = `mailboxes/${MAILBOX_ID}/messages/${messageId}/attachments/000`;
     await persistInboundMessage(env.DB, {
       id: messageId,
       mailboxId: MAILBOX_ID,
@@ -129,12 +132,38 @@ describe('R2 storage reconciliation', () => {
       rawSize: 3,
       bodyTextKey: bodyKey,
       bodyHtmlKey: null,
-      attachments: [],
+      attachments: [{
+        ordinal: 0,
+        filename: 'evidence.txt',
+        contentType: 'text/plain',
+        disposition: 'attachment',
+        contentId: '',
+        size: 8,
+        sha256: 'b'.repeat(64),
+        storageKey: attachmentKey,
+        createdAt: NOW,
+      }],
       createdAt: NOW,
     });
-    await env.RAW_EMAILS.put(rawKey, 'raw');
+    await Promise.all([
+      env.RAW_EMAILS.put(rawKey, 'raw'),
+      env.RAW_EMAILS.put(attachmentKey, 'evidence'),
+    ]);
     const orphanKey = `mailboxes/${MAILBOX_ID}/messages/orphan/raw.eml`;
     await env.RAW_EMAILS.put(orphanKey, 'orphan');
+
+    const references = await listStorageReferences(env.DB, '', 1);
+    expect(references.map((reference) => reference.objectKey)).toEqual([
+      rawKey,
+      bodyKey,
+      attachmentKey,
+    ]);
+    await expect(isStorageKeyReferenced(env.DB, rawKey)).resolves.toBe(true);
+    await expect(isStorageKeyReferenced(env.DB, attachmentKey)).resolves.toBe(true);
+    await expect(isStorageKeyReferenced(
+      env.DB,
+      `mailboxes/${USER_ID}/messages/${messageId}/raw.eml`,
+    )).resolves.toBe(false);
 
     const result = await auditCanonicalStorage(env.DB, env.RAW_EMAILS, NOW + 4);
     expect(result).toMatchObject({ missing: 1, orphaned: 1 });

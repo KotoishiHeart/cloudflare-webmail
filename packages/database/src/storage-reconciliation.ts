@@ -104,53 +104,112 @@ export async function resolveStorageIssuesForKeys(
 
 export async function listStorageReferences(
   db: D1Database,
-  afterKey: string,
+  afterMessageId: string,
   limit = 50,
 ): Promise<StorageReference[]> {
   const boundedLimit = Math.max(1, Math.min(100, Math.floor(limit)));
+  // Page on the messages primary key before joining attachments. Paging the
+  // UNION of unindexed object-key columns makes every small audit batch scan
+  // the complete mailbox database.
   const rows = await db.prepare(`
-    SELECT object_key, mailbox_id, message_id, kind FROM (
-      SELECT raw_key AS object_key, mailbox_id, id AS message_id, 'raw' AS kind FROM messages
-      UNION ALL
-      SELECT body_text_key, mailbox_id, id, 'body_text' FROM messages
-      WHERE body_text_key IS NOT NULL
-      UNION ALL
-      SELECT body_html_key, mailbox_id, id, 'body_html' FROM messages
-      WHERE body_html_key IS NOT NULL
-      UNION ALL
-      SELECT a.storage_key, m.mailbox_id, a.message_id, 'attachment'
-      FROM attachments AS a JOIN messages AS m ON m.id = a.message_id
-    )
-    WHERE object_key > ?
-    ORDER BY object_key
-    LIMIT ?
-  `).bind(afterKey, boundedLimit).all<{
-    object_key: string;
+    SELECT m.id AS message_id, m.mailbox_id, m.raw_key,
+      m.body_text_key, m.body_html_key, a.storage_key
+    FROM (
+      SELECT id, mailbox_id, raw_key, body_text_key, body_html_key
+      FROM messages
+      WHERE id > ?
+      ORDER BY id
+      LIMIT ?
+    ) AS m
+    LEFT JOIN attachments AS a ON a.message_id = m.id
+    ORDER BY m.id, a.ordinal
+  `).bind(afterMessageId, boundedLimit).all<{
     mailbox_id: string;
     message_id: string;
-    kind: string;
+    raw_key: string;
+    body_text_key: string | null;
+    body_html_key: string | null;
+    storage_key: string | null;
   }>();
-  return rows.results.map((row) => ({
-    objectKey: row.object_key,
-    mailboxId: row.mailbox_id,
-    messageId: row.message_id,
-    kind: row.kind,
-  }));
+  const references = new Map<string, StorageReference>();
+  for (const row of rows.results) {
+    addReference(references, row.raw_key, row, 'raw');
+    if (row.body_text_key !== null) addReference(references, row.body_text_key, row, 'body_text');
+    if (row.body_html_key !== null) addReference(references, row.body_html_key, row, 'body_html');
+    if (row.storage_key !== null) addReference(references, row.storage_key, row, 'attachment');
+  }
+  return [...references.values()];
 }
 
 export async function isStorageKeyReferenced(
   db: D1Database,
   objectKey: string,
 ): Promise<boolean> {
+  // Canonical keys carry the indexed message identity. Resolve that identity
+  // first instead of scanning the three object-key columns for every R2 item.
+  const parsed = parseCanonicalObjectKey(objectKey);
+  if (parsed === null) return false;
+  if (parsed.kind === 'attachment') {
+    const row = await db.prepare(`
+      SELECT a.storage_key
+      FROM attachments AS a
+      JOIN messages AS m ON m.id = a.message_id
+      WHERE a.message_id = ? AND a.ordinal = ? AND m.mailbox_id = ?
+    `).bind(parsed.messageId, parsed.ordinal, parsed.mailboxId)
+      .first<{ storage_key: string }>();
+    return row?.storage_key === objectKey;
+  }
   const row = await db.prepare(`
-    SELECT EXISTS (
-      SELECT 1 FROM messages
-      WHERE raw_key = ? OR body_text_key = ? OR body_html_key = ?
-      UNION ALL
-      SELECT 1 FROM attachments WHERE storage_key = ?
-    ) AS found
-  `).bind(objectKey, objectKey, objectKey, objectKey).first<{ found: number }>();
-  return row?.found === 1;
+    SELECT raw_key, body_text_key, body_html_key
+    FROM messages
+    WHERE id = ? AND mailbox_id = ?
+  `).bind(parsed.messageId, parsed.mailboxId).first<{
+    raw_key: string;
+    body_text_key: string | null;
+    body_html_key: string | null;
+  }>();
+  if (row === null) return false;
+  if (parsed.kind === 'raw') return row.raw_key === objectKey;
+  if (parsed.kind === 'body_text') return row.body_text_key === objectKey;
+  return row.body_html_key === objectKey;
+}
+
+function addReference(
+  references: Map<string, StorageReference>,
+  objectKey: string,
+  row: { mailbox_id: string; message_id: string },
+  kind: string,
+): void {
+  references.set(objectKey, {
+    objectKey,
+    mailboxId: row.mailbox_id,
+    messageId: row.message_id,
+    kind,
+  });
+}
+
+type ParsedCanonicalObjectKey = {
+  mailboxId: string;
+  messageId: string;
+} & (
+  | { kind: 'raw' | 'body_text' | 'body_html' }
+  | { kind: 'attachment'; ordinal: number }
+);
+
+function parseCanonicalObjectKey(objectKey: string): ParsedCanonicalObjectKey | null {
+  const match = objectKey.match(
+    /^mailboxes\/([^/]+)\/messages\/([^/]+)\/(raw\.eml|body\.txt|body\.html|attachments\/([0-9]{3}))$/u,
+  );
+  if (match === null) return null;
+  const mailboxId = match[1] ?? '';
+  const messageId = match[2] ?? '';
+  const suffix = match[3] ?? '';
+  if (suffix === 'raw.eml') return { mailboxId, messageId, kind: 'raw' };
+  if (suffix === 'body.txt') return { mailboxId, messageId, kind: 'body_text' };
+  if (suffix === 'body.html') return { mailboxId, messageId, kind: 'body_html' };
+  const ordinal = Number(match[4]);
+  if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > 99) return null;
+  return { mailboxId, messageId, kind: 'attachment', ordinal };
 }
 
 function nullableBounded(value: string | undefined, maximum: number): string | null {
