@@ -5,6 +5,7 @@ import {
 } from '@cf-webmail/database';
 
 const REENQUEUE_AFTER_MILLISECONDS = 5 * 60 * 1000;
+const RECOVERY_BATCH_SIZE = 20;
 
 export async function recoverOutboundDeliveries(
   db: D1Database,
@@ -15,7 +16,7 @@ export async function recoverOutboundDeliveries(
     db,
     now,
     now - REENQUEUE_AFTER_MILLISECONDS,
-    100,
+    RECOVERY_BATCH_SIZE,
   );
   if (messages.length === 0) return 0;
   await queue.sendBatch(messages.map((message) => ({

@@ -8,6 +8,8 @@ import {
   recordDeadLetterRetryError,
 } from '@cf-webmail/database';
 
+const RECOVERY_BATCH_SIZE = 12;
+
 export type DeadLetterRecoveryResult = {
   requeued: number;
   failed: number;
@@ -19,7 +21,7 @@ export async function recoverRequestedDeadLetters(
   outboundQueue: Queue<unknown>,
   now: number,
 ): Promise<DeadLetterRecoveryResult> {
-  const requested = await listRequestedDeadLetters(db, 25);
+  const requested = await listRequestedDeadLetters(db, RECOVERY_BATCH_SIZE);
   const result: DeadLetterRecoveryResult = { requeued: 0, failed: 0 };
   for (const deadLetter of requested) {
     const parsed = deadLetter.source === 'inbound'

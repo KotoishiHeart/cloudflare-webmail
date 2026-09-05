@@ -35,6 +35,7 @@ export * from './retention-policies.js';
 export * from './retention-runs.js';
 export { resolveActiveMailboxAddress } from './routing.js';
 export * from './storage-reconciliation.js';
+export * from './storage-reference-page.js';
 export * from './system-administrators.js';
 export * from './validation.js';
 export * from './web-message-detail.js';

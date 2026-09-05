@@ -6,6 +6,7 @@ import {
 } from '@cf-webmail/database';
 
 const REENQUEUE_AFTER_MILLISECONDS = 5 * 60 * 1000;
+const RECOVERY_BATCH_SIZE = 12;
 
 export type InboundRecoveryResult = {
   requeued: number;
@@ -20,7 +21,7 @@ export async function recoverInboundHandoffs(
   const handoffs = await listRecoverableInboundHandoffs(
     db,
     now - REENQUEUE_AFTER_MILLISECONDS,
-    100,
+    RECOVERY_BATCH_SIZE,
   );
   const result: InboundRecoveryResult = { requeued: 0, failed: 0 };
   for (const handoff of handoffs) {

@@ -9,13 +9,6 @@ export type StorageIssueType =
   | 'canonical_object_missing'
   | 'orphan_canonical_object';
 
-export type StorageReference = {
-  objectKey: string;
-  mailboxId: string;
-  messageId: string;
-  kind: string;
-};
-
 export async function getMaintenanceCursor(db: D1Database, task: string): Promise<string> {
   const row = await db.prepare(
     'SELECT cursor FROM maintenance_cursors WHERE task = ?',
@@ -102,45 +95,6 @@ export async function resolveStorageIssuesForKeys(
   `).bind(now, bounded(key, 1024, 'objectKey'))));
 }
 
-export async function listStorageReferences(
-  db: D1Database,
-  afterMessageId: string,
-  limit = 50,
-): Promise<StorageReference[]> {
-  const boundedLimit = Math.max(1, Math.min(100, Math.floor(limit)));
-  // Page on the messages primary key before joining attachments. Paging the
-  // UNION of unindexed object-key columns makes every small audit batch scan
-  // the complete mailbox database.
-  const rows = await db.prepare(`
-    SELECT m.id AS message_id, m.mailbox_id, m.raw_key,
-      m.body_text_key, m.body_html_key, a.storage_key
-    FROM (
-      SELECT id, mailbox_id, raw_key, body_text_key, body_html_key
-      FROM messages
-      WHERE id > ?
-      ORDER BY id
-      LIMIT ?
-    ) AS m
-    LEFT JOIN attachments AS a ON a.message_id = m.id
-    ORDER BY m.id, a.ordinal
-  `).bind(afterMessageId, boundedLimit).all<{
-    mailbox_id: string;
-    message_id: string;
-    raw_key: string;
-    body_text_key: string | null;
-    body_html_key: string | null;
-    storage_key: string | null;
-  }>();
-  const references = new Map<string, StorageReference>();
-  for (const row of rows.results) {
-    addReference(references, row.raw_key, row, 'raw');
-    if (row.body_text_key !== null) addReference(references, row.body_text_key, row, 'body_text');
-    if (row.body_html_key !== null) addReference(references, row.body_html_key, row, 'body_html');
-    if (row.storage_key !== null) addReference(references, row.storage_key, row, 'attachment');
-  }
-  return [...references.values()];
-}
-
 export async function isStorageKeyReferenced(
   db: D1Database,
   objectKey: string,
@@ -172,20 +126,6 @@ export async function isStorageKeyReferenced(
   if (parsed.kind === 'raw') return row.raw_key === objectKey;
   if (parsed.kind === 'body_text') return row.body_text_key === objectKey;
   return row.body_html_key === objectKey;
-}
-
-function addReference(
-  references: Map<string, StorageReference>,
-  objectKey: string,
-  row: { mailbox_id: string; message_id: string },
-  kind: string,
-): void {
-  references.set(objectKey, {
-    objectKey,
-    mailboxId: row.mailbox_id,
-    messageId: row.message_id,
-    kind,
-  });
 }
 
 type ParsedCanonicalObjectKey = {

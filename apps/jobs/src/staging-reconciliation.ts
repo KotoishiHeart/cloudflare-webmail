@@ -18,6 +18,8 @@ import {
 
 const STAGING_PREFIX = 'staging/raw/';
 const STAGING_CURSOR_TASK = 'staging-objects';
+const CLEANUP_BATCH_SIZE = 2;
+const RECONCILIATION_BATCH_SIZE = 4;
 
 export type StagingReconciliationResult = {
   scanned: number;
@@ -42,7 +44,7 @@ export async function reconcileInboundStaging(
   const cursor = await getMaintenanceCursor(db, STAGING_CURSOR_TASK);
   const listed = await bucket.list({
     prefix: STAGING_PREFIX,
-    limit: 50,
+    limit: RECONCILIATION_BATCH_SIZE,
     ...(cursor === '' ? {} : { cursor }),
   });
   for (const object of listed.objects) {
@@ -154,7 +156,7 @@ async function cleanupStoredStaging(
   bucket: R2Bucket,
   now: number,
 ): Promise<number> {
-  const pending = await listInboundStagingCleanupPending(db, 50);
+  const pending = await listInboundStagingCleanupPending(db, CLEANUP_BATCH_SIZE);
   let cleaned = 0;
   for (const handoff of pending) {
     const keys = [handoff.rawKey, buildInboundQueuePayloadKey(handoff.rawKey)];

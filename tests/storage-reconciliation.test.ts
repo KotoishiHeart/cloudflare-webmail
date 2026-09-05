@@ -7,6 +7,7 @@ import {
 } from '@cf-webmail/contracts';
 import {
   isStorageKeyReferenced,
+  listStorageReferencePage,
   listStorageReferences,
   persistInboundMessage,
   provisionMailboxWithOwner,
@@ -152,7 +153,7 @@ describe('R2 storage reconciliation', () => {
     const orphanKey = `mailboxes/${MAILBOX_ID}/messages/orphan/raw.eml`;
     await env.RAW_EMAILS.put(orphanKey, 'orphan');
 
-    const references = await listStorageReferences(env.DB, '', 1);
+    const references = await listStorageReferences(env.DB, '', 3);
     expect(references.map((reference) => reference.objectKey)).toEqual([
       rawKey,
       bodyKey,
@@ -180,6 +181,63 @@ describe('R2 storage reconciliation', () => {
       { issue_type: 'canonical_object_missing', object_key: bodyKey, status: 'open' },
       { issue_type: 'orphan_canonical_object', object_key: orphanKey, status: 'open' },
     ]);
+  });
+
+  it('bounds reference pages and resumes inside an attachment-heavy message', async () => {
+    const messageId = '019c315c-1f20-7000-8000-000000000807';
+    const rawKey = `mailboxes/${MAILBOX_ID}/messages/${messageId}/raw.eml`;
+    const attachments = Array.from({ length: 12 }, (_, ordinal) => ({
+      ordinal,
+      filename: `evidence-${ordinal}.txt`,
+      contentType: 'text/plain',
+      disposition: 'attachment' as const,
+      contentId: '',
+      size: 8,
+      sha256: ordinal.toString(16).padStart(64, '0'),
+      storageKey: `mailboxes/${MAILBOX_ID}/messages/${messageId}/attachments/${ordinal.toString().padStart(3, '0')}`,
+      createdAt: NOW,
+    }));
+    await persistInboundMessage(env.DB, {
+      id: messageId,
+      mailboxId: MAILBOX_ID,
+      status: 'ready',
+      processingError: '',
+      envelopeFrom: 'sender@example.net',
+      deliveredTo: 'storage@example.com',
+      rfcMessageId: '',
+      inReplyTo: '',
+      referencesHeader: '',
+      subject: 'paged audit',
+      sender: 'sender@example.net',
+      recipients: 'storage@example.com',
+      cc: '',
+      replyTo: '',
+      dateHeader: '',
+      receivedAt: NOW,
+      textPreview: 'paged audit',
+      rawKey,
+      rawSha256: 'c'.repeat(64),
+      rawEtag: 'etag',
+      rawSize: 3,
+      bodyTextKey: null,
+      bodyHtmlKey: null,
+      attachments,
+      createdAt: NOW,
+    });
+
+    const first = await listStorageReferencePage(
+      env.DB,
+      '019c315c-1f20-7000-8000-000000000806',
+      8,
+    );
+    const second = await listStorageReferencePage(env.DB, first.nextCursor, 8);
+
+    expect(first.references).toHaveLength(8);
+    expect(first.nextCursor).not.toBe('');
+    expect(second.references).toHaveLength(5);
+    expect(second.nextCursor).toBe('');
+    expect(new Set([...first.references, ...second.references].map(({ objectKey }) => objectKey)))
+      .toEqual(new Set([rawKey, ...attachments.map(({ storageKey }) => storageKey)]));
   });
 });
 

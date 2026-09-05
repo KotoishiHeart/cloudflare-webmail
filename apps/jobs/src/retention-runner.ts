@@ -9,7 +9,7 @@ import {
 } from '@cf-webmail/database';
 
 const OBJECT_CHUNK_SIZE = 20;
-const MAX_WORK_UNITS = 10;
+const MAX_WORK_UNITS = 1;
 
 export type RetentionProcessingResult = {
   claimed: number;

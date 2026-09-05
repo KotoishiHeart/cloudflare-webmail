@@ -1,7 +1,7 @@
 import {
   getMaintenanceCursor,
   isStorageKeyReferenced,
-  listStorageReferences,
+  listStorageReferencePage,
   recordStorageIssue,
   resolveStorageIssue,
   saveMaintenanceCursor,
@@ -9,6 +9,9 @@ import {
 
 const REFERENCE_TASK = 'canonical-references';
 const OBJECT_TASK = 'canonical-objects';
+// Both audit directions together stay below the Workers Free 50-request cap.
+const REFERENCE_BATCH_SIZE = 8;
+const OBJECT_BATCH_SIZE = 8;
 
 export type StorageAuditResult = {
   referencesScanned: number;
@@ -29,9 +32,9 @@ export async function auditCanonicalStorage(
 
 async function auditReferences(db: D1Database, bucket: R2Bucket, now: number) {
   const cursor = await getMaintenanceCursor(db, REFERENCE_TASK);
-  const references = await listStorageReferences(db, cursor, 50);
+  const page = await listStorageReferencePage(db, cursor, REFERENCE_BATCH_SIZE);
   let missing = 0;
-  for (const reference of references) {
+  for (const reference of page.references) {
     if (await bucket.head(reference.objectKey) === null) {
       await recordStorageIssue(db, 'canonical_object_missing', reference.objectKey, now, {
         mailboxId: reference.mailboxId,
@@ -43,23 +46,15 @@ async function auditReferences(db: D1Database, bucket: R2Bucket, now: number) {
       await resolveStorageIssue(db, 'canonical_object_missing', reference.objectKey, now);
     }
   }
-  const messageIds = [...new Set(references.map((reference) => reference.messageId))];
-  await saveMaintenanceCursor(
-    db,
-    REFERENCE_TASK,
-    messageIds.length === 50
-      ? (messageIds.at(-1) ?? '')
-      : '',
-    now,
-  );
-  return { referencesScanned: references.length, missing };
+  await saveMaintenanceCursor(db, REFERENCE_TASK, page.nextCursor, now);
+  return { referencesScanned: page.references.length, missing };
 }
 
 async function auditObjects(db: D1Database, bucket: R2Bucket, now: number) {
   const cursor = await getMaintenanceCursor(db, OBJECT_TASK);
   const listed = await bucket.list({
     prefix: 'mailboxes/',
-    limit: 50,
+    limit: OBJECT_BATCH_SIZE,
     ...(cursor === '' ? {} : { cursor }),
   });
   let orphaned = 0;

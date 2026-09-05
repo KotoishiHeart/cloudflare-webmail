@@ -125,7 +125,9 @@ already-enqueued job unrecoverable. The D1 handoff ledger re-enqueues stale
 `staged` and `queue_failed` records idempotently. The jobs cron also recovers
 valid R2 raw/contract pairs created before a handoff row could be written and
 records incomplete pairs for review. Incremental D1-to-R2 and R2-to-D1 audits
-report missing and unreferenced canonical objects without deleting them.
+report missing and unreferenced canonical objects without deleting them. The
+minute cron rotates through one bounded maintenance task per invocation so the
+combined recovery workload stays within the Workers Free subrequest limit.
 
 `worker-configuration.d.ts` files are generated from each Worker configuration
 with Wrangler and are checked in CI through `npm run types:check`.

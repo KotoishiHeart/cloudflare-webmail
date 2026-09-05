@@ -16,6 +16,18 @@ import { processApprovedRetentionRuns } from './retention-runner.js';
 import { pruneExpiredEvents } from '@cf-webmail/database';
 import { createSmtp2goMailer } from './smtp2go-mailer.js';
 
+export const MAINTENANCE_TASKS = [
+  'inbound_handoff',
+  'dead_letter',
+  'outbound',
+  'staging',
+  'storage_audit',
+  'retention',
+  'event_retention',
+] as const;
+
+type MaintenanceTask = typeof MAINTENANCE_TASKS[number];
+
 export default {
   async queue(batch: MessageBatch<unknown>, env: JobsEnv): Promise<void> {
     if (
@@ -45,34 +57,48 @@ export default {
     batch.retryAll({ delaySeconds: 0 });
   },
 
-  async scheduled(_controller: ScheduledController, env: JobsEnv): Promise<void> {
+  async scheduled(controller: ScheduledController, env: JobsEnv): Promise<void> {
     const now = Date.now();
-    const [inbound, deadLetters, outbound, staging, storage, retention, events] = await Promise.allSettled([
-      recoverInboundHandoffs(env.DB, env.INBOUND_QUEUE, now),
-      recoverRequestedDeadLetters(env.DB, env.INBOUND_QUEUE, env.OUTBOUND_QUEUE, now),
-      recoverOutboundDeliveries(env.DB, env.OUTBOUND_QUEUE, now),
-      reconcileInboundStaging(env.DB, env.RAW_EMAILS, env.INBOUND_QUEUE, now),
-      auditCanonicalStorage(env.DB, env.RAW_EMAILS, now),
-      processApprovedRetentionRuns(env.DB, env.RAW_EMAILS),
-      pruneExpiredEvents(env.DB, now),
-    ]);
-    logRecovery('inbound_handoff', inbound);
-    logRecovery('dead_letter', deadLetters);
-    logRecovery('outbound', outbound);
-    logRecovery('staging', staging);
-    logRecovery('storage_audit', storage);
-    logRecovery('retention', retention);
-    logRecovery('event_retention', events);
+    // Workers Free permits 50 external-service requests per invocation. Run a
+    // single bounded maintenance task each minute instead of aggregating them.
+    const task = selectMaintenanceTask(controller.scheduledTime);
+    try {
+      const result = await runMaintenanceTask(task, env, now);
+      console.log(JSON.stringify({ event: `${task}.recovery_completed`, result }));
+    } catch (error) {
+      console.error(JSON.stringify({
+        event: `${task}.recovery_failed`,
+        errorType: error instanceof Error ? error.name : typeof error,
+      }));
+      throw error;
+    }
   },
 } satisfies ExportedHandler<JobsEnv>;
 
-function logRecovery(name: string, result: PromiseSettledResult<unknown>): void {
-  if (result.status === 'fulfilled') {
-    console.log(JSON.stringify({ event: `${name}.recovery_completed`, result: result.value }));
-    return;
+export function selectMaintenanceTask(scheduledTime: number): MaintenanceTask {
+  const minute = Math.floor(scheduledTime / 60_000);
+  return MAINTENANCE_TASKS[minute % MAINTENANCE_TASKS.length]!;
+}
+
+function runMaintenanceTask(
+  task: MaintenanceTask,
+  env: JobsEnv,
+  now: number,
+): Promise<unknown> {
+  switch (task) {
+    case 'inbound_handoff':
+      return recoverInboundHandoffs(env.DB, env.INBOUND_QUEUE, now);
+    case 'dead_letter':
+      return recoverRequestedDeadLetters(env.DB, env.INBOUND_QUEUE, env.OUTBOUND_QUEUE, now);
+    case 'outbound':
+      return recoverOutboundDeliveries(env.DB, env.OUTBOUND_QUEUE, now);
+    case 'staging':
+      return reconcileInboundStaging(env.DB, env.RAW_EMAILS, env.INBOUND_QUEUE, now);
+    case 'storage_audit':
+      return auditCanonicalStorage(env.DB, env.RAW_EMAILS, now);
+    case 'retention':
+      return processApprovedRetentionRuns(env.DB, env.RAW_EMAILS);
+    case 'event_retention':
+      return pruneExpiredEvents(env.DB, now);
   }
-  console.error(JSON.stringify({
-    event: `${name}.recovery_failed`,
-    errorType: result.reason instanceof Error ? result.reason.name : typeof result.reason,
-  }));
 }
