@@ -90,16 +90,17 @@ export async function verifyBackup(backupInput) {
   const manifest = JSON.parse(await readFile(join(backup, 'manifest.json'), 'utf8'));
   validateBackupManifest(manifest);
   const d1Content = (await verifyDescriptor(backup, manifest.d1)).toString('utf8');
+  const d1ObjectKeys = extractD1ObjectKeys(d1Content);
   const seen = new Set();
   for (const object of manifest.objects) {
     validateObjectDescriptor(object);
     if (seen.has(object.key)) throw new Error(`duplicate backup object key: ${object.key}`);
     seen.add(object.key);
-    await verifyDescriptor(backup, object);
-    if (!d1Content.includes(object.key)) {
+    if (!d1ObjectKeys.has(object.key)) {
       throw new Error(`D1 export does not reference object: ${object.key}`);
     }
   }
+  await verifyObjects(backup, manifest.objects);
   if (manifest.counts.objects !== manifest.objects.length) {
     throw new Error('backup object count does not match manifest');
   }
@@ -143,6 +144,26 @@ async function readValidSidecar(path, filePath, reference) {
     return descriptor;
   } catch {
     return null;
+  }
+}
+
+function extractD1ObjectKeys(sql) {
+  const keys = new Set();
+  const literalPattern = /'((?:''|[^'])*)'/gu;
+  for (const match of sql.matchAll(literalPattern)) {
+    const value = (match[1] ?? '').replaceAll("''", "'");
+    if (value.startsWith('mailboxes/')) keys.add(value);
+  }
+  return keys;
+}
+
+async function verifyObjects(backup, objects) {
+  const concurrency = 32;
+  for (let offset = 0; offset < objects.length; offset += concurrency) {
+    await Promise.all(
+      objects.slice(offset, offset + concurrency)
+        .map((object) => verifyDescriptor(backup, object)),
+    );
   }
 }
 
