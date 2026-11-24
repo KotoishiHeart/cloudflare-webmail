@@ -25,11 +25,44 @@ Creation performs these steps:
 4. Writes `manifest.json` last, with SHA-256 and byte size for D1 and every
    object.
 
-## Faster remote creation with rclone
+## Faster remote creation: rclone or direct S3
 
 By default step 3 spawns one `wrangler r2 object get` process per object,
 which dominates creation time once a mailbox holds many messages. For remote
-backups, `--rclone-source` switches the pending-object download to a single
+backups, two interchangeable fast paths replace that download; choose one
+per run (`--rclone-source` and `--s3-keys` cannot be combined). Both only
+transfer objects without a valid sidecar, fall back to the per-object
+Wrangler download for anything they did not produce, and yield an identical
+manifest.
+
+### Direct S3 (no rclone binary)
+
+`--s3-keys` points at a local JSON file holding an R2 API token's S3
+credentials (template: `tools/examples/r2-backup-keys.v1.json`):
+
+```json
+{
+  "accountId": "<32-character hex account id>",
+  "accessKeyId": "<R2 access key id>",
+  "secretAccessKey": "<R2 secret access key>"
+}
+```
+
+Keep the file outside the repository (for example under `ops/`, which is
+git-ignored) with mode `600`. The tool signs GET requests itself
+(Signature Version 4, region `auto`) and downloads in parallel
+(`--transfers`, default 16). Credentials are held in memory only and never
+written to the backup bundle.
+
+```bash
+npm run backup -- create --output ops/backups/2026-07-16 --remote \
+  --config ops/deploy-production/configs/web.wrangler.json \
+  --s3-keys ops/r2-backup-keys.json
+```
+
+### rclone
+
+`--rclone-source` switches the pending-object download to a single
 parallel `rclone copy`, the same bulk pattern the legacy snapshot path uses:
 
 ```bash

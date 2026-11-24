@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createBackup, restoreBackup, verifyBackup } from '../lib/backup-core.mjs';
+import { signS3Request } from '../lib/backup-s3.mjs';
 
 const KEY = 'mailboxes/019c315c-1f20-7000-8000-000000000801/messages/019c315c-1f20-7000-8000-000000000802/raw.eml';
 const OPTIONS = {
@@ -72,6 +73,103 @@ describe('portable D1 and R2 backup', () => {
     assert.equal(verified.d1.sha256, manifest.d1.sha256);
     const names = await readdir(backup);
     assert.equal(names.some((name) => name.startsWith('.rclone-')), false);
+  });
+
+  it('signs S3 requests with the documented SigV4 example signature', () => {
+    const authorization = signS3Request({
+      method: 'GET',
+      host: 'iam.amazonaws.com',
+      canonicalUri: '/',
+      canonicalQuery: 'Action=ListUsers&Version=2010-05-08',
+      headerValues: {
+        'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
+        'x-amz-date': '20150830T123600Z',
+      },
+      payloadHash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      credentials: {
+        accessKeyId: 'AKIDEXAMPLE',
+        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+      },
+      region: 'us-east-1',
+      service: 'iam',
+      amzDate: '20150830T123600Z',
+      dateStamp: '20150830',
+    });
+    assert.equal(
+      authorization,
+      'AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/iam/aws4_request, '
+      + 'SignedHeaders=content-type;host;x-amz-date, '
+      + 'Signature=5d672d79c15b13162d9279b0855cfba6789a8edb4c82c400e06b5924a6f2b5d7',
+    );
+  });
+
+  it('downloads pending objects directly over S3 when a keys file is given', async () => {
+    const backup = join(root, 'backup-s3');
+    const keysFile = join(root, 'r2-keys.json');
+    await writeFile(keysFile, JSON.stringify({
+      accountId: '0123456789abcdef0123456789abcdef',
+      accessKeyId: 'test-access-key',
+      secretAccessKey: 'test-secret-key',
+    }), { mode: 0o600 });
+    const calls = [];
+    const fetches = [];
+    const runner = fakeBackupRunner(calls);
+    runner.fetch = async (url, init) => {
+      fetches.push([url, init]);
+      assert.match(url, /^https:\/\/0123456789abcdef0123456789abcdef\.r2\.cloudflarestorage\.com\/cf-webmail-raw\/mailboxes\//u);
+      assert.match(init.headers.authorization, /^AWS4-HMAC-SHA256 Credential=test-access-key\//u);
+      assert.equal(init.headers['x-amz-content-sha256'], 'UNSIGNED-PAYLOAD');
+      return {
+        ok: true,
+        status: 200,
+        arrayBuffer: async () => new TextEncoder().encode('raw backup fixture').buffer,
+      };
+    };
+    const manifest = await createBackup(backup, {
+      ...OPTIONS,
+      local: false,
+      remote: true,
+      s3Keys: keysFile,
+    }, runner);
+    assert.equal(manifest.objects.length, 1);
+    assert.equal(fetches.length, 1);
+    assert.equal(calls.find((args) => args.includes('get')), undefined);
+    const verified = await verifyBackup(backup);
+    assert.equal(verified.d1.sha256, manifest.d1.sha256);
+    const names = await readdir(backup);
+    assert.equal(names.some((name) => name.startsWith('.s3-')), false);
+  });
+
+  it('rejects combining fast paths, S3 for local backups, and bad keys files', async () => {
+    const keysFile = join(root, 'r2-keys.json');
+    await assert.rejects(
+      createBackup(join(root, 'backup-both'), {
+        ...OPTIONS,
+        local: false,
+        remote: true,
+        rcloneSource: 'test-r2:cf-webmail-raw',
+        s3Keys: keysFile,
+      }, fakeBackupRunner([])),
+      /choose only one fast download mode/u,
+    );
+    await assert.rejects(
+      createBackup(join(root, 'backup-s3-local'), {
+        ...OPTIONS,
+        s3Keys: keysFile,
+      }, fakeBackupRunner([])),
+      /requires a remote backup/u,
+    );
+    const badKeys = join(root, 'r2-keys-bad.json');
+    await writeFile(badKeys, JSON.stringify({ accountId: 'xyz' }));
+    await assert.rejects(
+      createBackup(join(root, 'backup-s3-bad'), {
+        ...OPTIONS,
+        local: false,
+        remote: true,
+        s3Keys: badKeys,
+      }, fakeBackupRunner([])),
+      /S3 keys file/u,
+    );
   });
 
   it('rejects an rclone source for local backups or a different bucket', async () => {

@@ -44,6 +44,7 @@ function targetOptions(options) {
     persistTo: options['persist-to'],
     rcloneSource: options['rclone-source'],
     rcloneConfig: options['rclone-config'],
+    s3Keys: options['s3-keys'],
     transfers: options.transfers,
     checkers: options.checkers,
   };
@@ -75,7 +76,10 @@ function usage() {
     `  verify --backup DIR\n` +
     `  restore --backup DIR (--local|--remote) --empty-target --yes\n\n` +
     `Options: --database NAME --bucket NAME --config FILE --persist-to DIR\n` +
-    `Remote create fast path: --rclone-source REMOTE:BUCKET [--rclone-config FILE]\n` +
-    `  [--transfers N] [--checkers N] downloads pending objects with one\n` +
-    `  parallel rclone copy instead of one Wrangler process per object.\n`;
+    `Remote create fast paths (choose one):\n` +
+    `  --rclone-source REMOTE:BUCKET [--rclone-config FILE] [--transfers N]\n` +
+    `    [--checkers N] downloads pending objects with one parallel rclone copy.\n` +
+    `  --s3-keys FILE [--transfers N] downloads pending objects directly from\n` +
+    `    the R2 S3 API with the credentials in FILE; no rclone binary needed.\n` +
+    `  Both replace one Wrangler process per object.\n`;
 }

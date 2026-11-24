@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { bulkDownloadOptions, stageBulkDownloads } from './backup-bulk.mjs';
+import { loadS3Credentials, s3Options, stageS3Downloads } from './backup-s3.mjs';
 import {
   defaultRunner,
   downloadR2Object,
@@ -24,6 +25,11 @@ import {
 export async function createBackup(outputInput, options, runner = defaultRunner()) {
   requireTarget(options);
   const bulk = bulkDownloadOptions(options);
+  const s3 = s3Options(options);
+  if (bulk !== null && s3 !== null) {
+    throw new Error('choose only one fast download mode: --rclone-source or --s3-keys');
+  }
+  const s3Credentials = s3 === null ? null : await loadS3Credentials(s3.keysFile);
   if (options.persistTo) {
     throw new Error('Wrangler d1 export does not support --persist-to; use the default local state');
   }
@@ -60,10 +66,13 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
     entries.push({ reference, file, filePath, sidecarPath, descriptor, stagedPath: null });
   }
   const pending = entries.filter((entry) => entry.descriptor === null);
-  let bulkCleanup = null;
+  let stagingCleanup = null;
   try {
     if (bulk !== null && pending.length > 0) {
-      bulkCleanup = await stageBulkDownloads(output, pending, bulk, runner);
+      stagingCleanup = await stageBulkDownloads(output, pending, bulk, runner);
+    } else if (s3 !== null && pending.length > 0) {
+      const target = { ...s3, bucket: options.bucket, credentials: s3Credentials };
+      stagingCleanup = await stageS3Downloads(output, pending, target, runner);
     }
     for (const entry of pending) {
       if (entry.stagedPath !== null && await exists(entry.stagedPath)) {
@@ -87,7 +96,7 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
       await writeJsonAtomic(entry.sidecarPath, entry.descriptor);
     }
   } finally {
-    if (bulkCleanup !== null) await bulkCleanup();
+    if (stagingCleanup !== null) await stagingCleanup();
   }
   const objects = entries.map((entry) => entry.descriptor);
   const d1 = await descriptorForFile(output, 'd1.sql');
