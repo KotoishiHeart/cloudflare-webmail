@@ -42,6 +42,10 @@ function targetOptions(options) {
     bucket: options.bucket ?? 'cf-webmail-raw',
     config: options.config ?? 'apps/web/wrangler.jsonc',
     persistTo: options['persist-to'],
+    rcloneSource: options['rclone-source'],
+    rcloneConfig: options['rclone-config'],
+    transfers: options.transfers,
+    checkers: options.checkers,
   };
 }
 
@@ -70,5 +74,8 @@ function usage() {
     `  create --output DIR (--local|--remote)\n` +
     `  verify --backup DIR\n` +
     `  restore --backup DIR (--local|--remote) --empty-target --yes\n\n` +
-    `Options: --database NAME --bucket NAME --config FILE --persist-to DIR\n`;
+    `Options: --database NAME --bucket NAME --config FILE --persist-to DIR\n` +
+    `Remote create fast path: --rclone-source REMOTE:BUCKET [--rclone-config FILE]\n` +
+    `  [--transfers N] [--checkers N] downloads pending objects with one\n` +
+    `  parallel rclone copy instead of one Wrangler process per object.\n`;
 }

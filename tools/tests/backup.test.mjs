@@ -1,8 +1,8 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createBackup, restoreBackup, verifyBackup } from '../lib/backup-core.mjs';
 
@@ -36,6 +36,61 @@ describe('portable D1 and R2 backup', () => {
     const verified = await verifyBackup(backup);
     assert.equal(verified.d1.sha256, manifest.d1.sha256);
     assert.match(await readFile(join(backup, 'd1.sql'), 'utf8'), new RegExp(KEY, 'u'));
+  });
+
+  it('downloads pending objects with one bulk rclone copy when a source is given', async () => {
+    const backup = join(root, 'backup-bulk');
+    const calls = [];
+    const rcloneCalls = [];
+    const runner = fakeBackupRunner(calls);
+    runner.execFile = async (command, args) => {
+      rcloneCalls.push([command, ...args]);
+      if (args[0] === 'version') return { status: 0 };
+      assert.equal(args[0], 'copy');
+      const destination = args[2];
+      const keys = (await readFile(args[args.indexOf('--files-from-raw') + 1], 'utf8'))
+        .trim().split('\n');
+      assert.deepEqual(keys, [KEY]);
+      for (const key of keys) {
+        const file = join(destination, key);
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, 'raw backup fixture');
+      }
+      return { status: 0 };
+    };
+    const manifest = await createBackup(backup, {
+      ...OPTIONS,
+      local: false,
+      remote: true,
+      rcloneSource: 'test-r2:cf-webmail-raw',
+    }, runner);
+    assert.equal(manifest.objects.length, 1);
+    assert.equal(manifest.objects[0].key, KEY);
+    assert.ok(rcloneCalls.some((args) => args.includes('copy')));
+    assert.equal(calls.find((args) => args.includes('get')), undefined);
+    const verified = await verifyBackup(backup);
+    assert.equal(verified.d1.sha256, manifest.d1.sha256);
+    const names = await readdir(backup);
+    assert.equal(names.some((name) => name.startsWith('.rclone-')), false);
+  });
+
+  it('rejects an rclone source for local backups or a different bucket', async () => {
+    await assert.rejects(
+      createBackup(join(root, 'backup-bulk-local'), {
+        ...OPTIONS,
+        rcloneSource: 'test-r2:cf-webmail-raw',
+      }, fakeBackupRunner([])),
+      /requires a remote backup/u,
+    );
+    await assert.rejects(
+      createBackup(join(root, 'backup-bulk-bucket'), {
+        ...OPTIONS,
+        local: false,
+        remote: true,
+        rcloneSource: 'test-r2:another-bucket',
+      }, fakeBackupRunner([])),
+      /must match the backup bucket/u,
+    );
   });
 
   it('restores objects before SQL, requires an empty D1, and resumes', async () => {

@@ -1,4 +1,7 @@
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
 
 const REFERENCES_SQL = `
   SELECT raw_key AS object_key, 'message/rfc822' AS content_type FROM messages
@@ -28,6 +31,34 @@ export function downloadR2Object(file, key, options, runner) {
     '--file', file, targetFlag(options), ...persistenceArgs(options),
     '--config', options.config,
   ]);
+}
+
+// Downloads every key listed in keysFile from the rclone source root into
+// destinationRoot in one rclone invocation, mirroring the bulk transfer the
+// legacy snapshot path already uses for production-sized R2 buckets. This
+// avoids one Wrangler process spawn per object, which dominated backup
+// creation time. The runner may inject execFile (as in tests); otherwise the
+// real rclone binary on PATH is used.
+export async function downloadR2ObjectsBulk(keysFile, destinationRoot, options, runner) {
+  await runRclone(runner, ['version']);
+  await runRclone(runner, [
+    'copy', options.rcloneSource, destinationRoot,
+    '--files-from-raw', keysFile,
+    '--no-traverse', '--immutable',
+    '--transfers', String(options.transfers),
+    '--checkers', String(options.checkers),
+    ...(options.rcloneConfig ? ['--config', options.rcloneConfig] : []),
+  ]);
+}
+
+async function runRclone(runner, args) {
+  const result = runner?.execFile
+    ? await runner.execFile('rclone', args)
+    : await execFileAsync('rclone', args, { maxBuffer: 8 * 1024 * 1024 });
+  if (result?.error) throw result.error;
+  if (result?.status !== undefined && result.status !== 0) {
+    throw new Error(`rclone exited with ${result.status}: ${String(result.stderr ?? '').slice(0, 1000)}`);
+  }
 }
 
 export function uploadR2Object(file, object, options, runner) {

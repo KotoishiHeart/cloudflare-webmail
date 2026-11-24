@@ -25,6 +25,30 @@ Creation performs these steps:
 4. Writes `manifest.json` last, with SHA-256 and byte size for D1 and every
    object.
 
+## Faster remote creation with rclone
+
+By default step 3 spawns one `wrangler r2 object get` process per object,
+which dominates creation time once a mailbox holds many messages. For remote
+backups, `--rclone-source` switches the pending-object download to a single
+parallel `rclone copy`, the same bulk pattern the legacy snapshot path uses:
+
+```bash
+npm run backup -- create --output ops/backups/2026-07-16 --remote \
+  --config ops/deploy-production/configs/web.wrangler.json \
+  --rclone-source prod-r2:cf-webmail-raw \
+  --rclone-config /secure/rclone.conf \
+  --transfers 16 --checkers 32
+```
+
+Configure the named remote as an S3 remote for R2 (`provider = Cloudflare`,
+endpoint `https://<account-id>.r2.cloudflarestorage.com`) with an R2 API
+token that can read the bucket, and keep its config outside the repository.
+The bucket in `--rclone-source` must match the backup bucket, and the option
+is rejected for `--local` backups. Only objects without a valid sidecar are
+transferred; any object the bulk copy did not produce falls back to the
+per-object Wrangler download, and the manifest is identical either way. The
+staging directory and key list are removed when creation finishes or fails.
+
 Wrangler currently does not expose `--persist-to` for `d1 export`, so local
 backup creation always reads the normal local Wrangler state. Remote creation
 requires an authenticated Wrangler profile. D1 export can temporarily block

@@ -1,5 +1,6 @@
-import { access, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { bulkDownloadOptions, stageBulkDownloads } from './backup-bulk.mjs';
 import {
   defaultRunner,
   downloadR2Object,
@@ -9,6 +10,7 @@ import {
   restoreD1,
   uploadR2Object,
 } from './backup-cloudflare.mjs';
+import { exists, removePartial, writeJsonAtomic } from './backup-files.mjs';
 import {
   BACKUP_VERSION,
   descriptorForFile,
@@ -21,6 +23,7 @@ import {
 
 export async function createBackup(outputInput, options, runner = defaultRunner()) {
   requireTarget(options);
+  const bulk = bulkDownloadOptions(options);
   if (options.persistTo) {
     throw new Error('Wrangler d1 export does not support --persist-to; use the default local state');
   }
@@ -47,30 +50,46 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
     await writeJsonAtomic(referencesFile, references);
   }
   validateReferences(references);
-  const objects = [];
+  const entries = [];
   for (const [index, reference] of references.entries()) {
     const file = `objects/${String(index).padStart(8, '0')}.bin`;
     const sidecar = `objects/${String(index).padStart(8, '0')}.json`;
     const filePath = join(output, file);
     const sidecarPath = join(output, sidecar);
-    let descriptor = await readValidSidecar(sidecarPath, filePath, reference);
-    if (descriptor === null) {
-      const temporaryObject = `${filePath}.partial`;
-      await removePartial(temporaryObject);
-      downloadR2Object(temporaryObject, reference.key, options, runner);
-      await rename(temporaryObject, filePath);
-      const content = await readFile(filePath);
-      descriptor = {
-        key: reference.key,
-        file,
-        contentType: reference.contentType,
+    const descriptor = await readValidSidecar(sidecarPath, filePath, reference);
+    entries.push({ reference, file, filePath, sidecarPath, descriptor, stagedPath: null });
+  }
+  const pending = entries.filter((entry) => entry.descriptor === null);
+  let bulkCleanup = null;
+  try {
+    if (bulk !== null && pending.length > 0) {
+      bulkCleanup = await stageBulkDownloads(output, pending, bulk, runner);
+    }
+    for (const entry of pending) {
+      if (entry.stagedPath !== null && await exists(entry.stagedPath)) {
+        // The bulk transfer already produced the complete object; moving it
+        // into place is atomic on the same filesystem.
+        await rename(entry.stagedPath, entry.filePath);
+      } else {
+        const temporaryObject = `${entry.filePath}.partial`;
+        await removePartial(temporaryObject);
+        downloadR2Object(temporaryObject, entry.reference.key, options, runner);
+        await rename(temporaryObject, entry.filePath);
+      }
+      const content = await readFile(entry.filePath);
+      entry.descriptor = {
+        key: entry.reference.key,
+        file: entry.file,
+        contentType: entry.reference.contentType,
         size: content.byteLength,
         sha256: sha256(content),
       };
-      await writeJsonAtomic(sidecarPath, descriptor);
+      await writeJsonAtomic(entry.sidecarPath, entry.descriptor);
     }
-    objects.push(descriptor);
+  } finally {
+    if (bulkCleanup !== null) await bulkCleanup();
   }
+  const objects = entries.map((entry) => entry.descriptor);
   const d1 = await descriptorForFile(output, 'd1.sql');
   const manifest = {
     version: BACKUP_VERSION,
@@ -216,29 +235,4 @@ function requireTarget(options) {
     throw new Error('specify exactly one of local or remote');
   }
   if (options.remote && options.persistTo) throw new Error('--persist-to is local-only');
-}
-
-async function writeJsonAtomic(path, value) {
-  const temporary = `${path}.partial`;
-  await removePartial(temporary);
-  await writeFile(temporary, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
-  await rename(temporary, path);
-}
-
-async function removePartial(path) {
-  try {
-    await unlink(path);
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
-}
-
-async function exists(path) {
-  try {
-    await access(path);
-    return true;
-  } catch (error) {
-    if (error?.code === 'ENOENT') return false;
-    throw error;
-  }
 }
