@@ -56,6 +56,40 @@ export async function verifyDescriptor(root, descriptor) {
   return content;
 }
 
+export function extractD1ObjectKeys(sql) {
+  const keys = new Set();
+  const literalPattern = /'((?:''|[^'])*)'/gu;
+  for (const match of sql.matchAll(literalPattern)) {
+    const value = (match[1] ?? '').replaceAll("''", "'");
+    if (value.startsWith('mailboxes/')) keys.add(value);
+  }
+  return keys;
+}
+
+// The reference list is queried from the live database after the D1 export
+// is taken, so on a busy system it can name objects that the exported rows
+// do not reference yet (for example a message whose body keys were set by
+// MIME parsing moments after the export). Keeping such objects would
+// produce a bundle verify must reject, so creation aligns the list to the
+// export itself: only objects the exported D1 actually references are
+// backed up. A handful of exclusions is the normal race; a large divergence
+// means the snapshot is not trustworthy and creation aborts instead.
+export async function alignReferencesToExport(root, references, log) {
+  const exportKeys = extractD1ObjectKeys(await readFile(join(root, 'd1.sql'), 'utf8'));
+  const aligned = references.filter((reference) => exportKeys.has(reference.key));
+  const dropped = references.length - aligned.length;
+  if (dropped > 0) {
+    log(`Excluded ${dropped} objects that changed after the D1 export was taken.\n`);
+    if (dropped > 100 && dropped > references.length / 100) {
+      throw new Error(
+        `backup diverged from the live database: ${dropped} of ${references.length} `
+        + 'referenced objects are absent from the D1 export; retry when the system is quieter',
+      );
+    }
+  }
+  return aligned;
+}
+
 export async function descriptorForFile(root, file) {
   const content = await readFile(join(root, file));
   return { file, size: content.byteLength, sha256: sha256(content) };

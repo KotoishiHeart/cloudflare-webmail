@@ -13,8 +13,10 @@ import {
 } from './backup-cloudflare.mjs';
 import { backupLog, exists, removePartial, writeJsonAtomic } from './backup-files.mjs';
 import {
+  alignReferencesToExport,
   BACKUP_VERSION,
   descriptorForFile,
+  extractD1ObjectKeys,
   sha256,
   validateBackupManifest,
   validateObjectDescriptor,
@@ -56,6 +58,7 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
     await writeJsonAtomic(referencesFile, references);
   }
   validateReferences(references);
+  references = await alignReferencesToExport(output, references, log);
   const entries = [];
   for (const [index, reference] of references.entries()) {
     const file = `objects/${String(index).padStart(8, '0')}.bin`;
@@ -173,16 +176,6 @@ async function readValidSidecar(path, filePath, reference) {
   } catch {
     return null;
   }
-}
-
-function extractD1ObjectKeys(sql) {
-  const keys = new Set();
-  const literalPattern = /'((?:''|[^'])*)'/gu;
-  for (const match of sql.matchAll(literalPattern)) {
-    const value = (match[1] ?? '').replaceAll("''", "'");
-    if (value.startsWith('mailboxes/')) keys.add(value);
-  }
-  return keys;
 }
 
 async function verifyObjects(backup, objects) {

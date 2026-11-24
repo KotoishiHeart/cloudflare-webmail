@@ -25,6 +25,12 @@ Creation performs these steps:
 4. Writes `manifest.json` last, with SHA-256 and byte size for D1 and every
    object.
 
+Because step 2 reads the live database after the export, objects that
+changed in between (for example a body key set by MIME parsing just after
+the export) are excluded so the bundle always matches its own D1 export;
+the exclusion count is logged, and creation aborts instead if the
+divergence is large enough to distrust the snapshot.
+
 ## Faster remote creation: rclone or direct S3
 
 By default step 3 spawns one `wrangler r2 object get` process per object,

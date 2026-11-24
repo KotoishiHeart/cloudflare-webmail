@@ -195,6 +195,34 @@ describe('portable D1 and R2 backup', () => {
     );
   });
 
+  it('excludes objects the live database gained after the D1 export', async () => {
+    const backup = join(root, 'backup-raced');
+    const calls = [];
+    const racedKey = 'mailboxes/019c315c-1f20-7000-8000-000000000801/messages/019c315c-1f20-7000-8000-000000000803/body.html';
+    const runner = fakeBackupRunner(calls);
+    const baseSpawn = runner.spawn;
+    runner.spawn = (command, args) => {
+      if (args.includes('--json')) {
+        return {
+          status: 0,
+          stdout: JSON.stringify([{
+            results: [
+              { object_key: KEY, content_type: 'message/rfc822' },
+              { object_key: racedKey, content_type: 'text/html; charset=utf-8' },
+            ],
+          }]),
+          stderr: '',
+        };
+      }
+      return baseSpawn(command, args);
+    };
+    const manifest = await createBackup(backup, OPTIONS, runner);
+    assert.deepEqual(manifest.objects.map((object) => object.key), [KEY]);
+    assert.equal(calls.some((args) => args.some((arg) => String(arg).includes(racedKey))), false);
+    const verified = await verifyBackup(backup);
+    assert.equal(verified.objects.length, 1);
+  });
+
   it('restores objects before SQL, requires an empty D1, and resumes', async () => {
     const backup = join(root, 'backup');
     const calls = [];
