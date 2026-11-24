@@ -48,6 +48,19 @@ describe('authenticated Static Assets', () => {
     await expect(fallback.text()).resolves.toContain('<title>Cloudflare Webmail</title>');
   });
 
+  it('assigns the HTML body srcdoc only after the frame becomes visible', async () => {
+    const response = await handleWebRequest(
+      new Request('https://webmail.example.com/ui/message-detail.js'),
+      env,
+      AUTHENTICATED,
+    );
+    expect(response.status).toBe(200);
+    const source = await response.text();
+    expect(source).toContain('scheduleHtmlBody(frame, body.html, generation)');
+    expect(source).toContain('requestAnimationFrame');
+    expect(source).not.toContain('frame.srcdoc = body.html');
+  });
+
   it('rejects mutation methods for the asset surface', async () => {
     const response = await handleWebRequest(
       new Request('https://webmail.example.com/', { method: 'POST' }),
@@ -74,7 +87,7 @@ describe('authenticated Static Assets', () => {
     expect(worker.headers.get('cache-control')).toContain('no-cache');
     const source = await worker.text();
     expect(source).toContain("url.pathname.startsWith('/api/')");
-    expect(source).toContain("const CACHE = 'cf-webmail-shell-v4'");
+    expect(source).toContain("const CACHE = 'cf-webmail-shell-v5'");
     expect(source).toContain("cache: 'no-cache'");
     expect(source).toContain("cache: 'reload'");
     expect(source).not.toContain('caches.match(');

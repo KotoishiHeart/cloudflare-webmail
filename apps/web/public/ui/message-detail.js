@@ -8,6 +8,7 @@ const actions = document.querySelector('#detail-actions');
 const attachmentSection = document.querySelector('#attachment-section');
 const attachmentList = document.querySelector('#attachment-list');
 const attachmentTemplate = document.querySelector('#attachment-template');
+let htmlBodyGeneration = 0;
 
 export function showMessageDetail(detail, body, handlers) {
   const { message, attachments } = detail;
@@ -62,13 +63,14 @@ function renderBody(message, body, showHtmlByDefault) {
   const showText = document.querySelector('#show-text-body');
   text.textContent = body.text || (body.html ? '' : '本文は保存されていません。');
   frame.title = `HTMLメール本文: ${message.subject || '件名なし'}`;
-  frame.srcdoc = body.html || '';
   modes.hidden = body.html === null || body.text === '';
+  const generation = ++htmlBodyGeneration;
   const selectHtml = () => {
     frame.hidden = body.html === null;
     text.hidden = body.html !== null;
     showHtml.disabled = body.html !== null;
     showText.disabled = false;
+    scheduleHtmlBody(frame, body.html, generation);
   };
   const selectText = () => {
     frame.hidden = true;
@@ -114,7 +116,24 @@ function renderLabels(message, assigned, handlers) {
   };
 }
 
+// Assign srcdoc only after the frame has become visible. Setting srcdoc
+// while the iframe is display:none (via the hidden attribute) can leave a
+// sandboxed srcdoc frame stuck on a blank document in some browsers, which
+// is why a manual text/HTML toggle (visibility change long after the
+// assignment) used to recover the display. Deferring to the next animation
+// frame guarantees the frame is laid out as visible before the assignment,
+// and the generation guard drops assignments superseded by a newer message
+// or by switching back to the text view first.
+function scheduleHtmlBody(frame, html, generation) {
+  if (html === null) return;
+  requestAnimationFrame(() => {
+    if (generation !== htmlBodyGeneration || frame.hidden) return;
+    if (frame.srcdoc !== html) frame.srcdoc = html;
+  });
+}
+
 function clearHtmlBody() {
+  htmlBodyGeneration += 1;
   const frame = document.querySelector('#detail-html');
   frame.srcdoc = '';
   frame.hidden = true;
