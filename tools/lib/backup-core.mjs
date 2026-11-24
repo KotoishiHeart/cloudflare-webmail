@@ -11,7 +11,7 @@ import {
   restoreD1,
   uploadR2Object,
 } from './backup-cloudflare.mjs';
-import { exists, removePartial, writeJsonAtomic } from './backup-files.mjs';
+import { backupLog, exists, removePartial, writeJsonAtomic } from './backup-files.mjs';
 import {
   BACKUP_VERSION,
   descriptorForFile,
@@ -30,9 +30,8 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
     throw new Error('choose only one fast download mode: --rclone-source or --s3-keys');
   }
   const s3Credentials = s3 === null ? null : await loadS3Credentials(s3.keysFile);
-  if (options.persistTo) {
-    throw new Error('Wrangler d1 export does not support --persist-to; use the default local state');
-  }
+  const log = backupLog(runner);
+  if (options.persistTo) throw new Error('Wrangler d1 export does not support --persist-to; use the default local state');
   const output = resolve(outputInput);
   const manifestPath = join(output, 'manifest.json');
   if (await exists(manifestPath)) throw new Error('backup is already complete');
@@ -41,6 +40,7 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
   await bindTarget(join(output, 'backup-target.json'), target);
   const d1File = join(output, 'd1.sql');
   if (!await exists(d1File)) {
+    log('Exporting D1 database...\n');
     const temporaryD1 = `${d1File}.partial`;
     await removePartial(temporaryD1);
     exportD1(temporaryD1, options, runner);
@@ -66,6 +66,7 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
     entries.push({ reference, file, filePath, sidecarPath, descriptor, stagedPath: null });
   }
   const pending = entries.filter((entry) => entry.descriptor === null);
+  log(`Referenced objects: ${entries.length}; downloading ${pending.length}.\n`);
   let stagingCleanup = null;
   try {
     if (bulk !== null && pending.length > 0) {
@@ -76,8 +77,7 @@ export async function createBackup(outputInput, options, runner = defaultRunner(
     }
     for (const entry of pending) {
       if (entry.stagedPath !== null && await exists(entry.stagedPath)) {
-        // The bulk transfer already produced the complete object; moving it
-        // into place is atomic on the same filesystem.
+        // The staged object is complete; renaming it into place is atomic.
         await rename(entry.stagedPath, entry.filePath);
       } else {
         const temporaryObject = `${entry.filePath}.partial`;

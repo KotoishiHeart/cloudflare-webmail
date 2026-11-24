@@ -1,5 +1,11 @@
 import { access, rename, unlink, writeFile } from 'node:fs/promises';
 
+// Progress logging seam: the CLI runner logs to stderr so stdout stays a
+// clean JSON summary; runners without a log function stay silent.
+export function backupLog(runner) {
+  return typeof runner?.log === 'function' ? (message) => runner.log(message) : () => {};
+}
+
 export async function writeJsonAtomic(path, value) {
   const temporary = `${path}.partial`;
   await removePartial(temporary);

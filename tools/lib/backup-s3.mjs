@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import { chmod, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve, sep } from 'node:path';
+import { backupLog } from './backup-files.mjs';
 
 // Direct S3 fast path for remote backups: an alternative to the rclone
 // mode that needs no external binary. Credentials live only in a local
@@ -74,19 +75,26 @@ export async function stageS3Downloads(output, pending, s3, runner) {
   await mkdir(stagingRoot, { recursive: true, mode: 0o700 });
   await chmod(stagingRoot, 0o700);
   const stagingRootResolved = resolve(stagingRoot);
+  const log = backupLog(runner);
   let cursor = 0;
+  let completed = 0;
   let fatal = null;
   const worker = async () => {
     while (fatal === null && cursor < pending.length) {
       const entry = pending[cursor];
       cursor += 1;
       const staged = resolve(join(stagingRoot, entry.reference.key));
-      if (!staged.startsWith(stagingRootResolved + sep)) continue;
-      try {
-        await downloadWithRetries(fetchImpl, s3, entry.reference.key, staged);
-        entry.stagedPath = staged;
-      } catch (error) {
-        if (error?.rejectedCredentials) fatal = error;
+      if (staged.startsWith(stagingRootResolved + sep)) {
+        try {
+          await downloadWithRetries(fetchImpl, s3, entry.reference.key, staged);
+          entry.stagedPath = staged;
+        } catch (error) {
+          if (error?.rejectedCredentials) fatal = error;
+        }
+      }
+      completed += 1;
+      if (completed % 100 === 0 || completed === pending.length) {
+        log(`S3 download: ${completed}/${pending.length} objects\n`);
       }
     }
   };
@@ -116,7 +124,9 @@ async function downloadWithRetries(fetchImpl, s3, key, staged) {
 
 async function downloadObject(fetchImpl, s3, key, staged) {
   const { url, headers } = signedGetRequest(s3, key, new Date());
-  const response = await fetchImpl(url, { headers });
+  // A stalled connection must not hang the whole backup: bound each
+  // attempt and let the retry loop above decide what happens next.
+  const response = await fetchImpl(url, { headers, signal: AbortSignal.timeout(120_000) });
   if (!response.ok) {
     const error = new Error(`S3 GET failed with HTTP ${response.status} for ${key}`);
     if (response.status === 401 || response.status === 403) {

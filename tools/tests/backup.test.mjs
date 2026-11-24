@@ -113,7 +113,9 @@ describe('portable D1 and R2 backup', () => {
     }), { mode: 0o600 });
     const calls = [];
     const fetches = [];
+    const logs = [];
     const runner = fakeBackupRunner(calls);
+    runner.log = (value) => logs.push(value);
     runner.fetch = async (url, init) => {
       fetches.push([url, init]);
       assert.match(url, /^https:\/\/0123456789abcdef0123456789abcdef\.r2\.cloudflarestorage\.com\/cf-webmail-raw\/mailboxes\//u);
@@ -133,6 +135,8 @@ describe('portable D1 and R2 backup', () => {
     }, runner);
     assert.equal(manifest.objects.length, 1);
     assert.equal(fetches.length, 1);
+    assert.ok(logs.some((line) => line.includes('S3 download: 1/1 objects')));
+    assert.ok(logs.some((line) => line.includes('Referenced objects: 1')));
     assert.equal(calls.find((args) => args.includes('get')), undefined);
     const verified = await verifyBackup(backup);
     assert.equal(verified.d1.sha256, manifest.d1.sha256);

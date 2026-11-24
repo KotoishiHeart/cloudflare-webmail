@@ -1,6 +1,7 @@
 import { chmod, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import { downloadR2ObjectsBulk } from './backup-cloudflare.mjs';
+import { backupLog } from './backup-files.mjs';
 
 // Optional fast path for remote backups: when --rclone-source names the
 // same bucket, all pending objects are fetched with a single parallel
@@ -47,6 +48,7 @@ export async function stageBulkDownloads(output, pending, bulk, runner) {
       rm(pendingList, { force: true }),
     ]);
   };
+  backupLog(runner)(`rclone copy: ${pending.length} objects (transfers ${bulk.transfers}, checkers ${bulk.checkers})\n`);
   await mkdir(bulkRoot, { recursive: true, mode: 0o700 });
   await chmod(bulkRoot, 0o700);
   await writeFile(

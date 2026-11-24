@@ -33,7 +33,10 @@ backups, two interchangeable fast paths replace that download; choose one
 per run (`--rclone-source` and `--s3-keys` cannot be combined). Both only
 transfer objects without a valid sidecar, fall back to the per-object
 Wrangler download for anything they did not produce, and yield an identical
-manifest.
+manifest. Creation reports its phase and download progress on stderr (the
+final summary on stdout stays machine-readable), and each S3 request times
+out after 120 seconds and is retried, so a stalled connection cannot hang
+a run silently forever.
 
 ### Direct S3 (no rclone binary)
 

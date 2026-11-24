@@ -67,7 +67,11 @@ function required(options, key) {
 }
 
 function defaultIo() {
-  return { stdout: (value) => process.stdout.write(value), spawn: spawnSync };
+  return {
+    stdout: (value) => process.stdout.write(value),
+    log: (value) => process.stderr.write(value),
+    spawn: spawnSync,
+  };
 }
 
 function usage() {
