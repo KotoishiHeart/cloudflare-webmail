@@ -10,3 +10,14 @@ coverage/
 worker-configuration.d.ts.tmp
 *.log
 /ops/
+
+# Credentials and operator data that must never be committed, wherever in
+# the tree they are placed. Backup bundles contain complete mail, and the
+# keys and rclone configs below hold live R2 credentials.
+/backups/
+r2-backup-keys.json
+rclone.conf
+*.rclone.conf
+.rclone-objects/
+.s3-objects/
+.rclone-pending-keys.txt
